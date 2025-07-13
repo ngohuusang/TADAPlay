@@ -1,0 +1,23 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2012/06/nuspec.xsd">
+  <metadata>
+    <id>WireGuardNT-PInvoke</id>
+    <version>1.0.4</version>
+    <authors>damob.byun</authors>
+    <license type="file">LICENSE</license>
+    <licenseUrl>https://aka.ms/deprecateLicenseUrl</licenseUrl>
+    <projectUrl>https://github.com/damob-byun/WireGuardNTSharp</projectUrl>
+    <description>Package Description</description>
+    <repository type="git" url="https://github.com/damob-byun/WireGuardNTSharp" commit="355a6343c725dc40d9d9324d97169d8454464a20" />
+    <dependencies>
+      <group targetFramework=".NETStandard2.0">
+        <dependency id="IPNetwork2" version="3.1.764" exclude="Build,Analyzers" />
+        <dependency id="Vanara.PInvoke.IpHlpApi" version="4.1.6" exclude="Build,Analyzers" />
+      </group>
+    </dependencies>
+  </metadata>
+  <files>
+    <file src="C:\Users\sang.ngo\Desktop\Project\TADAPlay\WireGuardNT-PInvoke\bin\Debug\netstandard2.0\WireGuardNT-PInvoke.dll" target="lib\netstandard2.0\WireGuardNT-PInvoke.dll" />
+    <file src="C:\Users\sang.ngo\Desktop\Project\TADAPlay\LICENSE" target="\LICENSE" />
+  </files>
+</package>
