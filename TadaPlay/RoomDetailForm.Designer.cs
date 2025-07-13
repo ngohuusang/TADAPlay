@@ -36,6 +36,7 @@
             tableLayoutPanel1 = new TableLayoutPanel();
             label2 = new AntdUI.Label();
             userListView = new ListView();
+            logChatList = new AntdUI.Chat.ChatList();
             tableLayoutPanel2.SuspendLayout();
             tableLayoutPanel1.SuspendLayout();
             SuspendLayout();
@@ -119,6 +120,7 @@
             tableLayoutPanel1.Controls.Add(label1, 0, 0);
             tableLayoutPanel1.Controls.Add(tableLayoutPanel2, 0, 2);
             tableLayoutPanel1.Controls.Add(userListView, 0, 1);
+            tableLayoutPanel1.Controls.Add(logChatList, 1, 1);
             tableLayoutPanel1.Dock = DockStyle.Fill;
             tableLayoutPanel1.Location = new Point(0, 62);
             tableLayoutPanel1.Name = "tableLayoutPanel1";
@@ -154,6 +156,15 @@
             userListView.TabIndex = 6;
             userListView.UseCompatibleStateImageBehavior = false;
             // 
+            // logChatList
+            // 
+            logChatList.Dock = DockStyle.Fill;
+            logChatList.Location = new Point(270, 53);
+            logChatList.Name = "logChatList";
+            logChatList.Size = new Size(529, 337);
+            logChatList.TabIndex = 7;
+            logChatList.Text = "chatList1";
+            // 
             // RoomDetailForm
             // 
             AutoScaleDimensions = new SizeF(7F, 17F);
@@ -184,5 +195,6 @@
         private TableLayoutPanel tableLayoutPanel1;
         private AntdUI.Label label2;
         private ListView userListView;
+        private AntdUI.Chat.ChatList logChatList;
     }
 }

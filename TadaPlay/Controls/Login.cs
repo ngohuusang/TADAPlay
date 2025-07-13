@@ -61,17 +61,19 @@ namespace TadaPlay.Controls
         {
             if (appContext.GetAutoLoginSetting())
             {
+                this.Visible = false;
                 AntdUI.Spin.open(form, AntdUI.Localization.Get("Loading2", "Đang đăng nhập..."), config =>
                 {
                     accountService.DoAuthAsync().ContinueWith(async task =>
                     {
                         if (task.IsCompletedSuccessfully && task.Result)
                         {
-                            AntdUI.Message.info(form, AntdUI.Localization.Get("LoginSuccess", "Đăng nhập ok!"));
+                            AntdUI.Message.info(form, AntdUI.Localization.Get("LoginSuccess", "Đăng nhập thành công!"));
                             LoginSuccessful?.Invoke(this, EventArgs.Empty);
                         }
                         else
                         {
+                            this.Visible = true;
                             AntdUI.Message.error(form, AntdUI.Localization.Get("LoginError", task.Exception!.InnerException!.Message));
                         }
                     });

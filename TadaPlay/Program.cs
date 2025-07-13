@@ -27,6 +27,7 @@ namespace TadaPlay
             Application.SetCompatibleTextRenderingDefault(false);
 
             DebugLogger.InitLog4Net();
+            DebugLogger.CleanLog();
             DebugLogger.Info("Project start: " + Application.ProductVersion);
 
             ConfigureServices();

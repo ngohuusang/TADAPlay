@@ -77,11 +77,52 @@ namespace TadaPlay.Logger
             }
         }
 
+        public static void CleanLog()
+        {
+            try
+            {
+                string logDirectory = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Logs"); // Assuming 'Logs' folder
+                if (Directory.Exists(logDirectory))
+                {
+                    foreach (string file in Directory.GetFiles(logDirectory, "*.log"))
+                    {
+                        if (File.GetCreationTime(file) < DateTime.Now.AddDays(-2)) // Delete logs older than 2 days
+                        {
+                            File.Delete(file);
+                            Console.WriteLine($"Deleted old log file: {file}");
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"Error cleaning logs: {ex.Message}");
+            }
+        }
+
         public static void InitLog4Net()
         {
-            var logCfg = new FileInfo(AppDomain.CurrentDomain.BaseDirectory + "Resources/Log4net/log4net.config");
-            XmlConfigurator.ConfigureAndWatch(logCfg);
-        }
+            try
+            {
+                var logCfgPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "Log4net", "log4net.config");
+                var logCfg = new FileInfo(logCfgPath);
+
+                if (!logCfg.Exists)
+                {
+                    Console.Error.WriteLine($"Error: log4net configuration file not found at {logCfgPath}");
+                    log4net.Config.BasicConfigurator.Configure(); // Basic fallback to console
+                }
+                else
+                {
+                    XmlConfigurator.ConfigureAndWatch(logCfg);
+                    Console.WriteLine("log4net configured successfully.");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"Failed to initialize log4net: {ex.Message}");
+            }
+        }        
     }
 }
 

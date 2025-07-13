@@ -29,15 +29,33 @@ namespace TadaPlay
             _webSocketService.OnErrorOccurred += WebSocketService_OnErrorOccurred;
             // No need to subscribe to OnMessageReceived from WebSocketService here, AppContext processes it.
 
-            userListView.Columns.Add("Username", 100);
-            userListView.Columns.Add("Nickname", 100);
-            userListView.Columns.Add("Status", 80);
+            userListView.Columns.Add("user_name", "Tên");
+            userListView.Columns.Add("ping", "Ping");
+            userListView.Columns.Add("status", "Trạng thái");
             userListView.View = View.Details;
+            userListView.FullRowSelect = true;
+
+            resizeColumns();
 
             // Hook up button click events
             this.kickUserButton.Click += kickUserButton_Click;
             this.startGameButton.Click += startGameButton_Click; // Assuming you have a start game button
             this.userListView.SelectedIndexChanged += usersInRoomListView_SelectedIndexChanged;
+        }
+
+        private void resizeColumns()
+        {
+            if (this.userListView.Columns.Count < 3) return; // Ensure columns exist
+
+            int width = this.userListView.Size.Width;
+            // Adjust calculation based on your desired column widths
+            int fixedWidths = 80 + 50; // Ping + Status
+            int remainingWidth = width - fixedWidths;
+            if (remainingWidth < 0) remainingWidth = 0; // Prevent negative width
+
+            this.userListView.Columns[0].Width = remainingWidth - 5;
+            this.userListView.Columns[1].Width = 80;
+            this.userListView.Columns[2].Width = 50;
         }
 
         public void SetRoom(ClientRoom room)
