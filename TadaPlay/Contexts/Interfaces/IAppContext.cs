@@ -24,6 +24,10 @@ public interface IAppContext
 
     public User GetCurrentUser();
 
+    public void SetVpnProfile(VpnProfile vpnProfile);
+
+    public VpnProfile GetVpnProfile();
+
     IReadOnlyList<User> AllOnlineUsers { get; }
     IReadOnlyList<ClientRoom> AllActiveRooms { get; }
     ClientRoom CurrentRoomDetails { get; }
@@ -32,6 +36,8 @@ public interface IAppContext
     event System.EventHandler OnOnlineUsersUpdated;
     event System.EventHandler OnActiveRoomsUpdated;
     event System.EventHandler OnCurrentRoomDetailsUpdated;
+
+    event System.EventHandler OnVpnProfileUpdated;
 
     void ProcessWebSocketMessage(string jsonMessage);
 }

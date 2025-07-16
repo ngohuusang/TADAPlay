@@ -75,7 +75,9 @@ public class AccountService : IAccountService
         if (apiResponse.Success)
         {
             var _currentUser = apiResponse.User;
+            var vpnProfile = _currentUser?.VpnProfile;
             _appContext.SetCurrentUser(_currentUser);
+            _appContext.SetVpnProfile(vpnProfile);
 
             return true;
         }
@@ -111,9 +113,30 @@ public class AccountService : IAccountService
         {
             var jwtToken = apiResponse.Token;
             var _currentUser = apiResponse.User;
+            var vpnProfile = _currentUser?.VpnProfile;
             _appContext.SetCurrentUser(_currentUser);
             _appContext.SetJwtTokenSetting(jwtToken);
             _appContext.SetAutoLoginSetting(AutoLogin);
+            _appContext.SetVpnProfile(vpnProfile);
+
+            return true;
+        }
+        else
+        {
+            throw new Exception(apiResponse.Message);
+        }
+    }
+
+    public async Task<bool> ReleaseVpnProfileAsync()
+    {
+        var content = new StringContent("", Encoding.UTF8, "application/json");
+        var response = await _httpClient.PostAsync(BASE_URL + "?action=release_vpn_profile", content);
+        response.EnsureSuccessStatusCode();
+        var responseBody = await response.Content.ReadAsStringAsync();
+        var apiResponse = JsonConvert.DeserializeObject<ApiResponse>(responseBody);
+        if (apiResponse.Success)
+        {
+            _appContext.SetVpnProfile(null);
 
             return true;
         }

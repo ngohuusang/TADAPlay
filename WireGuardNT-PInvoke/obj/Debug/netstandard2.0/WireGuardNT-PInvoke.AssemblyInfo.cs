@@ -14,7 +14,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("damob.byun")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.4.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.4+355a6343c725dc40d9d9324d97169d8454464a20")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.4+b0efa2d9ccf39a77af0d2d6cfeb1fd5eff5dfde9")]
 [assembly: System.Reflection.AssemblyProductAttribute("WireGuardNT-PInvoke")]
 [assembly: System.Reflection.AssemblyTitleAttribute("WireGuardNT-PInvoke")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.4.0")]

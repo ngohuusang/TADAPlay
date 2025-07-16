@@ -17,7 +17,7 @@ namespace TadaPlay.Websockets
 {
     public class WebSocketService : IWebSocketService
     {
-        private const string WS_BASE_URI = "ws://192.168.1.12:8888/";
+        private const string WS_BASE_URI = "ws://192.168.1.14:8888/";
 
         private ClientWebSocket _ws; // The actual WebSocket client
         private CancellationTokenSource _receiveCts; // Manages cancellation for the receive loop
@@ -103,7 +103,7 @@ namespace TadaPlay.Websockets
 
             _isConnecting = true;
             OnConnectionStatusChanged?.Invoke(this, $"Connecting (attempt {_reconnectAttempt + 1}/{MaxReconnectAttempts})...");
-            DebugLogger.Info($"WebSocketService: Attempting connection to {_currentFullWsUri} (attempt {_reconnectAttempt + 1}).");
+            DebugLogger.Info($"WebSocketService: Attempting connection ... (attempt {_reconnectAttempt + 1}).");
 
             if (_ws != null)
             {
@@ -470,6 +470,21 @@ namespace TadaPlay.Websockets
                 _receiveCts?.Dispose(); // Dispose the cancellation token source
             }
             // No unmanaged resources in this class that require explicit handling
+        }
+
+        public Task<bool> CreateRoomAsync(string roomName)
+        {
+            return SendMessageAsync(new { command = "create_room", room_name = roomName });
+        }
+
+        public async void RefreshAsync()
+        {
+            await SendMessageAsync(new { refresh = "refresh" });
+        }
+
+        public Task<bool> LeaveRoomAsync()
+        {
+           return SendMessageAsync(new { command = "leave_room" });
         }
 
         // Finalizer (destructor)

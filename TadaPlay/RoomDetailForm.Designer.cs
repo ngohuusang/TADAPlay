@@ -88,6 +88,7 @@
             // startGameButton
             // 
             startGameButton.Dock = DockStyle.Fill;
+            startGameButton.Enabled = false;
             startGameButton.Location = new Point(3, 3);
             startGameButton.Name = "startGameButton";
             startGameButton.Size = new Size(124, 38);
@@ -177,9 +178,9 @@
             Name = "RoomDetailForm";
             Resizable = false;
             Text = "Phòng thi đấu - TADA Play";
-            TopMost = true;
             FormClosing += RoomDetailForm_FormClosing;
             FormClosed += RoomDetailForm_FormClosed;
+            Load += RoomDetailForm_Load;
             tableLayoutPanel2.ResumeLayout(false);
             tableLayoutPanel1.ResumeLayout(false);
             ResumeLayout(false);

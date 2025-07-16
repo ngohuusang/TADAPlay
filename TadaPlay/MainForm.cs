@@ -1,7 +1,9 @@
 ﻿using AntdUI;
 using Microsoft.VisualBasic.Logging;
+using TadaPlay.Connections.Interface;
 using TadaPlay.Contexts.Interfaces;
 using TadaPlay.Controls;
+using TadaPlay.Logger;
 using TadaPlay.Services;
 using TadaPlay.Services.Interface;
 using TadaPlay.Websockets.Interface;
@@ -13,17 +15,39 @@ namespace TadaPlay
         private readonly IAccountService accountService;
         private readonly IAppContext appContext;
         private readonly IWebSocketService webSocketService;
+        private readonly IWireGuardVpnService wireGuardVpnService;
         private readonly IServiceProvider serviceProvider;
         private Login _loginControl;
         private Home _homeControl;
 
-        public MainForm(IAccountService _accountService, IAppContext _appContext, IWebSocketService _webSocketService, IServiceProvider _serviceProvider)
+        public MainForm(IAccountService _accountService, IAppContext _appContext, IWebSocketService _webSocketService, IWireGuardVpnService _wireGuardVpnService, IServiceProvider _serviceProvider)
         {
             InitializeComponent();
             accountService = _accountService;
             appContext = _appContext;
             webSocketService = _webSocketService;
             serviceProvider = _serviceProvider;
+            wireGuardVpnService = _wireGuardVpnService;
+
+            appContext.OnVpnProfileUpdated += AppContext_OnVpnProfileUpdated;
+        }
+
+        private void AppContext_OnVpnProfileUpdated(object sender, EventArgs e)
+        {
+            this.BeginInvoke(() => {
+                DebugLogger.Info($"Home: Current vpn profile updated by AppContext.");
+                wireGuardVpnService.InitAdapter(appContext.GetVpnProfile()?.ConfigContent).ContinueWith(task =>
+                {
+                    if (task.IsCompletedSuccessfully)
+                    {
+                        AntdUI.Notification.success(this, AntdUI.Localization.Get("VPNProfileUpdated", "Cập nhật cấu hình VPN"), AntdUI.Localization.Get("VPNProfileUpdatedContent", "Cấu hình VPN đã được cập nhật thành công!"), AntdUI.TAlignFrom.Bottom);
+                    }
+                    else
+                    {
+                        AntdUI.Notification.error(this, AntdUI.Localization.Get("VPNProfileUpdateError", "Lỗi cập nhật cấu hình VPN"), AntdUI.Localization.Get("VPNProfileUpdateErrorContent", task.Exception!.InnerException!.Message), AntdUI.TAlignFrom.Bottom);
+                    }
+                });
+            });
         }
 
         private void btn_setting_Click(object sender, EventArgs e)
@@ -102,16 +126,6 @@ namespace TadaPlay
                 control.Left = (this.ClientSize.Width - control.Width) / 2;
                 control.Top = (this.ClientSize.Height - control.Height) / 2;
             }
-        }
-
-        private void button7_SelectedValueChanged(object sender, ObjectNEventArgs e)
-        {
-
-        }
-
-        private void virtualPanel_ItemClick(object sender, VirtualItemEventArgs e)
-        {
-
         }
     }
 }

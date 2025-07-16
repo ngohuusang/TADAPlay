@@ -16,6 +16,7 @@ public class AppContext : IAppContext
     private List<User> _allOnlineUsers = new List<User>();
     private List<ClientRoom> _allActiveRooms = new List<ClientRoom>();
     private ClientRoom _currentRoomDetails;
+    private VpnProfile _currentVpnProfile;
 
     private static object? GetRegistryValue(string name)
     {
@@ -109,6 +110,17 @@ public class AppContext : IAppContext
         UpdateOnlineUserInList(user);
     }
 
+    public void SetVpnProfile(VpnProfile vpnProfile)
+    {
+        _currentVpnProfile = vpnProfile;
+        OnVpnProfileUpdated?.Invoke(this, EventArgs.Empty);
+    }
+
+    public VpnProfile GetVpnProfile()
+    {
+        return _currentVpnProfile;
+    }
+
     public IReadOnlyList<User> AllOnlineUsers => _allOnlineUsers.AsReadOnly();
     public IReadOnlyList<ClientRoom> AllActiveRooms => _allActiveRooms.AsReadOnly();
     public ClientRoom CurrentRoomDetails => _currentRoomDetails;
@@ -118,6 +130,8 @@ public class AppContext : IAppContext
     public event EventHandler OnOnlineUsersUpdated;
     public event EventHandler OnActiveRoomsUpdated;
     public event EventHandler OnCurrentRoomDetailsUpdated;
+
+    public event EventHandler OnVpnProfileUpdated;
 
     public void ProcessWebSocketMessage(string jsonMessage)
     {

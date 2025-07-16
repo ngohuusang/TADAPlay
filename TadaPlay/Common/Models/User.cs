@@ -10,7 +10,7 @@ namespace TadaPlay.Common.Models
     public class User
     {
         [JsonProperty("id")]
-        public int Id { get; set; }
+        public string Id { get; set; }
 
         [JsonProperty("username")]
         public string Username { get; set; }
@@ -41,6 +41,9 @@ namespace TadaPlay.Common.Models
 
         [JsonProperty("current_room_id")]
         public string CurrentRoomId { get; set; } // The room ID this user is currently in
+
+        [JsonProperty("vpn_profile")]
+        public VpnProfile VpnProfile { get; set; }
 
         public bool IsHost => Status == "host";
         public bool IsInRoom => !string.IsNullOrEmpty(CurrentRoomId);

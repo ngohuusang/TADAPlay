@@ -97,7 +97,7 @@
             virtualPanel.Size = new Size(1024, 665);
             virtualPanel.TabIndex = 3;
             virtualPanel.Waterfall = true;
-            virtualPanel.ItemClick += virtualPanel_ItemClick;
+
             // 
             // rankingTooltip
             // 

@@ -28,9 +28,6 @@
         /// </summary>
         private void InitializeComponent()
         {
-            AntdUI.Chat.MsgItem msgItem1 = new AntdUI.Chat.MsgItem();
-            AntdUI.Chat.MsgItem msgItem2 = new AntdUI.Chat.MsgItem();
-            AntdUI.Chat.MsgItem msgItem3 = new AntdUI.Chat.MsgItem();
             AntdUI.CarouselItem carouselItem1 = new AntdUI.CarouselItem();
             AntdUI.CarouselItem carouselItem2 = new AntdUI.CarouselItem();
             AntdUI.TimelineItem timelineItem1 = new AntdUI.TimelineItem();
@@ -172,21 +169,6 @@
             userList.BackColor = Color.MintCream;
             userList.BadgeSvg = "";
             userList.Dock = DockStyle.Fill;
-            msgItem1.Icon = Properties.Resources.user_icon;
-            msgItem1.Name = "Sang Ngo";
-            msgItem1.Text = "sangbro";
-            msgItem1.Time = "10:24";
-            msgItem2.Icon = Properties.Resources.user_icon;
-            msgItem2.Name = "Huy Canh";
-            msgItem2.Text = "huycanh11";
-            msgItem2.Time = "11:24";
-            msgItem3.Icon = Properties.Resources.user_icon;
-            msgItem3.Name = "Duong Tank";
-            msgItem3.Text = "duongtank";
-            msgItem3.Time = "12:12";
-            userList.Items.Add(msgItem1);
-            userList.Items.Add(msgItem2);
-            userList.Items.Add(msgItem3);
             userList.Location = new Point(3, 53);
             userList.Name = "userList";
             userList.Size = new Size(254, 268);

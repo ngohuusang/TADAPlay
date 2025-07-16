@@ -218,7 +218,7 @@ namespace TadaPlay.Controls
             {
                 try
                 {
-                    bool sendSuccess = await webSocketService.SendMessageAsync(new { command = "create_room", room_name = roomName });
+                    bool sendSuccess = await webSocketService.CreateRoomAsync(roomName);
                     if (!sendSuccess)
                     {
                         throw new InvalidOperationException("Failed to send create room message to server.");
@@ -259,7 +259,10 @@ namespace TadaPlay.Controls
                 }
                 catch (TimeoutException)
                 {
-                    mainForm.BeginInvoke(new Action(() => { AntdUI.Modal.open(new AntdUI.Modal.Config(mainForm, AntdUI.Localization.Get("CreateRoomTimeout", "Thời gian chờ tạo phòng đã hết"), AntdUI.Localization.Get("CreateRoomTimeoutContent", "Máy chủ không phản hồi kịp thời."), AntdUI.TType.Error) { CancelText = null, OkText = AntdUI.Localization.Get("CloseButton", "Đóng") }); }));
+                    mainForm.BeginInvoke(new Action(() =>  { 
+                        AntdUI.Modal.open(new AntdUI.Modal.Config(mainForm, AntdUI.Localization.Get("CreateRoomTimeout", "Thời gian chờ tạo phòng đã hết"), AntdUI.Localization.Get("CreateRoomTimeoutContent", "Máy chủ không phản hồi kịp thời."), AntdUI.TType.Error) { CancelText = null, OkText = AntdUI.Localization.Get("CloseButton", "Đóng") });
+                       
+                    }));
                 }
                 catch (Exception ex)
                 {
@@ -291,7 +294,7 @@ namespace TadaPlay.Controls
             {
                 AntdUI.Chat.MsgItem userItem = new AntdUI.Chat.MsgItem();
                 string username = user.FullName ?? user.Username;
-                string nickname = user.NickName ?? username;
+                string nickname = user.Username;
                 string status = user.Status ?? "";
 
                 userItem.Icon = Properties.Resources.user_icon; //TODO change avatar
@@ -355,7 +358,7 @@ namespace TadaPlay.Controls
             this.BeginInvoke(new Action(() =>
             {
                 DebugLogger.Info("WebSocketService reported connected. Attempting initial refresh.");
-                webSocketService.SendMessageAsync(new { refresh = "refresh" });
+                webSocketService.RefreshAsync();
                 UpdateUiBasedOnLobbyState();
             }));
         }
@@ -376,7 +379,7 @@ namespace TadaPlay.Controls
                 this.BeginInvoke(new Action(() =>
                 {
                     // Display error message to the user (e.g., MessageBox or status label)
-                    MessageBox.Show(errorMessage, "WebSocket Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    AntdUI.Notification.error(mainForm, AntdUI.Localization.Get("ConnectionErrorTitle", "Lỗi kết nối"), AntdUI.Localization.Get("ConnectionErrorContent", errorMessage), AntdUI.TAlignFrom.Bottom, Font);
                     DebugLogger.Error($"Home Control WS Error: {errorMessage}");
                 }));
             }
