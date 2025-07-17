@@ -45,7 +45,14 @@ public class AppContext : IAppContext
         try
         {
             RegistryKey key = Registry.CurrentUser.CreateSubKey(REGISTRY_SUB_KEY);
-            key.SetValue(name, value);
+            if (value == null)
+            {
+                key.DeleteValue(name);
+            }
+            else
+            {
+                key.SetValue(name, value);
+            }
         }
         catch (Exception ex)
         {

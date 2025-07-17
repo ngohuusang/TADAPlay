@@ -24,10 +24,14 @@ namespace TadaPlay.Controls
 
         public Login(Form _form, IAccountService _accountService, IAppContext _appContext)
         {
+            InitializeComponent();
+
             form = _form;
             accountService = _accountService;
             appContext = _appContext;
-            InitializeComponent();
+
+            this.usernameTextBox.KeyDown += TextBox_KeyDown;
+            this.passwordTextBox.KeyDown += TextBox_KeyDown;
         }
 
         private void signInButton_Click(object sender, EventArgs e)
@@ -38,7 +42,6 @@ namespace TadaPlay.Controls
                 {
                     if (task.IsCompletedSuccessfully && task.Result)
                     {
-                        AntdUI.Notification.success(form, AntdUI.Localization.Get("LoginSuccessTitle", "Đăng nhập"), AntdUI.Localization.Get("LoginSuccessContent", "Đăng nhập thành công!"), AntdUI.TAlignFrom.Bottom);
                         LoginSuccessful?.Invoke(this, EventArgs.Empty);
                     }
                     else
@@ -51,14 +54,15 @@ namespace TadaPlay.Controls
                        
                     }
                 });
-            }, () =>
-            {
-                System.Diagnostics.Debug.WriteLine("Hoàn tất");
             });
         }
 
         private void Login_Load(object sender, EventArgs e)
         {
+            autoLoginCheckbox.Checked = appContext.GetAutoLoginSetting();
+
+            form.AcceptButton = signInButton;
+
             if (appContext.GetAutoLoginSetting())
             {
                 this.Visible = false;
@@ -68,7 +72,6 @@ namespace TadaPlay.Controls
                     {
                         if (task.IsCompletedSuccessfully && task.Result)
                         {
-                            AntdUI.Notification.info(form, AntdUI.Localization.Get("LoginSuccessTitle", "Đăng nhập"), AntdUI.Localization.Get("LoginSuccessContent", "Đăng nhập thành công!"), AntdUI.TAlignFrom.Bottom, Font);
                             LoginSuccessful?.Invoke(this, EventArgs.Empty);
                         }
                         else
@@ -77,11 +80,33 @@ namespace TadaPlay.Controls
                             AntdUI.Notification.error(form, AntdUI.Localization.Get("LoginErrorTitle", "Lỗi đăng nhập"), AntdUI.Localization.Get("LoginErrorContent", task.Exception!.InnerException!.Message), AntdUI.TAlignFrom.Bottom, Font);
                         }
                     });
-                }, () =>
-                {
-                    System.Diagnostics.Debug.WriteLine("Hoàn tất");
                 });
             }
+        }
+
+        private void TextBox_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.KeyCode == Keys.Enter)
+            {
+                // Prevent the TextBox from processing the Enter key (e.g., adding a new line)
+                e.SuppressKeyPress = true;
+                e.Handled = true;
+
+                // Trigger the click event of the login button
+                this.signInButton.PerformClick();
+            }
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing && (components != null))
+            {
+                // --- NEW: Unsubscribe from KeyDown events ---
+                this.usernameTextBox.KeyDown -= TextBox_KeyDown;
+                this.passwordTextBox.KeyDown -= TextBox_KeyDown;
+                // ... (existing unsubscribes) ...
+            }
+            base.Dispose(disposing);
         }
     }
 }

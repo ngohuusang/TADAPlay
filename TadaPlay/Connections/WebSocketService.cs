@@ -17,7 +17,7 @@ namespace TadaPlay.Websockets
 {
     public class WebSocketService : IWebSocketService
     {
-        private const string WS_BASE_URI = "ws://192.168.1.14:8888/";
+        private const string WS_BASE_URI = "ws://192.168.1.10:8888/";
 
         private ClientWebSocket _ws; // The actual WebSocket client
         private CancellationTokenSource _receiveCts; // Manages cancellation for the receive loop
@@ -114,7 +114,7 @@ namespace TadaPlay.Websockets
                 }
                 _ws.Dispose();
             }
-            StopPing();
+            //TODO Enable if needed StopPing();
 
             _ws = new ClientWebSocket();
             _ws.Options.KeepAliveInterval = TimeSpan.FromSeconds(30);
@@ -133,7 +133,7 @@ namespace TadaPlay.Websockets
                 DebugLogger.Info("✅ WebSocketService: Connected.");
                 OnConnected?.Invoke(this, EventArgs.Empty);
                 OnConnectionStatusChanged?.Invoke(this, "Connected");
-                StartPing();
+                //TODO Enable if needed StartPing();
 
                 _ = ReceiveLoopAsync(_receiveCts.Token);
             }
@@ -159,7 +159,7 @@ namespace TadaPlay.Websockets
         {
             _isExplicitlyDisconnected = true;
             StopReconnectTimer(); // Stop it
-            StopPing();
+            //StopPing();
 
             if (_ws != null && (_ws.State == WebSocketState.Open || _ws.State == WebSocketState.Connecting))
             {
@@ -262,36 +262,36 @@ namespace TadaPlay.Websockets
         }
 
         // --- Ping/Pong Logic ---
-        public void StartPing()
-        {
-            if (_pingTimer == null)
-            {
-                _pingTimer = new System.Timers.Timer(PingInterval);
-                _pingTimer.Elapsed += async (s, e) => await SendPingAsync(); // Async lambda for ping
-            }
-            //TODO _pingTimer.Start();
-            DebugLogger.Info("WebSocketService: Ping timer started."); // Changed to DebugLogger.Info
-        }
+        //public void StartPing()
+        //{
+        //    if (_pingTimer == null)
+        //    {
+        //        _pingTimer = new System.Timers.Timer(PingInterval);
+        //        _pingTimer.Elapsed += async (s, e) => await SendPingAsync(); // Async lambda for ping
+        //    }
+        //    _pingTimer.Start();
+        //    DebugLogger.Info("WebSocketService: Ping timer started."); // Changed to DebugLogger.Info
+        //}
 
-        public void StopPing()
-        {
-            _pingTimer?.Stop();
-            _pingTimer?.Dispose();
-            _pingTimer = null;
-            DebugLogger.Info("WebSocketService: Ping timer stopped and disposed."); // Changed to DebugLogger.Info
-        }
+        //public void StopPing()
+        //{
+        //    _pingTimer?.Stop();
+        //    _pingTimer?.Dispose();
+        //    _pingTimer = null;
+        //    DebugLogger.Info("WebSocketService: Ping timer stopped and disposed."); // Changed to DebugLogger.Info
+        //}
 
-        private async Task SendPingAsync()
-        {
-            if (_ws != null && _ws.State == WebSocketState.Open)
-            {
-                long ts = GetUnixTimeMilliseconds();
-                var pingMsg = new { ping = true, ts = ts };
-                string json = JsonConvert.SerializeObject(pingMsg);
-                await SendRawAsync(json);
-                DebugLogger.Info("📡 WebSocketService: Ping sent"); // Changed to DebugLogger.Info
-            }
-        }
+        //private async Task SendPingAsync()
+        //{
+        //    if (_ws != null && _ws.State == WebSocketState.Open)
+        //    {
+        //        long ts = GetUnixTimeMilliseconds();
+        //        var pingMsg = new { ping = true, ts = ts };
+        //        string json = JsonConvert.SerializeObject(pingMsg);
+        //        await SendRawAsync(json);
+        //        DebugLogger.Info("📡 WebSocketService: Ping sent"); // Changed to DebugLogger.Info
+        //    }
+        //}
 
         // --- Receiving Messages ---
         private async Task ReceiveLoopAsync(CancellationToken cancellationToken)

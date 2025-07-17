@@ -32,6 +32,8 @@ namespace TadaPlay.Controls
         private TaskCompletionSource<bool> roomCreationTcs;
         private string pendingRoomCreationId = null;
 
+        public event EventHandler LogoutRequested;
+
         public Home(MainForm _mainForm, IWebSocketService _webSocketService, IAppContext _appContext, IServiceProvider _serviceProvider)
         {
             InitializeComponent();
@@ -45,23 +47,35 @@ namespace TadaPlay.Controls
         // --- AppContext Event Handlers ---
         private void AppContext_OnCurrentUserUpdated(object sender, EventArgs e)
         {
-            this.BeginInvoke(() => {
-                DebugLogger.Info($"Home: Current user model updated by AppContext.");
+            if (this.InvokeRequired && this.IsHandleCreated)
+            {
+                this.BeginInvoke(() =>
+                {
+                    DebugLogger.Info($"Home: Current user model updated by AppContext.");
+                    UpdateUiBasedOnLobbyState();
+                });
+            }
+            else
+            {
                 UpdateUiBasedOnLobbyState();
-            });
+                DebugLogger.Warn($"[HOME_CONTROL - No UI Handle] AppContext Current User Update.");
+            }
+
         }
 
         private void AppContext_OnOnlineUsersUpdated(object sender, EventArgs e)
         {
             if (this.InvokeRequired && this.IsHandleCreated)
             {
-                this.BeginInvoke(() => {
+                this.BeginInvoke(() =>
+                {
                     UpdateOnlineUsersListView(appContext.AllOnlineUsers);
                     DebugLogger.Info($"Home: Online users list updated by AppContext. Count: {appContext.AllOnlineUsers.Count}");
                     UpdateUiBasedOnLobbyState();
                 });
             }
-            else {
+            else
+            {
                 UpdateOnlineUsersListView(appContext.AllOnlineUsers);
                 DebugLogger.Warn($"[HOME_CONTROL - No UI Handle] AppContext Online Users Update.");
             }
@@ -71,13 +85,15 @@ namespace TadaPlay.Controls
         {
             if (this.InvokeRequired && this.IsHandleCreated)
             {
-                this.BeginInvoke(() => {
+                this.BeginInvoke(() =>
+                {
                     UpdateRoomsListView(appContext.AllActiveRooms);
                     DebugLogger.Info($"Home: Active rooms list updated by AppContext. Count: {appContext.AllActiveRooms.Count}");
                     UpdateUiBasedOnLobbyState();
                 });
             }
-            else { 
+            else
+            {
                 UpdateRoomsListView(appContext.AllActiveRooms);
                 DebugLogger.Info($"Home: Active rooms list updated by AppContext. Count: {appContext.AllActiveRooms.Count}");
                 UpdateUiBasedOnLobbyState();
@@ -88,14 +104,16 @@ namespace TadaPlay.Controls
         {
             if (this.InvokeRequired && this.IsHandleCreated)
             {
-                this.BeginInvoke(() => {
+                this.BeginInvoke(() =>
+                {
                     DebugLogger.Info($"Home: Current room details updated by AppContext. Room: {appContext.CurrentRoomDetails?.Name ?? "None"}");
                     UpdateUiBasedOnLobbyState();
                 });
             }
-            else {
+            else
+            {
                 UpdateUiBasedOnLobbyState();
-                DebugLogger.Warn($"[HOME_CONTROL - No UI Handle] AppContext Current Room Update."); 
+                DebugLogger.Warn($"[HOME_CONTROL - No UI Handle] AppContext Current Room Update.");
             }
         }
         #endregion
@@ -124,7 +142,8 @@ namespace TadaPlay.Controls
         {
             if (!webSocketService.IsConnected)
             {
-                mainForm.BeginInvoke(new Action(() => {
+                mainForm.BeginInvoke(new Action(() =>
+                {
                     AntdUI.Modal.open(new AntdUI.Modal.Config(mainForm, AntdUI.Localization.Get("Error", "Lỗi"), AntdUI.Localization.Get("NotConnectedToServer", "Chưa kết nối đến máy chủ."), AntdUI.TType.Error)
                     { CancelText = null, OkText = AntdUI.Localization.Get("CloseButton", "Đóng") });
                 }));
@@ -132,7 +151,8 @@ namespace TadaPlay.Controls
             }
             if (appContext.GetCurrentUser()?.CurrentRoomId != null)
             {
-                mainForm.BeginInvoke(new Action(() => {
+                mainForm.BeginInvoke(new Action(() =>
+                {
                     AntdUI.Modal.open(new AntdUI.Modal.Config(mainForm, AntdUI.Localization.Get("Error", "Lỗi"), AntdUI.Localization.Get("AlreadyInRoom", "Bạn đã ở trong một phòng. Vui lòng rời khỏi trước."), AntdUI.TType.Warn)
                     { CancelText = null, OkText = AntdUI.Localization.Get("CloseButton", "Đóng") });
                 }));
@@ -149,7 +169,8 @@ namespace TadaPlay.Controls
             EventHandler appContextCreateRoomHandler = null;
             appContextCreateRoomHandler = (s, e) => // This handler reacts to AppContext's events
             {
-                mainForm.BeginInvoke(new Action(() => { // Marshal to UI thread (if needed for MessageBox or UI changes)
+                mainForm.BeginInvoke(new Action(() =>
+                { // Marshal to UI thread (if needed for MessageBox or UI changes)
                     // The AppContext.OnActiveRoomsUpdated event implies room list is fresh
                     ClientRoom createdRoom = appContext.AllActiveRooms.FirstOrDefault(r => r.Id == pendingRoomCreationId);
                     User currentUser = appContext.GetCurrentUser();
@@ -178,7 +199,8 @@ namespace TadaPlay.Controls
             {
                 if (mainForm != null && mainForm.IsHandleCreated)
                 {
-                    mainForm.BeginInvoke(new Action(() => { // Marshal to UI thread
+                    mainForm.BeginInvoke(new Action(() =>
+                    { // Marshal to UI thread
                         try
                         {
                             var data = JObject.Parse(e.Data);
@@ -259,14 +281,16 @@ namespace TadaPlay.Controls
                 }
                 catch (TimeoutException)
                 {
-                    mainForm.BeginInvoke(new Action(() =>  { 
+                    mainForm.BeginInvoke(new Action(() =>
+                    {
                         AntdUI.Modal.open(new AntdUI.Modal.Config(mainForm, AntdUI.Localization.Get("CreateRoomTimeout", "Thời gian chờ tạo phòng đã hết"), AntdUI.Localization.Get("CreateRoomTimeoutContent", "Máy chủ không phản hồi kịp thời."), AntdUI.TType.Error) { CancelText = null, OkText = AntdUI.Localization.Get("CloseButton", "Đóng") });
-                       
+
                     }));
                 }
                 catch (Exception ex)
                 {
-                    mainForm.BeginInvoke(new Action(() => {
+                    mainForm.BeginInvoke(new Action(() =>
+                    {
                         DebugLogger.Error($"Home Control: Error creating room: {ex.Message}");
                         AntdUI.Modal.open(new AntdUI.Modal.Config(mainForm, AntdUI.Localization.Get("CreateRoomError", "Lỗi tạo phòng"), AntdUI.Localization.Get("CreateRoomErrorContent", ex.InnerException?.Message ?? ex.Message), AntdUI.TType.Error) { CancelText = null, OkText = AntdUI.Localization.Get("CloseButton", "Đóng") });
                     }));
@@ -310,19 +334,19 @@ namespace TadaPlay.Controls
         }
 
         private void UpdateRoomsListView(IReadOnlyList<ClientRoom> rooms)
-        {  
+        {
             roomTable.DataSource = rooms;
         }
 
         private void UpdateUiBasedOnLobbyState()
         {
+            userAvatar.Badge = "A+";
+            usernameLabel.Text = appContext.GetCurrentUser()?.Username ?? "Chưa đăng nhập";
+            rankLabel.Text = appContext.GetCurrentUser()?.Ranking ?? "Chưa có hạng";
             // Create Room button always enabled if user is connected and not currently hosting/in a full room
             // Assuming we don't allow hosting while already in a room.
             createRoomButton.Enabled = webSocketService.IsConnected &&
                                        (appContext.GetCurrentUser()?.CurrentRoomId == null || appContext.GetCurrentUser()?.Status == "online"); // Only if not in a room
-
-            // View/Join Room button enabled only if a room is selected
-            joinRoomButton.Enabled = webSocketService.IsConnected && roomTable.SelectedIndex >= 0;
         }
 
         private void WebSocketService_OnConnectionStatusChanged(object sender, string statusMessage)
@@ -422,6 +446,33 @@ namespace TadaPlay.Controls
                     UpdateUiBasedOnLobbyState();
                 }));
             }
+        }
+
+        private void refreshRoomButton_Click(object sender, EventArgs e)
+        {
+            if (this.InvokeRequired)
+            {
+                this.BeginInvoke(new Action(() =>
+                {
+                    webSocketService.RefreshAsync();
+                }));
+            }
+            else
+            {
+                webSocketService.RefreshAsync();
+            }
+        }
+
+        private void logoutButton_Click(object sender, EventArgs e)
+        {
+            AntdUI.Modal.open(new AntdUI.Modal.Config(mainForm, "Đăng xuất", "Bạn chắc chắn muốn thoát tài khoản?", AntdUI.TType.Warn)
+            {
+                OnOk = config =>
+                {
+                    LogoutRequested?.Invoke(this, EventArgs.Empty);
+                    return true;
+                }
+            });
         }
     }
 }

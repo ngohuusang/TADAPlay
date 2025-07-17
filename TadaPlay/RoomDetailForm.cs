@@ -10,6 +10,7 @@ using TadaPlay.Connections;
 using TadaPlay.Connections.Interface;
 using TadaPlay.Contexts.Interfaces;
 using TadaPlay.Logger;
+using TadaPlay.Websockets;
 using TadaPlay.Websockets.Interface;
 
 namespace TadaPlay
@@ -21,6 +22,8 @@ namespace TadaPlay
         private readonly IAppContext _appContext;
         private ClientRoom _currentRoom;
 
+        private bool _isClosingOrClosed = false;
+
         public RoomDetailForm(IWebSocketService webSocketService, IAppContext appContext, IWireGuardVpnService wireGuardVpnService)
         {
             InitializeComponent();
@@ -31,6 +34,8 @@ namespace TadaPlay
             // Subscribe to AppContext events relevant to this form
             _appContext.OnCurrentRoomDetailsUpdated += AppContext_OnCurrentRoomDetailsUpdated;
             _appContext.OnOnlineUsersUpdated += AppContext_OnOnlineUsersUpdated; // For user status within room
+
+            _webSocketService.OnConnectionStatusChanged += WebSocketService_OnConnectionStatusChanged;
             _webSocketService.OnErrorOccurred += WebSocketService_OnErrorOccurred;
             // No need to subscribe to OnMessageReceived from WebSocketService here, AppContext processes it.
 
@@ -81,20 +86,34 @@ namespace TadaPlay
             _wireGuardVpnService.ConnectAsync();
         }
 
+        private void WebSocketService_OnConnectionStatusChanged(object sender, string message)
+        {
+            if (this.InvokeRequired && this.IsHandleCreated)
+            {
+                this.BeginInvoke(() => {
+                    printLog($"[Kết nối] {message}", logRichTextBox.ForeColor);
+                });
+            }
+            else
+            {
+                printLog($"[Kết nối] {message}", logRichTextBox.ForeColor);
+            }
+        }
+
         private void WireguardVpnService_OnConnected(object sender, EventArgs e)
         {
             if (this.InvokeRequired && this.IsHandleCreated)
             {
                 this.BeginInvoke(() => {
                     DebugLogger.Info("VPN connected successfully. You can interact with this room.");
-                    Notification.info(this, "Đã kết nối VPN", "VPN đã kết nối thành công. Bạn có thể tương tác với phòng này.", TAlignFrom.Bottom);
+                    printLog($"[Kết nối VPN] VPN đã kết nối thành công.", Color.DarkGreen);
                     UpdateButtonsState(); // Update buttons as VPN state affects them
                 });
             }
             else 
             { 
                 DebugLogger.Warn("[ROOM_DETAIL_FORM - No UI Handle] VPN Connected.");
-                Notification.info(this, "Đã kết nối VPN", "VPN đã kết nối thành công. Bạn có thể tương tác với phòng này.", TAlignFrom.Bottom);
+                printLog($"[Kết nối VPN] VPN đã kết nối thành công.", Color.DarkGreen);
                 UpdateButtonsState(); // Update buttons as VPN state affects them
             }
         }
@@ -105,15 +124,58 @@ namespace TadaPlay
             {
                 this.BeginInvoke(() => {
                     DebugLogger.Warn("VPN disconnected. User may not be able to interact with the room.");
-                    Notification.warn(this, "Đã ngắt kết nối VPN", "VPN đã ngắt kết nối. Bạn có thể không tương tác được với phòng này.", TAlignFrom.Bottom);
+                    printLog($"[Lỗi kết nối VPN] VPN đã ngắt kết nối. Hãy mở lại ứng dụng hoặc kiểm tra mạng", Color.Red);
                     UpdateButtonsState(); // Update buttons
                 });
             }
             else 
             { 
                 DebugLogger.Warn("[ROOM_DETAIL_FORM - No UI Handle] VPN Disconnected.");
-                Notification.warn(this, "Đã ngắt kết nối VPN", "VPN đã ngắt kết nối. Bạn có thể không tương tác được với phòng này.", TAlignFrom.Bottom);
+                printLog($"[Lỗi kết nối VPN] VPN đã ngắt kết nối. Hãy mở lại ứng dụng hoặc kiểm tra mạng", Color.Red);
                 UpdateButtonsState(); // Update buttons
+            }
+        }
+
+        private void printLog(string logMessage, Color textColor)
+        {
+            if (this.InvokeRequired && this.IsHandleCreated)
+            {
+                this.BeginInvoke(() =>
+                {
+                    logRichTextBox.SelectionStart = logRichTextBox.TextLength;
+                    logRichTextBox.SelectionLength = 0;
+                    logRichTextBox.SelectionColor = textColor;
+                    logRichTextBox.AppendText(logMessage + Environment.NewLine);
+                    logRichTextBox.SelectionColor = logRichTextBox.ForeColor; // Reset color for subsequent text
+
+                    // Auto-scroll to the bottom
+                    logRichTextBox.SelectionStart = logRichTextBox.TextLength;
+                    logRichTextBox.ScrollToCaret();
+
+                    // Optional: Limit number of lines to prevent performance issues with very large logs
+                    if (logRichTextBox.Lines.Length > 500) // Keep last 500 lines
+                    {
+                        logRichTextBox.Text = string.Join(Environment.NewLine, logRichTextBox.Lines.Skip(logRichTextBox.Lines.Length - 500));
+                    }
+                });
+            }
+            else
+            {
+                logRichTextBox.SelectionStart = logRichTextBox.TextLength;
+                logRichTextBox.SelectionLength = 0;
+                logRichTextBox.SelectionColor = textColor;
+                logRichTextBox.AppendText(logMessage + Environment.NewLine);
+                logRichTextBox.SelectionColor = logRichTextBox.ForeColor; // Reset color for subsequent text
+
+                // Auto-scroll to the bottom
+                logRichTextBox.SelectionStart = logRichTextBox.TextLength;
+                logRichTextBox.ScrollToCaret();
+
+                // Optional: Limit number of lines to prevent performance issues with very large logs
+                if (logRichTextBox.Lines.Length > 500) // Keep last 500 lines
+                {
+                    logRichTextBox.Text = string.Join(Environment.NewLine, logRichTextBox.Lines.Skip(logRichTextBox.Lines.Length - 500));
+                }
             }
         }
 
@@ -123,13 +185,13 @@ namespace TadaPlay
             {
                 this.BeginInvoke(() => {
                     DebugLogger.Error($"VPN Error: {errorMessage}");
-                    Notification.error(this, "Lỗi kết nối VPN", errorMessage, TAlignFrom.Bottom);
+                    printLog($"[Lỗi kết nối VPN] {errorMessage}.", Color.Red);
                     UpdateButtonsState(); // Update buttons
                 });
             }
             else { 
                 DebugLogger.Error($"[ROOM_DETAIL_FORM - No UI Handle] VPN Error: {errorMessage}");
-                Notification.error(this, "Lỗi kết nối VPN", errorMessage, TAlignFrom.Bottom);
+                printLog($"[Lỗi kết nối VPN] {errorMessage}.", Color.Red);
                 UpdateButtonsState(); // Update buttons
             }
         }
@@ -141,32 +203,40 @@ namespace TadaPlay
             {
                 this.BeginInvoke(new Action(() =>
                 {
-                    User currentUser = _appContext.GetCurrentUser();
-                    // If the updated current room in AppContext is THIS room
-                    if (_currentRoom != null && _appContext.CurrentRoomDetails?.Id == _currentRoom.Id)
-                    {
-                        _currentRoom = _appContext.CurrentRoomDetails; // Get the latest details
-                        UpdateRoomDetailsUi();
-                        // Check if room was closed
-                        if (_currentRoom.Status == "closed")
-                        {
-                            MessageBox.Show($"Phòng '{_currentRoom.Name}' đã bị đóng.", "Phòng đã đóng", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                            this.Close();
-                        }
-                    }
-                    // Or if current user is no longer in *any* room and this form is showing their previous room
-                    else if (_appContext.CurrentRoomDetails == null && _currentRoom != null && currentUser?.CurrentRoomId == null)
-                    {
-                        // Check if this specific room is no longer in the active rooms list
-                        if (!_appContext.AllActiveRooms.Any(r => r.Id == _currentRoom.Id && r.Status != "closed"))
-                        {
-                            MessageBox.Show($"Bạn bị mời ra khỏi phòng '{_currentRoom.Name}' hoặc nó đã bị đóng.", "Phòng đã đóng", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                            this.Close();
-                        }
-                    }
+                    HandleRoomDetailsUpdate();
                 }));
             }
+            else
+            {
+                HandleRoomDetailsUpdate();
+            }
         }
+
+        private void HandleRoomDetailsUpdate()
+        {
+            User currentUser = _appContext.GetCurrentUser();
+            if (_currentRoom != null && _appContext.CurrentRoomDetails?.Id == _currentRoom.Id)
+            {
+                _currentRoom = _appContext.CurrentRoomDetails;
+                UpdateRoomDetailsUi();
+                if (_currentRoom.Status == "closed")
+                {
+                    _isClosingOrClosed = true;
+                    MessageBox.Show($"Phòng '{_currentRoom.Name}' đã bị đóng.", "Phòng đã đóng", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    this.Close();
+                }
+            }
+            else if (_appContext.CurrentRoomDetails == null && _currentRoom != null && currentUser?.CurrentRoomId == null)
+            {
+                if (!_appContext.AllActiveRooms.Any(r => r.Id == _currentRoom.Id && r.Status != "closed"))
+                {
+                    _isClosingOrClosed = true;
+                    MessageBox.Show($"Bạn bị mời ra khỏi phòng '{_currentRoom.Name}' hoặc nó đã bị đóng.", "Phòng đã đóng", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    this.Close();
+                }
+            }
+        }
+
 
         private void AppContext_OnOnlineUsersUpdated(object sender, EventArgs e)
         {
@@ -207,13 +277,13 @@ namespace TadaPlay
             {
                 this.BeginInvoke(() =>
                 {
-                    Notification.error(this, "Mất kết nối", errorMessage, TAlignFrom.Bottom);
+                    printLog($"[Mất kết nối] {errorMessage}.", Color.Red);
                     DebugLogger.Error($"RoomDetailForm WS Error: {errorMessage}");
                 });
             }
             else 
             {
-                Notification.error(this, "Mất kết nối", errorMessage, TAlignFrom.Bottom);
+                printLog($"[Mất kết nối] {errorMessage}.", Color.Red);
                 DebugLogger.Error($"[ROOM_DETAIL_FORM - No UI Handle] WS Error: {errorMessage}");
             }
         }
@@ -267,11 +337,11 @@ namespace TadaPlay
 
             bool isHost = currentUser.Id.ToString() == _currentRoom.HostUserId;
 
-            bool isInThisRoom = (currentUser.CurrentRoomId == _currentRoom.Id) && (currentUser.Status == "host" || currentUser.Status == "joined" || currentUser.Status == "spectating");
+            bool isInThisRoom = (currentUser.CurrentRoomId == _currentRoom.Id) && (currentUser.Status == "host" || currentUser.Status == "joined" || currentUser.Status == "playing");
 
 
             kickUserButton.Enabled = isHost && userListView.SelectedItems.Count > 0 &&
-                                    (string)userListView.SelectedItems[0].Tag != currentUser.Username;
+                                    (string) userListView.SelectedItems[0].Tag != currentUser.Username;
 
         }
 
@@ -360,6 +430,10 @@ namespace TadaPlay
                     }
                 });
             }
+            else
+            {
+                e.Cancel = true;
+            }
         }
 
         private async void leaveRoom(object sender, FormClosingEventArgs e)
@@ -388,6 +462,10 @@ namespace TadaPlay
                         { CancelText = null, OkText = AntdUI.Localization.Get("CloseButton", "Đóng") });
                     }
                 });
+            } 
+            else
+            {
+                e.Cancel = true;
             }
         }
 
@@ -398,6 +476,8 @@ namespace TadaPlay
 
         private void RoomDetailForm_FormClosed(object sender, FormClosedEventArgs e)
         {
+            _isClosingOrClosed = true;
+
             _webSocketService.OnErrorOccurred -= WebSocketService_OnErrorOccurred;
             _appContext.OnCurrentRoomDetailsUpdated -= AppContext_OnCurrentRoomDetailsUpdated;
             _appContext.OnOnlineUsersUpdated -= AppContext_OnOnlineUsersUpdated;
@@ -416,6 +496,12 @@ namespace TadaPlay
 
         private void RoomDetailForm_FormClosing(object sender, FormClosingEventArgs e)
         {
+
+            if (_isClosingOrClosed)
+            {
+                return;
+            }
+
             User currentUser = _appContext.GetCurrentUser();
             if (currentUser != null && _currentRoom != null) // Ensure _currentRoom is not null
             {

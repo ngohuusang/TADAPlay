@@ -45,6 +45,9 @@ namespace TadaPlay.Common.Models
         [JsonProperty("vpn_profile")]
         public VpnProfile VpnProfile { get; set; }
 
+        [JsonProperty("ranking")]
+        public string Ranking { get; set; }
+
         public bool IsHost => Status == "host";
         public bool IsInRoom => !string.IsNullOrEmpty(CurrentRoomId);
     }

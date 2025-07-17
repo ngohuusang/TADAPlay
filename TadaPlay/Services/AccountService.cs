@@ -129,7 +129,9 @@ public class AccountService : IAccountService
 
     public async Task<bool> ReleaseVpnProfileAsync()
     {
+        var currentUser = _appContext.GetCurrentUser();
         var content = new StringContent("", Encoding.UTF8, "application/json");
+        _httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _appContext.GetJwtTokenSetting());
         var response = await _httpClient.PostAsync(BASE_URL + "?action=release_vpn_profile", content);
         response.EnsureSuccessStatusCode();
         var responseBody = await response.Content.ReadAsStringAsync();
@@ -140,10 +142,8 @@ public class AccountService : IAccountService
 
             return true;
         }
-        else
-        {
-            throw new Exception(apiResponse.Message);
-        }
+
+        return false;
     }
 
     public async Task<bool> UpdateUserInfo(string full_name, string nick_name, string current_password, string new_password)
@@ -203,6 +203,15 @@ public class AccountService : IAccountService
                 throw new Exception("Lỗi cập nhật IP:" + apiResponse.Message);
             }
         }
+
+        return true;
+    }
+
+    public async Task<bool> DoLogoutAsync()
+    {
+        await ReleaseVpnProfileAsync();
+        _appContext.SetJwtTokenSetting(null);
+        _appContext.SetCurrentUser(null);
 
         return true;
     }

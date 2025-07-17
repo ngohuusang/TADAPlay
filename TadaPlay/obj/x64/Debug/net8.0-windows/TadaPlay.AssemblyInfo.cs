@@ -14,7 +14,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("TadaPlay")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+b0efa2d9ccf39a77af0d2d6cfeb1fd5eff5dfde9")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+d3711494bad661567484f65f3725522972c607d1")]
 [assembly: System.Reflection.AssemblyProductAttribute("TadaPlay")]
 [assembly: System.Reflection.AssemblyTitleAttribute("TadaPlay")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

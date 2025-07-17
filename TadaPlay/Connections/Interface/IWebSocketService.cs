@@ -22,8 +22,8 @@ namespace TadaPlay.Websockets.Interface
         void Disconnect();
         Task<bool> SendMessageAsync(object message);
         Task<bool> SendRawAsync(string message);
-        void StartPing();
-        void StopPing();
+        //void StartPing();
+        //void StopPing();
 
         Task<bool> KickUserFromRoomAsync(string roomId, string userNameToKick);
         Task<bool> CloseRoomAsync(string roomId);

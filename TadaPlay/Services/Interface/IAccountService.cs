@@ -13,6 +13,8 @@ public interface IAccountService
 
     Task<bool> ReleaseVpnProfileAsync();
 
+    Task<bool> DoLogoutAsync();
+
     Task<bool> UpdateUserInfo(string full_name, string nick_name, string current_password, string new_password);
 
     Task<bool> UpdateCurrentIPToServer(string currentIp);
