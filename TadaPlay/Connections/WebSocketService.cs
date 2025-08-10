@@ -17,7 +17,7 @@ namespace TadaPlay.Websockets
 {
     public class WebSocketService : IWebSocketService
     {
-        private const string WS_BASE_URI = "ws://192.168.1.10:8888/";
+        private const string WS_BASE_URI = "ws://192.168.1.5:8888/";
 
         private ClientWebSocket _ws; // The actual WebSocket client
         private CancellationTokenSource _receiveCts; // Manages cancellation for the receive loop

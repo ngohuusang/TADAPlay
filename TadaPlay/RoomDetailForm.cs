@@ -51,6 +51,48 @@ namespace TadaPlay
             this.kickUserButton.Click += kickUserButton_Click;
             this.startGameButton.Click += startGameButton_Click; // Assuming you have a start game button
             this.userListView.SelectedIndexChanged += usersInRoomListView_SelectedIndexChanged;
+
+            InitializeRoomEvents();
+        }
+
+        private void InitializeRoomEvents()
+        {
+            // Subscribe to WebSocket events for user actions
+            _webSocketService.OnMessageReceived += (sender, e) =>
+            {
+                try
+                {
+                    var message = JObject.Parse(e.Data);
+                    if (message["command"]?.ToString() == "user_joined")
+                    {
+                        var user = message["user"]?.ToObject<User>();
+                        if (user != null)
+                        {
+                            LogRoomAction(user, "đã tham gia phòng.", Color.Green);
+                        }
+                    }
+                    else if (message["command"]?.ToString() == "user_left")
+                    {
+                        var user = message["user"]?.ToObject<User>();
+                        if (user != null)
+                        {
+                            LogRoomAction(user, "đã rời phòng.", Color.Orange);
+                        }
+                    }
+                    else if (message["command"]?.ToString() == "user_kicked")
+                    {
+                        var user = message["user"]?.ToObject<User>();
+                        if (user != null)
+                        {
+                            LogRoomAction(user, "đã bị đá khỏi phòng.", Color.Red);
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    DebugLogger.Error($"Error processing room action message: {ex.Message}");
+                }
+            };
         }
 
         private void resizeColumns()
@@ -72,6 +114,7 @@ namespace TadaPlay
         {
             _currentRoom = room;
             this.Text = $"Room: {_currentRoom.Name}";
+            LogRoomAction(_appContext.GetCurrentUser(), "đã tham gia phòng.", Color.Green);
             UpdateRoomDetailsUi();
         }
 
@@ -138,10 +181,11 @@ namespace TadaPlay
 
         private void printLog(string logMessage, Color textColor)
         {
-            if (this.InvokeRequired && this.IsHandleCreated)
+            if (this.InvokeRequired)
             {
                 this.BeginInvoke(() =>
                 {
+                    if (this.IsDisposed || logRichTextBox.IsDisposed) return;
                     logRichTextBox.SelectionStart = logRichTextBox.TextLength;
                     logRichTextBox.SelectionLength = 0;
                     logRichTextBox.SelectionColor = textColor;
@@ -161,6 +205,7 @@ namespace TadaPlay
             }
             else
             {
+                if (this.IsDisposed || logRichTextBox.IsDisposed) return;
                 logRichTextBox.SelectionStart = logRichTextBox.TextLength;
                 logRichTextBox.SelectionLength = 0;
                 logRichTextBox.SelectionColor = textColor;
@@ -217,12 +262,39 @@ namespace TadaPlay
             User currentUser = _appContext.GetCurrentUser();
             if (_currentRoom != null && _appContext.CurrentRoomDetails?.Id == _currentRoom.Id)
             {
+                // Get the old status before updating
+                string oldStatus = _currentRoom.Status;
                 _currentRoom = _appContext.CurrentRoomDetails;
+                
+                // Log status changes
+                if (oldStatus != _currentRoom.Status)
+                {
+                    switch (_currentRoom.Status)
+                    {
+                        case "playing":
+                            LogGameAction("Trò chơi đã bắt đầu!", Color.Green);
+                            break;
+                        case "finished":
+                            LogGameAction("Trò chơi đã kết thúc.", Color.Orange);
+                            break;
+                        case "closed":
+                            LogGameAction("Phòng đã đóng.", Color.Red);
+                            break;
+                    }
+                }
+
                 UpdateRoomDetailsUi();
                 if (_currentRoom.Status == "closed")
                 {
                     _isClosingOrClosed = true;
-                    MessageBox.Show($"Phòng '{_currentRoom.Name}' đã bị đóng.", "Phòng đã đóng", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    AntdUI.Modal.open(new AntdUI.Modal.Config(this,
+                        "Phòng đã đóng",
+                        $"Phòng '{_currentRoom.Name}' đã bị đóng.",
+                        AntdUI.TType.Info)
+                    {
+                        CancelText = null,
+                        OkText = "Đóng"
+                    });
                     this.Close();
                 }
             }
@@ -231,37 +303,45 @@ namespace TadaPlay
                 if (!_appContext.AllActiveRooms.Any(r => r.Id == _currentRoom.Id && r.Status != "closed"))
                 {
                     _isClosingOrClosed = true;
-                    MessageBox.Show($"Bạn bị mời ra khỏi phòng '{_currentRoom.Name}' hoặc nó đã bị đóng.", "Phòng đã đóng", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    AntdUI.Modal.open(new AntdUI.Modal.Config(this,
+                        "Phòng đã đóng",
+                        $"Bạn bị mời ra khỏi phòng '{_currentRoom.Name}' hoặc nó đã bị đóng.",
+                        AntdUI.TType.Info)
+                    {
+                        CancelText = null,
+                        OkText = "Đóng"
+                    });
                     this.Close();
                 }
             }
         }
 
-
         private void AppContext_OnOnlineUsersUpdated(object sender, EventArgs e)
         {
-            // This event indicates any user's status or list changed.
-            // We need to check if the users in *our* room (_currentRoom) were affected.
             if (this.InvokeRequired && this.IsHandleCreated)
             {
                 this.BeginInvoke(new Action(() =>
                 {
                     if (_currentRoom != null)
                     {
-                        // Get the latest version of this room from AppContext's rooms list
                         var updatedRoomInList = _appContext.AllActiveRooms.FirstOrDefault(r => r.Id == _currentRoom.Id);
                         if (updatedRoomInList != null)
                         {
-                            _currentRoom = updatedRoomInList; // Update local room object
-                            UpdateRoomDetailsUi(); // Refresh UI
+                            _currentRoom = updatedRoomInList;
+                            UpdateRoomDetailsUi();
                         }
                         else
                         {
-                            // If our room is no longer in the AllActiveRooms list (it was closed/deleted)
-                            // This scenario is mostly covered by OnCurrentRoomDetailsUpdated, but good to double check.
-                            if (_currentRoom.Status != "closed") // If not already marked closed, implies it vanished
+                            if (_currentRoom.Status != "closed")
                             {
-                                MessageBox.Show($"Phòng '{_currentRoom.Name}' không tồn tại hoặc đã đóng.", "Phòng không tồn tại", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                                AntdUI.Modal.open(new AntdUI.Modal.Config(this,
+                                    "Phòng không tồn tại",
+                                    $"Phòng '{_currentRoom.Name}' không tồn tại hoặc đã đóng.",
+                                    AntdUI.TType.Info)
+                                {
+                                    CancelText = null,
+                                    OkText = "Đóng"
+                                });
                                 this.Close();
                             }
                         }
@@ -332,75 +412,157 @@ namespace TadaPlay
             {
                 kickUserButton.Enabled = false;
                 startGameButton.Enabled = false;
+                startGameButton.Text = "Bắt đầu";
                 return;
             }
 
-            bool isHost = currentUser.Id.ToString() == _currentRoom.HostUserId;
+            bool isHost = currentUser.Username == _currentRoom.HostUserId;
+            bool isVpnConnected = _wireGuardVpnService.IsConnected;
+            bool isJoined = currentUser.CurrentRoomId == _currentRoom.Id && currentUser.Status == "joined";
 
-            bool isInThisRoom = (currentUser.CurrentRoomId == _currentRoom.Id) && (currentUser.Status == "host" || currentUser.Status == "joined" || currentUser.Status == "playing");
+            // Enable kickUserButton if host and a joined user is selected (not self)
+            if (isHost && userListView.SelectedItems.Count > 0)
+            {
+                var selectedUserTag = userListView.SelectedItems[0].Tag as string;
+                var selectedUser = _currentRoom.Users.FirstOrDefault(u => u.Username == selectedUserTag);
+                kickUserButton.Enabled = selectedUser != null
+                    && selectedUser.Username != currentUser.Username
+                    && selectedUser.Status == "joined";
+            }
+            else
+            {
+                kickUserButton.Enabled = false;
+            }
 
-
-            kickUserButton.Enabled = isHost && userListView.SelectedItems.Count > 0 &&
-                                    (string) userListView.SelectedItems[0].Tag != currentUser.Username;
-
+            if (isHost && isVpnConnected)
+            {
+                startGameButton.Enabled = true;
+                startGameButton.Text = "Bắt đầu";
+            }
+            else if (isJoined)
+            {
+                startGameButton.Enabled = false;
+                startGameButton.Text = "Tham gia";
+            }
+            else
+            {
+                startGameButton.Enabled = false;
+                startGameButton.Text = "Bắt đầu";
+            }
         }
 
         // --- Button Click Handlers ---
         private async void startGameButton_Click(object sender, EventArgs e)
         {
             User currentUser = _appContext.GetCurrentUser();
-            if (currentUser == null || currentUser.Username != _currentRoom.HostUsername) return; // Only host can start game
-            if (_currentRoom.Status != "open") { MessageBox.Show("Game is not in 'open' status.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
-            if (_currentRoom.Users.Length <= 1) { MessageBox.Show("Need at least 2 players to start a game.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
+            if (currentUser == null || currentUser.Username != _currentRoom.HostUsername) return; // Chỉ chủ phòng mới được bắt đầu game
 
+            if (_currentRoom.Status != "open")
+            {
+                AntdUI.Modal.open(new AntdUI.Modal.Config(this,
+                    "Lỗi",
+                    "Trạng thái phòng không phải là 'mở'.",
+                    AntdUI.TType.Warn)
+                {
+                    CancelText = null,
+                    OkText = "Đóng"
+                });
+                return;
+            }
+
+            if (_currentRoom.Users.Length <= 1)
+            {
+                AntdUI.Modal.open(new AntdUI.Modal.Config(this,
+                    "Lỗi",
+                    "Cần ít nhất 2 người chơi để bắt đầu game.",
+                    AntdUI.TType.Warn)
+                {
+                    CancelText = null,
+                    OkText = "Đóng"
+                });
+                return;
+            }
 
             await AntdUI.Spin.open(this, AntdUI.Localization.Get("StartingGame", "Đang bắt đầu game..."), async config =>
             {
                 try
                 {
-                    // Assuming you have a command for starting game in WebSocketService
                     bool success = await _webSocketService.SendMessageAsync(new { command = "start_game", room_id = _currentRoom.Id });
-                    if (!success) { throw new Exception("Failed to send start game command."); }
-                    DebugLogger.Info($"RoomDetailForm: Sent start_game command for room {_currentRoom.Id}");
-                    // Server will update room status to 'playing' and broadcast, which updates UI
+                    if (!success) { throw new Exception("Gửi lệnh bắt đầu game thất bại."); }
+                    DebugLogger.Info($"RoomDetailForm: Đã gửi lệnh bắt đầu game cho phòng {_currentRoom.Id}");
+                    // Server sẽ cập nhật trạng thái phòng thành 'playing' và broadcast, UI sẽ được cập nhật
                 }
                 catch (Exception ex)
                 {
-                    DebugLogger.Error($"RoomDetailForm: Failed to send start game command: {ex.Message}");
-                    AntdUI.Modal.open(new AntdUI.Modal.Config(this, AntdUI.Localization.Get("Error", "Lỗi"), ex.InnerException?.Message ?? ex.Message, AntdUI.TType.Error)
-                    { CancelText = null, OkText = AntdUI.Localization.Get("CloseButton", "Đóng") });
+                    DebugLogger.Error($"RoomDetailForm: Gửi lệnh bắt đầu game thất bại: {ex.Message}");
+                    AntdUI.Modal.open(new AntdUI.Modal.Config(this, "Lỗi", ex.InnerException?.Message ?? ex.Message, AntdUI.TType.Error)
+                    { CancelText = null, OkText = "Đóng" });
                 }
             });
         }
 
-        private async void kickUserButton_Click(object sender, EventArgs e)
+        private void kickUserButton_Click(object sender, EventArgs e)
         {
             User currentUser = _appContext.GetCurrentUser();
             if (currentUser == null || currentUser.Username != _currentRoom.HostUsername) return;
 
-            if (userListView.SelectedItems.Count == 0) { MessageBox.Show("Please select a user to kick.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
-            string userNameToKick = userListView.SelectedItems[0].Tag?.ToString();
-            if (userNameToKick == currentUser.Username) { MessageBox.Show("You cannot kick yourself.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
-
-            DialogResult confirm = MessageBox.Show($"Are you sure you want to kick '{userNameToKick}' from this room?", "Confirm Kick", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
-            if (confirm == DialogResult.Yes)
+            if (userListView.SelectedItems.Count == 0)
             {
-                await AntdUI.Spin.open(this, AntdUI.Localization.Get("KickingUser", "Đang đá người dùng..."), async config =>
+                AntdUI.Modal.open(new AntdUI.Modal.Config(this,
+                    "Lỗi",
+                    "Vui lòng chọn người dùng để đá khỏi phòng.",
+                    AntdUI.TType.Warn)
                 {
-                    try
-                    {
-                        bool success = await _webSocketService.KickUserFromRoomAsync(_currentRoom.Id, userNameToKick);
-                        if (!success) { throw new Exception("Failed to send kick command."); }
-                        DebugLogger.Info($"RoomDetailForm: Sent kick_user command for user {userNameToKick} in room {_currentRoom.Id}");
-                    }
-                    catch (Exception ex)
-                    {
-                        DebugLogger.Error($"RoomDetailForm: Failed to send kick command: {ex.Message}");
-                        AntdUI.Modal.open(new AntdUI.Modal.Config(this, AntdUI.Localization.Get("Error", "Lỗi"), ex.InnerException?.Message ?? ex.Message, AntdUI.TType.Error)
-                        { CancelText = null, OkText = AntdUI.Localization.Get("CloseButton", "Đóng") });
-                    }
+                    CancelText = null,
+                    OkText = "Đóng"
                 });
+                return;
             }
+            string userNameToKick = userListView.SelectedItems[0].Tag?.ToString();
+            if (userNameToKick == currentUser.Username)
+            {
+                AntdUI.Modal.open(new AntdUI.Modal.Config(this,
+                    "Lỗi",
+                    "Bạn không thể tự đá mình khỏi phòng.",
+                    AntdUI.TType.Warn)
+                {
+                    CancelText = null,
+                    OkText = "Đóng"
+                });
+                return;
+            }
+
+            AntdUI.Modal.open(new AntdUI.Modal.Config(this,
+                "Xác nhận",
+                $"Bạn có chắc chắn muốn đá '{userNameToKick}' khỏi phòng này?",
+                AntdUI.TType.Warn)
+            {
+                CancelText = "Hủy",
+                OkText = "Đồng ý",
+                OnOk = config =>
+                {
+                    // Use Task.Run to avoid blocking UI thread, since OnOk must be sync
+                    Task.Run(async () =>
+                    {
+                        await AntdUI.Spin.open(this, AntdUI.Localization.Get("KickingUser", "Đang đá người dùng..."), async spinConfig =>
+                        {
+                            try
+                            {
+                                bool success = await _webSocketService.KickUserFromRoomAsync(_currentRoom.Id, userNameToKick);
+                                if (!success) { throw new Exception("Gửi lệnh đá người dùng thất bại."); }
+                                DebugLogger.Info($"RoomDetailForm: Đã gửi lệnh đá người dùng {userNameToKick} khỏi phòng {_currentRoom.Id}");
+                            }
+                            catch (Exception ex)
+                            {
+                                DebugLogger.Error($"RoomDetailForm: Gửi lệnh đá người dùng thất bại: {ex.Message}");
+                                AntdUI.Modal.open(new AntdUI.Modal.Config(this, "Lỗi", ex.InnerException?.Message ?? ex.Message, AntdUI.TType.Error)
+                                { CancelText = null, OkText = "Đóng" });
+                            }
+                        });
+                    });
+                    return true;
+                }
+            });
         }
 
         private async void closeRoom(object sender, FormClosingEventArgs e)
@@ -408,32 +570,44 @@ namespace TadaPlay
             User currentUser = _appContext.GetCurrentUser();
             if (currentUser == null || currentUser.Username != _currentRoom.HostUsername) return;
 
-            DialogResult confirm = MessageBox.Show("Are you sure you want to close this room? All users will be removed.", "Confirm Close Room", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
-            if (confirm == DialogResult.Yes)
+            AntdUI.Modal.open(new AntdUI.Modal.Config(this,
+                "Xác nhận",
+                "Bạn có chắc chắn muốn đóng phòng này? Tất cả người dùng sẽ bị loại khỏi phòng.",
+                AntdUI.TType.Warn)
             {
-                await AntdUI.Spin.open(this, AntdUI.Localization.Get("ClosingRoom", "Đang đóng phòng..."), async config =>
+                CancelText = "Hủy",
+                OkText = "Đồng ý",
+                // Replace all instances of:
+                // OnOk = async config => { ... }
+
+                // With the following pattern:
+                OnOk = config =>
                 {
-                    try
+                    // Use Task.Run to execute async code without blocking the UI thread
+                    Task.Run(async () =>
                     {
-                        bool success = await _webSocketService.CloseRoomAsync(_currentRoom.Id);
-                        if (success) 
+                        await AntdUI.Spin.open(this, AntdUI.Localization.Get("ClosingRoom", "Đang đóng phòng..."), async spinConfig =>
                         {
-                            e.Cancel = false;
-                        }
-                        DebugLogger.Info($"RoomDetailForm: Sent close_room command for room {_currentRoom.Id}");
-                    }
-                    catch (Exception ex)
-                    {
-                        DebugLogger.Error($"RoomDetailForm: Failed to send close room command: {ex.Message}");
-                        AntdUI.Modal.open(new AntdUI.Modal.Config(this, AntdUI.Localization.Get("Error", "Lỗi"), ex.InnerException?.Message ?? ex.Message, AntdUI.TType.Error)
-                        { CancelText = null, OkText = AntdUI.Localization.Get("CloseButton", "Đóng") });
-                    }
-                });
-            }
-            else
-            {
-                e.Cancel = true;
-            }
+                            try
+                            {
+                                bool success = await _webSocketService.CloseRoomAsync(_currentRoom.Id);
+                                if (success)
+                                {
+                                    e.Cancel = false;
+                                }
+                                DebugLogger.Info($"RoomDetailForm: Đã gửi lệnh đóng phòng {_currentRoom.Id}");
+                            }
+                            catch (Exception ex)
+                            {
+                                DebugLogger.Error($"RoomDetailForm: Gửi lệnh đóng phòng thất bại: {ex.Message}");
+                                AntdUI.Modal.open(new AntdUI.Modal.Config(this, "Lỗi", ex.InnerException?.Message ?? ex.Message, AntdUI.TType.Error)
+                                { CancelText = null, OkText = "Đóng" });
+                            }
+                        });
+                    });
+                    return true;
+                }
+            });
         }
 
         private async void leaveRoom(object sender, FormClosingEventArgs e)
@@ -441,32 +615,41 @@ namespace TadaPlay
             User currentUser = _appContext.GetCurrentUser();
             if (currentUser == null || currentUser.CurrentRoomId != _currentRoom.Id) return;
 
-            DialogResult confirm = MessageBox.Show("Are you sure you want to leave this room?", "Confirm Leave", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
-            if (confirm == DialogResult.Yes)
+            AntdUI.Modal.open(new AntdUI.Modal.Config(this,
+                "Xác nhận",
+                "Bạn có chắc chắn muốn rời khỏi phòng này?",
+                AntdUI.TType.Warn)
             {
-                await AntdUI.Spin.open(this, AntdUI.Localization.Get("LeavingRoom", "Đang rời phòng..."), async config =>
+                CancelText = "Hủy",
+                OkText = "Đồng ý",
+                OnOk = config =>
                 {
-                    try
+                    // Use Task.Run to execute async code without blocking the UI thread
+                    Task.Run(async () =>
                     {
-                        bool success = await _webSocketService.LeaveRoomAsync();
-                        if (success) 
+                        await AntdUI.Spin.open(this, AntdUI.Localization.Get("LeavingRoom", "Đang rời phòng..."), async spinConfig =>
                         {
-                            e.Cancel = false;
-                        }
-                        DebugLogger.Info($"RoomDetailForm: Sent leave_room command for room {_currentRoom.Id}");
-                    }
-                    catch (Exception ex)
-                    {
-                        DebugLogger.Error($"RoomDetailForm: Failed to send leave room command: {ex.Message}");
-                        AntdUI.Modal.open(new AntdUI.Modal.Config(this, AntdUI.Localization.Get("Error", "Lỗi"), ex.InnerException?.Message ?? ex.Message, AntdUI.TType.Error)
-                        { CancelText = null, OkText = AntdUI.Localization.Get("CloseButton", "Đóng") });
-                    }
-                });
-            } 
-            else
-            {
-                e.Cancel = true;
-            }
+                            try
+                            {
+                                LogRoomAction(currentUser, "đang rời phòng...", Color.Orange);
+                                bool success = await _webSocketService.LeaveRoomAsync();
+                                if (success)
+                                {
+                                    e.Cancel = false;
+                                }
+                                DebugLogger.Info($"RoomDetailForm: Đã gửi lệnh rời phòng {_currentRoom.Id}");
+                            }
+                            catch (Exception ex)
+                            {
+                                DebugLogger.Error($"RoomDetailForm: Gửi lệnh rời phòng thất bại: {ex.Message}");
+                                AntdUI.Modal.open(new AntdUI.Modal.Config(this, "Lỗi", ex.InnerException?.Message ?? ex.Message, AntdUI.TType.Error)
+                                { CancelText = null, OkText = "Đóng" });
+                            }
+                        });
+                    });
+                    return true;
+                }
+            });
         }
 
         private void usersInRoomListView_SelectedIndexChanged(object sender, EventArgs e)
@@ -514,6 +697,19 @@ namespace TadaPlay
                     leaveRoom(sender, e); // Member leaving the room
                 }
             }
+        }
+
+        private void LogRoomAction(User user, string action, Color color = default)
+        {
+            if (color == default) color = logRichTextBox.ForeColor;
+            string username = user?.FullName ?? user?.Username ?? "Unknown user";
+            printLog($"[Hành động] {username} {action}", color);
+        }
+
+        private void LogGameAction(string action, Color color = default)
+        {
+            if (color == default) color = logRichTextBox.ForeColor;
+            printLog($"[Trò chơi] {action}", color);
         }
     }
 }

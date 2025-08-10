@@ -132,6 +132,8 @@ namespace TadaPlay.Controls
             appContext.OnActiveRoomsUpdated += AppContext_OnActiveRoomsUpdated;
 
             this.roomTable.SelectIndexChanged += (s, e) => UpdateUiBasedOnLobbyState();
+            this.roomTable.CellDoubleClick += roomTable_CellDoubleClick;
+
 
             UpdateUiBasedOnLobbyState();
 
@@ -444,7 +446,12 @@ namespace TadaPlay.Controls
                 this.BeginInvoke(new Action(() =>
                 {
                     UpdateUiBasedOnLobbyState();
+
                 }));
+            }
+            else
+            {
+                UpdateUiBasedOnLobbyState();
             }
         }
 
@@ -473,6 +480,117 @@ namespace TadaPlay.Controls
                     return true;
                 }
             });
+        }
+
+        private void roomTable_CellDoubleClick(object sender, AntdUI.TableClickEventArgs e)
+        {
+            if (this.InvokeRequired)
+            {
+                this.BeginInvoke(new Action(() => HandleRoomDoubleClick(e)));
+            }
+            else
+            {
+                HandleRoomDoubleClick(e);
+            }
+        }
+
+        private async void HandleRoomDoubleClick(AntdUI.TableClickEventArgs e)
+        {
+            if (!webSocketService.IsConnected)
+            {
+                AntdUI.Modal.open(new AntdUI.Modal.Config(mainForm,
+                    AntdUI.Localization.Get("Error", "Lỗi"),
+                    AntdUI.Localization.Get("NotConnectedToServer", "Chưa kết nối đến máy chủ."),
+                    AntdUI.TType.Error)
+                {
+                    CancelText = null,
+                    OkText = AntdUI.Localization.Get("CloseButton", "Đóng")
+                });
+                return;
+            }
+
+            var currentUser = appContext.GetCurrentUser();
+            if (currentUser?.CurrentRoomId != null)
+            {
+                AntdUI.Modal.open(new AntdUI.Modal.Config(mainForm,
+                    AntdUI.Localization.Get("Error", "Lỗi"),
+                    AntdUI.Localization.Get("AlreadyInRoom", "Bạn đã ở trong một phòng. Vui lòng rời khỏi trước."),
+                    AntdUI.TType.Warn)
+                {
+                    CancelText = null,
+                    OkText = AntdUI.Localization.Get("CloseButton", "Đóng")
+                });
+                return;
+            }
+
+            if (roomTable.DataSource is IReadOnlyList<ClientRoom> rooms)
+            {
+                DebugLogger.Info($"Room double-click: RowIndex={e.RowIndex}, RoomsCount={rooms.Count}");
+
+                int dataIndex = e.RowIndex - 1; // If header row is present
+                if (dataIndex >= 0 && dataIndex < rooms.Count)
+                {
+                    var selectedRoom = rooms[dataIndex];
+                    if (selectedRoom != null)
+                    {
+                        // Prevent joining if room status is host_disconnected
+                        if (selectedRoom.Status == "host_disconnected")
+                        {
+                            AntdUI.Modal.open(new AntdUI.Modal.Config(mainForm,
+                                AntdUI.Localization.Get("Error", "Lỗi"),
+                                AntdUI.Localization.Get("HostDisconnected", "Chủ phòng đã ngắt kết nối. Không thể vào phòng này."),
+                                AntdUI.TType.Warn)
+                            {
+                                CancelText = null,
+                                OkText = AntdUI.Localization.Get("CloseButton", "Đóng")
+                            });
+                            return;
+                        }
+
+                        await AntdUI.Spin.open(mainForm, AntdUI.Localization.Get("JoiningRoom", "Đang vào phòng..."), async config =>
+                        {
+                            try
+                            {
+                                bool success = await webSocketService.SendMessageAsync(new
+                                {
+                                    command = "join_room",
+                                    room_id = selectedRoom.Id
+                                });
+
+                                if (success)
+                                {
+                                    mainForm.BeginInvoke(new Action(() =>
+                                    {
+                                        RoomDetailForm roomForm = serviceProvider.GetRequiredService<RoomDetailForm>();
+                                        roomForm.SetRoom(selectedRoom);
+                                        roomForm.ShowDialog(mainForm);
+                                    }));
+                                }
+                                else
+                                {
+                                    throw new InvalidOperationException(AntdUI.Localization.Get("JoinRoomFailed", "Không thể vào phòng."));
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                DebugLogger.Error($"Home Control: Error joining room: {ex.Message}");
+                                AntdUI.Modal.open(new AntdUI.Modal.Config(mainForm,
+                                    AntdUI.Localization.Get("JoinRoomError", "Lỗi vào phòng"),
+                                    ex.Message,
+                                    AntdUI.TType.Error)
+                                {
+                                    CancelText = null,
+                                    OkText = AntdUI.Localization.Get("CloseButton", "Đóng")
+                                });
+                            }
+                        }, () => { System.Diagnostics.Debug.WriteLine("Hoàn tất"); });
+                    }
+                }
+                else
+                {
+                    DebugLogger.Warn($"Invalid row index: {e.RowIndex} (rooms count: {rooms.Count})");
+                }
+            }
         }
     }
 }
