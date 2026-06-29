@@ -23,6 +23,8 @@ namespace TadaPlay
         private readonly IServiceProvider serviceProvider;
         private Login _loginControl;
         private Home _homeControl;
+        private Ranking _rankingControl;
+        private Matches _matchesControl;
 
         public MainForm(IAccountService _accountService, IAppContext _appContext, IWebSocketService _webSocketService, IWireGuardVpnService _wireGuardVpnService, IServiceProvider _serviceProvider)
         {
@@ -34,6 +36,35 @@ namespace TadaPlay
             wireGuardVpnService = _wireGuardVpnService;
 
             appContext.OnVpnProfileUpdated += AppContext_OnVpnProfileUpdated;
+
+            rankingButton.Click += rankingButton_Click;
+            matchesButton.Click += matchesButton_Click;
+        }
+
+        private void rankingButton_Click(object sender, EventArgs e)
+        {
+            _rankingControl ??= CreateRankingControl();
+            ShowControl(_rankingControl, "Bảng xếp hạng", false, true);
+        }
+
+        private void matchesButton_Click(object sender, EventArgs e)
+        {
+            _matchesControl ??= CreateMatchesControl();
+            ShowControl(_matchesControl, "Danh sách trận đấu", false, true);
+        }
+
+        private Ranking CreateRankingControl()
+        {
+            var control = new Ranking(accountService);
+            control.BackRequested += (s, e) => ShowControl(_homeControl, "Trang chủ", false, true);
+            return control;
+        }
+
+        private Matches CreateMatchesControl()
+        {
+            var control = new Matches(accountService, appContext);
+            control.BackRequested += (s, e) => ShowControl(_homeControl, "Trang chủ", false, true);
+            return control;
         }
 
         private void AppContext_OnVpnProfileUpdated(object sender, EventArgs e)
@@ -53,7 +84,7 @@ namespace TadaPlay
         private void btn_setting_Click(object sender, EventArgs e)
         {
             accountService.GetAllAsync();
-            var setting = new Setting(this);
+            var setting = new Setting(this, appContext);
             if (AntdUI.Modal.open(this, AntdUI.Localization.Get("Setting", "Cài đặt"), setting) == DialogResult.OK)
             {
                 AntdUI.Config.Animation = setting.Animation;
@@ -114,6 +145,7 @@ namespace TadaPlay
                 ShowControl(_homeControl, "Trang chủ", false, true);
                 settingButton.Visible = true;
                 rankingButton.Visible = true;
+                matchesButton.Visible = true;
             };
             _loginControl.Load += (s, e) =>
             {
@@ -157,6 +189,7 @@ namespace TadaPlay
                         // Hide global buttons
                         settingButton.Visible = false;
                         rankingButton.Visible = false;
+                        matchesButton.Visible = false;
                     }
                     else
                     {

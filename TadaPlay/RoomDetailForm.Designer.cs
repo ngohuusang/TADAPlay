@@ -32,6 +32,7 @@
             tableLayoutPanel2 = new TableLayoutPanel();
             kickUserButton = new AntdUI.Button();
             startGameButton = new AntdUI.Button();
+            uploadRecordButton = new AntdUI.Button();
             label1 = new AntdUI.Label();
             tableLayoutPanel1 = new TableLayoutPanel();
             label2 = new AntdUI.Label();
@@ -61,11 +62,13 @@
             // 
             // tableLayoutPanel2
             // 
-            tableLayoutPanel2.ColumnCount = 2;
-            tableLayoutPanel2.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
-            tableLayoutPanel2.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
+            tableLayoutPanel2.ColumnCount = 3;
+            tableLayoutPanel2.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.3333F));
+            tableLayoutPanel2.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.3333F));
+            tableLayoutPanel2.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.3333F));
             tableLayoutPanel2.Controls.Add(kickUserButton, 1, 0);
             tableLayoutPanel2.Controls.Add(startGameButton, 0, 0);
+            tableLayoutPanel2.Controls.Add(uploadRecordButton, 2, 0);
             tableLayoutPanel2.Dock = DockStyle.Fill;
             tableLayoutPanel2.Location = new Point(3, 396);
             tableLayoutPanel2.Name = "tableLayoutPanel2";
@@ -95,7 +98,18 @@
             startGameButton.TabIndex = 3;
             startGameButton.Text = "Khởi động game";
             startGameButton.Type = AntdUI.TTypeMini.Success;
-            // 
+            //
+            // uploadRecordButton
+            //
+            uploadRecordButton.Dock = DockStyle.Fill;
+            uploadRecordButton.Enabled = false;
+            uploadRecordButton.Location = new Point(263, 3);
+            uploadRecordButton.Name = "uploadRecordButton";
+            uploadRecordButton.Size = new Size(125, 38);
+            uploadRecordButton.TabIndex = 5;
+            uploadRecordButton.Text = "Tải lên record";
+            uploadRecordButton.Type = AntdUI.TTypeMini.Primary;
+            //
             // label1
             // 
             label1.BackColor = Color.Honeydew;
@@ -196,6 +210,7 @@
         private TableLayoutPanel tableLayoutPanel2;
         private AntdUI.Button kickUserButton;
         private AntdUI.Button startGameButton;
+        private AntdUI.Button uploadRecordButton;
         private AntdUI.Label label1;
         private TableLayoutPanel tableLayoutPanel1;
         private AntdUI.Label label2;

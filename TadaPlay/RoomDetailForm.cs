@@ -10,6 +10,8 @@ using TadaPlay.Connections;
 using TadaPlay.Connections.Interface;
 using TadaPlay.Contexts.Interfaces;
 using TadaPlay.Logger;
+using TadaPlay.Services.Interface;
+using TadaPlay.Utils;
 using TadaPlay.Websockets;
 using TadaPlay.Websockets.Interface;
 
@@ -20,16 +22,24 @@ namespace TadaPlay
         private readonly IWebSocketService _webSocketService;
         private readonly IWireGuardVpnService _wireGuardVpnService;
         private readonly IAppContext _appContext;
+        private readonly IAccountService _accountService;
         private ClientRoom _currentRoom;
 
         private bool _isClosingOrClosed = false;
 
-        public RoomDetailForm(IWebSocketService webSocketService, IAppContext appContext, IWireGuardVpnService wireGuardVpnService)
+        // Set when the game starts ("playing"); used as a cutoff so we only pick up
+        // the record produced by this match. Guards against uploading the same record twice.
+        private DateTime? _gameStartedAtUtc = null;
+        private bool _recordUploaded = false;
+        private bool _uploadInProgress = false;
+
+        public RoomDetailForm(IWebSocketService webSocketService, IAppContext appContext, IWireGuardVpnService wireGuardVpnService, IAccountService accountService)
         {
             InitializeComponent();
             _webSocketService = webSocketService;
             _appContext = appContext;
             _wireGuardVpnService = wireGuardVpnService;
+            _accountService = accountService;
 
             // Subscribe to AppContext events relevant to this form
             _appContext.OnCurrentRoomDetailsUpdated += AppContext_OnCurrentRoomDetailsUpdated;
@@ -50,6 +60,7 @@ namespace TadaPlay
             // Hook up button click events
             this.kickUserButton.Click += kickUserButton_Click;
             this.startGameButton.Click += startGameButton_Click; // Assuming you have a start game button
+            this.uploadRecordButton.Click += uploadRecordButton_Click;
             this.userListView.SelectedIndexChanged += usersInRoomListView_SelectedIndexChanged;
 
             InitializeRoomEvents();
@@ -272,10 +283,18 @@ namespace TadaPlay
                     switch (_currentRoom.Status)
                     {
                         case "playing":
+                            _gameStartedAtUtc = DateTime.UtcNow;
+                            _recordUploaded = false;
                             LogGameAction("Trò chơi đã bắt đầu!", Color.Green);
                             break;
                         case "finished":
                             LogGameAction("Trò chơi đã kết thúc.", Color.Orange);
+                            // Only the host auto-uploads + reports the result (drives ELO).
+                            // This avoids every member uploading a duplicate of the same game.
+                            if (currentUser != null && currentUser.Username == _currentRoom.HostUsername)
+                            {
+                                _ = UploadRecordAsync(isAutomatic: true);
+                            }
                             break;
                         case "closed":
                             LogGameAction("Phòng đã đóng.", Color.Red);
@@ -413,8 +432,14 @@ namespace TadaPlay
                 kickUserButton.Enabled = false;
                 startGameButton.Enabled = false;
                 startGameButton.Text = "Bắt đầu";
+                uploadRecordButton.Enabled = false;
                 return;
             }
+
+            // Only the host uploads/reports the finished game (drives ELO). Enabled once finished.
+            bool isHostForUpload = currentUser.Username == _currentRoom.HostUsername;
+            uploadRecordButton.Enabled = isHostForUpload && _currentRoom.Status == "finished" && !_uploadInProgress;
+            uploadRecordButton.Visible = isHostForUpload;
 
             bool isHost = currentUser.Username == _currentRoom.HostUserId;
             bool isVpnConnected = _wireGuardVpnService.IsConnected;
@@ -499,6 +524,172 @@ namespace TadaPlay
                     { CancelText = null, OkText = "Đóng" });
                 }
             });
+        }
+
+        private void uploadRecordButton_Click(object sender, EventArgs e)
+        {
+            _ = UploadRecordAsync(isAutomatic: false);
+        }
+
+        /// <summary>
+        /// Locates the recorded game for this match and uploads it (with metadata) to the server.
+        /// Safe to call from any thread. When <paramref name="isAutomatic"/> is true the call is
+        /// skipped silently if a record was already uploaded for this game.
+        /// </summary>
+        private async Task UploadRecordAsync(bool isAutomatic)
+        {
+            if (_currentRoom == null) return;
+
+            // Avoid duplicate auto-uploads; the manual button can still force a retry.
+            if (isAutomatic && (_recordUploaded || _uploadInProgress)) return;
+            if (_uploadInProgress)
+            {
+                printLog("[Record] Đang tải lên, vui lòng đợi...", Color.Orange);
+                return;
+            }
+
+            _uploadInProgress = true;
+            UiUtils.InvokeOnUiThread(this, UpdateButtonsState);
+
+            try
+            {
+                string gameFolder = _appContext.GetGameFolder();
+                if (string.IsNullOrWhiteSpace(gameFolder))
+                {
+                    string cfgMsg = "Chưa cấu hình thư mục game. Vào Cài đặt để chọn thư mục cài đặt AoE2 (nơi chứa SaveGame).";
+                    printLog($"[Record] {cfgMsg}", Color.Red);
+                    if (!isAutomatic)
+                    {
+                        UiUtils.ShowAntdModal(this, "Chưa cấu hình", cfgMsg, AntdUI.TType.Warn);
+                    }
+                    return;
+                }
+
+                string recordPath = RecordedGameFinder.FindLatestRecord(gameFolder, _gameStartedAtUtc);
+                if (string.IsNullOrEmpty(recordPath))
+                {
+                    string msg = "Không tìm thấy file record (.mgz) của trận đấu trong thư mục game. " +
+                                 "Hãy chắc chắn rằng bạn đã chơi xong và game đã lưu lại trận đấu.";
+                    printLog($"[Record] {msg}", Color.Red);
+                    if (!isAutomatic)
+                    {
+                        UiUtils.ShowAntdModal(this, "Không tìm thấy record", msg, AntdUI.TType.Warn);
+                    }
+                    return;
+                }
+
+                User currentUser = _appContext.GetCurrentUser();
+                var metadata = new GameRecordMetadata
+                {
+                    RoomId = _currentRoom.Id,
+                    RoomName = _currentRoom.Name,
+                    HostUsername = _currentRoom.HostUsername,
+                    UploadedBy = currentUser?.Username,
+                    Players = _currentRoom.Users?.Select(u => u.Username).ToArray() ?? Array.Empty<string>(),
+                    FinishedAt = DateTime.UtcNow,
+                    RecordFileName = System.IO.Path.GetFileName(recordPath),
+                    ClientVersion = Application.ProductVersion
+                };
+
+                printLog($"[Record] Đang tải lên '{metadata.RecordFileName}'...", Color.RoyalBlue);
+
+                GameRecordUploadResponse response = await _accountService.UploadGameRecordAsync(metadata, recordPath);
+                _recordUploaded = true;
+                printLog("[Record] Tải lên record thành công.", Color.DarkGreen);
+
+                GameRecordInfo info = response.Record;
+
+                if (info != null && !string.IsNullOrEmpty(info.Mvp))
+                {
+                    printLog($"[Record] MVP của trận đấu: ⭐ {info.Mvp}", Color.DarkGoldenrod);
+                }
+
+                // Only the host reports the winner. The result drives the 4v4 ELO ranking.
+                bool isHost = currentUser != null && currentUser.Username == _currentRoom.HostUsername;
+                if (isHost && info != null && info.CanReport && info.Teams != null)
+                {
+                    UiUtils.InvokeOnUiThread(this, () => PromptReportWinner(info));
+                }
+                else if (info != null && info.Status == "needs_review")
+                {
+                    printLog($"[Record] Không thể xác định đội chơi từ record nên ELO sẽ không được tính tự động." +
+                             (string.IsNullOrEmpty(info.ReviewReason) ? "" : $" ({info.ReviewReason})"), Color.Orange);
+                    if (!isAutomatic)
+                    {
+                        UiUtils.ShowAntdModal(this, "Đã tải lên",
+                            "Đã tải lên record, nhưng không thể tự động xác định đội chơi để tính ELO.", AntdUI.TType.Warn);
+                    }
+                }
+                else if (!isAutomatic)
+                {
+                    UiUtils.ShowAntdModal(this, "Thành công", "Đã tải lên record của trận đấu.", AntdUI.TType.Success);
+                }
+            }
+            catch (Exception ex)
+            {
+                DebugLogger.Error($"RoomDetailForm: Upload record thất bại: {ex.Message}");
+                printLog($"[Record] Lỗi tải lên record: {ex.Message}", Color.Red);
+                if (!isAutomatic)
+                {
+                    UiUtils.ShowAntdModal(this, "Lỗi", ex.Message, AntdUI.TType.Error);
+                }
+            }
+            finally
+            {
+                _uploadInProgress = false;
+                UiUtils.InvokeOnUiThread(this, UpdateButtonsState);
+            }
+        }
+
+        /// <summary>
+        /// Host-only: shows the parsed teams and lets the host report the winner, which
+        /// triggers the server-side 4v4 ELO update. Must be called on the UI thread.
+        /// </summary>
+        private void PromptReportWinner(GameRecordInfo info)
+        {
+            if (this.IsDisposed || info?.Teams == null) return;
+
+            info.Teams.TryGetValue("1", out var team1);
+            info.Teams.TryGetValue("2", out var team2);
+
+            using var dialog = new ReportWinnerDialog(team1 ?? Array.Empty<string>(), team2 ?? Array.Empty<string>(), info.SuggestedWinnerTeam);
+            if (dialog.ShowDialog(this) == DialogResult.OK && dialog.WinningTeam.HasValue)
+            {
+                _ = ReportWinnerAsync(info.Id, dialog.WinningTeam.Value);
+            }
+            else
+            {
+                printLog("[Kết quả] Chưa báo kết quả. Bạn có thể tải lên lại record để báo kết quả sau.", Color.Orange);
+            }
+        }
+
+        private async Task ReportWinnerAsync(long recordId, int winningTeam)
+        {
+            try
+            {
+                printLog($"[Kết quả] Đang gửi kết quả (Đội {winningTeam} thắng)...", Color.RoyalBlue);
+                ReportResultResponse result = await _accountService.ReportGameResultAsync(recordId, winningTeam);
+
+                printLog($"[Kết quả] Đội {result.WinningTeam} thắng. ELO đã được cập nhật:", Color.DarkGreen);
+                if (result.Ratings != null)
+                {
+                    foreach (var change in result.Ratings)
+                    {
+                        string sign = change.Delta >= 0 ? "+" : "";
+                        // Breakdown: win/loss base, score-performance, MVP bonus.
+                        string perf = change.PerfDelta != 0 ? $", điểm {(change.PerfDelta > 0 ? "+" : "")}{change.PerfDelta}" : "";
+                        string mvp = change.MvpDelta != 0 ? $", MVP +{change.MvpDelta} ⭐" : "";
+                        printLog($"    {change.Username}: {change.Old} → {change.NewRating} ({sign}{change.Delta})  [trận {(change.BaseDelta > 0 ? "+" : "")}{change.BaseDelta}{perf}{mvp}]",
+                            change.Delta >= 0 ? Color.DarkGreen : Color.Firebrick);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                DebugLogger.Error($"RoomDetailForm: Báo kết quả thất bại: {ex.Message}");
+                printLog($"[Kết quả] Lỗi báo kết quả: {ex.Message}", Color.Red);
+                UiUtils.ShowAntdModal(this, "Lỗi", ex.Message, AntdUI.TType.Error);
+            }
         }
 
         private void kickUserButton_Click(object sender, EventArgs e)

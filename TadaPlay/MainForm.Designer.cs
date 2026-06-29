@@ -31,6 +31,7 @@
             System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(MainForm));
             windowBar = new AntdUI.PageHeader();
             rankingButton = new AntdUI.Button();
+            matchesButton = new AntdUI.Button();
             settingButton = new AntdUI.Button();
             virtualPanel = new AntdUI.VirtualPanel();
             rankingTooltip = new AntdUI.TooltipComponent();
@@ -40,6 +41,7 @@
             // windowBar
             // 
             windowBar.Controls.Add(rankingButton);
+            windowBar.Controls.Add(matchesButton);
             windowBar.Controls.Add(settingButton);
             windowBar.Dock = DockStyle.Top;
             windowBar.Font = new Font("Segoe UI", 14.25F, FontStyle.Regular, GraphicsUnit.Point, 0);
@@ -70,9 +72,24 @@
             rankingButton.Type = AntdUI.TTypeMini.Warn;
             rankingButton.Visible = false;
             rankingButton.WaveSize = 0;
-            // 
+            //
+            // matchesButton
+            //
+            matchesButton.Dock = DockStyle.Right;
+            matchesButton.Ghost = true;
+            matchesButton.IconSvg = "HistoryOutlined";
+            matchesButton.Location = new Point(730, 0);
+            matchesButton.Name = "matchesButton";
+            matchesButton.Radius = 0;
+            matchesButton.Size = new Size(50, 55);
+            matchesButton.TabIndex = 14;
+            rankingTooltip.SetTip(matchesButton, "Danh sách trận đấu");
+            matchesButton.Type = AntdUI.TTypeMini.Primary;
+            matchesButton.Visible = false;
+            matchesButton.WaveSize = 0;
+            //
             // settingButton
-            // 
+            //
             settingButton.Dock = DockStyle.Right;
             settingButton.Ghost = true;
             settingButton.IconSvg = "SettingOutlined";
@@ -127,5 +144,6 @@
         private AntdUI.TooltipComponent rankingTooltip;
         private AntdUI.Button settingButton;
         private AntdUI.Button rankingButton;
+        private AntdUI.Button matchesButton;
     }
 }

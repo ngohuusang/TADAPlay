@@ -207,6 +207,128 @@ public class AccountService : IAccountService
         return true;
     }
 
+    public async Task<GameRecordUploadResponse> UploadGameRecordAsync(GameRecordMetadata metadata, string recordFilePath)
+    {
+        if (metadata == null) throw new ArgumentNullException(nameof(metadata));
+        if (string.IsNullOrWhiteSpace(recordFilePath) || !File.Exists(recordFilePath))
+        {
+            throw new FileNotFoundException("Không tìm thấy file record của trận đấu.", recordFilePath);
+        }
+
+        using var form = new MultipartFormDataContent();
+
+        // Metadata fields.
+        form.Add(new StringContent(metadata.RoomId ?? string.Empty), "room_id");
+        form.Add(new StringContent(metadata.RoomName ?? string.Empty), "room_name");
+        form.Add(new StringContent(metadata.HostUsername ?? string.Empty), "host_username");
+        form.Add(new StringContent(metadata.UploadedBy ?? string.Empty), "uploaded_by");
+        form.Add(new StringContent(JsonConvert.SerializeObject(metadata.Players ?? Array.Empty<string>())), "players");
+        form.Add(new StringContent(metadata.FinishedAt.ToString("o")), "finished_at");
+        form.Add(new StringContent(metadata.ClientVersion ?? string.Empty), "client_version");
+
+        // The recorded game binary. Stream it so large files aren't fully buffered in memory.
+        var fileStream = File.OpenRead(recordFilePath);
+        var fileContent = new StreamContent(fileStream);
+        fileContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/octet-stream");
+        string fileName = metadata.RecordFileName ?? Path.GetFileName(recordFilePath);
+        form.Add(fileContent, "record", fileName);
+
+        _httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _appContext.GetJwtTokenSetting());
+
+        // Uploading a record can take longer than a regular API call; give it more time.
+        using var cts = new System.Threading.CancellationTokenSource(TimeSpan.FromMinutes(5));
+        HttpResponseMessage response = await _httpClient.PostAsync(BASE_URL + "?action=upload_record", form, cts.Token);
+
+        var responseBody = await response.Content.ReadAsStringAsync();
+
+        if (!response.IsSuccessStatusCode)
+        {
+            var errorResponse = JsonConvert.DeserializeObject<ApiResponse>(responseBody);
+            if (response.StatusCode == HttpStatusCode.Unauthorized)
+            {
+                throw new LoginException("Lỗi đăng nhập: " + errorResponse?.Message);
+            }
+
+            throw new Exception("Lỗi tải lên record: " + (errorResponse?.Message ?? response.ReasonPhrase));
+        }
+
+        var uploadResponse = JsonConvert.DeserializeObject<GameRecordUploadResponse>(responseBody);
+        if (uploadResponse == null || !uploadResponse.Success)
+        {
+            throw new Exception("Tải lên record thất bại: " + (uploadResponse?.Message ?? "phản hồi không hợp lệ."));
+        }
+
+        return uploadResponse;
+    }
+
+    public async Task<ReportResultResponse> ReportGameResultAsync(long recordId, int winningTeam)
+    {
+        var payload = new { record_id = recordId, winning_team = winningTeam };
+        var content = new StringContent(JsonConvert.SerializeObject(payload), Encoding.UTF8, "application/json");
+        _httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _appContext.GetJwtTokenSetting());
+        var response = await _httpClient.PostAsync(BASE_URL + "?action=report_result", content);
+
+        var responseBody = await response.Content.ReadAsStringAsync();
+
+        if (!response.IsSuccessStatusCode)
+        {
+            var errorResponse = JsonConvert.DeserializeObject<ApiResponse>(responseBody);
+            if (response.StatusCode == HttpStatusCode.Unauthorized)
+            {
+                throw new LoginException("Lỗi đăng nhập: " + errorResponse?.Message);
+            }
+
+            throw new Exception(errorResponse?.Message ?? "Báo kết quả thất bại.");
+        }
+
+        var result = JsonConvert.DeserializeObject<ReportResultResponse>(responseBody);
+        if (result == null || !result.Success)
+        {
+            throw new Exception("Báo kết quả thất bại: " + (result?.Message ?? "phản hồi không hợp lệ."));
+        }
+
+        return result;
+    }
+
+    public async Task<List<RankingEntry>> GetLeaderboardAsync()
+    {
+        _httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _appContext.GetJwtTokenSetting());
+        var response = await _httpClient.GetAsync(BASE_URL + "?action=leaderboard");
+        response.EnsureSuccessStatusCode();
+
+        var body = await response.Content.ReadAsStringAsync();
+        var result = JsonConvert.DeserializeObject<LeaderboardResponse>(body);
+        return result?.Players ?? new List<RankingEntry>();
+    }
+
+    public async Task<List<MatchSummary>> GetMatchesAsync()
+    {
+        _httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _appContext.GetJwtTokenSetting());
+        var response = await _httpClient.GetAsync(BASE_URL + "?action=matches");
+        response.EnsureSuccessStatusCode();
+
+        var body = await response.Content.ReadAsStringAsync();
+        var result = JsonConvert.DeserializeObject<MatchesResponse>(body);
+        return result?.Matches ?? new List<MatchSummary>();
+    }
+
+    public async Task DownloadRecordAsync(long recordId, string destinationPath)
+    {
+        _httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _appContext.GetJwtTokenSetting());
+        using var response = await _httpClient.GetAsync(BASE_URL + $"?action=download_record&id={recordId}", HttpCompletionOption.ResponseHeadersRead);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            var errBody = await response.Content.ReadAsStringAsync();
+            var apiResponse = JsonConvert.DeserializeObject<ApiResponse>(errBody);
+            throw new Exception("Tải record thất bại: " + (apiResponse?.Message ?? response.ReasonPhrase));
+        }
+
+        await using var source = await response.Content.ReadAsStreamAsync();
+        await using var fileStream = File.Create(destinationPath);
+        await source.CopyToAsync(fileStream);
+    }
+
     public async Task<bool> DoLogoutAsync()
     {
         await ReleaseVpnProfileAsync();

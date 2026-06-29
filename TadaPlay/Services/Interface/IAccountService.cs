@@ -18,4 +18,14 @@ public interface IAccountService
     Task<bool> UpdateUserInfo(string full_name, string nick_name, string current_password, string new_password);
 
     Task<bool> UpdateCurrentIPToServer(string currentIp);
+
+    Task<GameRecordUploadResponse> UploadGameRecordAsync(GameRecordMetadata metadata, string recordFilePath);
+
+    Task<ReportResultResponse> ReportGameResultAsync(long recordId, int winningTeam);
+
+    Task<List<RankingEntry>> GetLeaderboardAsync();
+
+    Task<List<MatchSummary>> GetMatchesAsync();
+
+    Task DownloadRecordAsync(long recordId, string destinationPath);
 }
