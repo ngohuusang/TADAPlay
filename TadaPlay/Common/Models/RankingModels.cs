@@ -72,9 +72,17 @@ namespace TadaPlay.Common.Models
         [JsonProperty("teams")]
         public Dictionary<string, string[]> Teams { get; set; }
 
-        /// <summary>MVP username (or in-game name if unmatched).</summary>
+        /// <summary>Overall game-flagged MVP username (or in-game name if unmatched).</summary>
         [JsonProperty("mvp")]
         public string Mvp { get; set; }
+
+        /// <summary>Top scorer on the winning team (set once the result is reported).</summary>
+        [JsonProperty("winner_mvp")]
+        public string WinnerMvp { get; set; }
+
+        /// <summary>Top scorer on the losing team.</summary>
+        [JsonProperty("loser_mvp")]
+        public string LoserMvp { get; set; }
 
         /// <summary>Per-player scoreboard parsed from the replay.</summary>
         [JsonProperty("players")]

@@ -671,6 +671,14 @@ namespace TadaPlay
                 ReportResultResponse result = await _accountService.ReportGameResultAsync(recordId, winningTeam);
 
                 printLog($"[Kết quả] Đội {result.WinningTeam} thắng. ELO đã được cập nhật:", Color.DarkGreen);
+                if (!string.IsNullOrEmpty(result.WinnerMvp))
+                {
+                    printLog($"    MVP đội thắng: ⭐ {result.WinnerMvp} (+{result.Ratings?.FirstOrDefault(r => r.MvpRole == "winner")?.MvpDelta})", Color.DarkGoldenrod);
+                }
+                if (!string.IsNullOrEmpty(result.LoserMvp))
+                {
+                    printLog($"    MVP đội thua: ⭐ {result.LoserMvp} (+{result.Ratings?.FirstOrDefault(r => r.MvpRole == "loser")?.MvpDelta})", Color.DarkGoldenrod);
+                }
                 if (result.Ratings != null)
                 {
                     foreach (var change in result.Ratings)

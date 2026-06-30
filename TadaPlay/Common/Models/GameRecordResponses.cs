@@ -62,6 +62,14 @@ namespace TadaPlay.Common.Models
         [JsonProperty("winning_team")]
         public int WinningTeam { get; set; }
 
+        /// <summary>Top scorer on the winning team (gets the larger MVP bonus).</summary>
+        [JsonProperty("winner_mvp")]
+        public string WinnerMvp { get; set; }
+
+        /// <summary>Top scorer on the losing team.</summary>
+        [JsonProperty("loser_mvp")]
+        public string LoserMvp { get; set; }
+
         [JsonProperty("ratings")]
         public List<RatingChange> Ratings { get; set; }
     }
@@ -82,6 +90,10 @@ namespace TadaPlay.Common.Models
 
         [JsonProperty("is_mvp")]
         public bool IsMvp { get; set; }
+
+        /// <summary>"winner", "loser" or null — which team MVP this player is.</summary>
+        [JsonProperty("mvp_role")]
+        public string MvpRole { get; set; }
 
         [JsonProperty("base_delta")]
         public int BaseDelta { get; set; }

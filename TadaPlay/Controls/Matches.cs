@@ -134,7 +134,9 @@ namespace TadaPlay.Controls
                     item.SubItems.Add(TeamText(m, "1"));
                     item.SubItems.Add(TeamText(m, "2"));
                     item.SubItems.Add(ResultText(m));
-                    item.SubItems.Add(string.IsNullOrEmpty(m.Mvp) ? "—" : "⭐ " + m.Mvp);
+                    // Prefer the winning team's MVP; fall back to the overall game MVP.
+                    string headlineMvp = !string.IsNullOrEmpty(m.WinnerMvp) ? m.WinnerMvp : m.Mvp;
+                    item.SubItems.Add(string.IsNullOrEmpty(headlineMvp) ? "—" : "⭐ " + headlineMvp);
                     item.Tag = m;
                     _listView.Items.Add(item);
                 }
@@ -181,7 +183,10 @@ namespace TadaPlay.Controls
 
             var sb = new System.Text.StringBuilder();
             sb.AppendLine($"Phòng: {match.RoomName}    Kết quả: {ResultText(match)}");
-            if (!string.IsNullOrEmpty(match.Mvp)) sb.AppendLine($"MVP: ⭐ {match.Mvp}");
+            if (!string.IsNullOrEmpty(match.WinnerMvp)) sb.AppendLine($"MVP đội thắng: ⭐ {match.WinnerMvp}");
+            if (!string.IsNullOrEmpty(match.LoserMvp)) sb.AppendLine($"MVP đội thua: ⭐ {match.LoserMvp}");
+            if (string.IsNullOrEmpty(match.WinnerMvp) && string.IsNullOrEmpty(match.LoserMvp)
+                && !string.IsNullOrEmpty(match.Mvp)) sb.AppendLine($"MVP: ⭐ {match.Mvp}");
             sb.AppendLine();
             foreach (var team in new[] { 1, 2 })
             {
