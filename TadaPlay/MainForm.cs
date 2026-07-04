@@ -84,7 +84,7 @@ namespace TadaPlay
         private void btn_setting_Click(object sender, EventArgs e)
         {
             accountService.GetAllAsync();
-            var setting = new Setting(this, appContext);
+            var setting = new Setting(this, appContext, accountService);
             if (AntdUI.Modal.open(this, AntdUI.Localization.Get("Setting", "Cài đặt"), setting) == DialogResult.OK)
             {
                 AntdUI.Config.Animation = setting.Animation;
