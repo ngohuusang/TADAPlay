@@ -512,7 +512,10 @@ namespace TadaPlay
             {
                 try
                 {
-                    bool success = await _webSocketService.SendMessageAsync(new { command = "start_game", room_id = _currentRoom.Id });
+                    // The server only recognizes "update_room_status" (see GameLobbyServer.php's
+                    // command switch) - "start_game" isn't a command it knows and was silently
+                    // getting back an "Unknown command" error, so Start Game did nothing.
+                    bool success = await _webSocketService.SendMessageAsync(new { command = "update_room_status", room_id = _currentRoom.Id, new_status = "playing" });
                     if (!success) { throw new Exception("Gửi lệnh bắt đầu game thất bại."); }
                     DebugLogger.Info($"RoomDetailForm: Đã gửi lệnh bắt đầu game cho phòng {_currentRoom.Id}");
                     // Server sẽ cập nhật trạng thái phòng thành 'playing' và broadcast, UI sẽ được cập nhật
