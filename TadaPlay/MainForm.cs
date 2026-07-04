@@ -39,6 +39,7 @@ namespace TadaPlay
 
             rankingButton.Click += rankingButton_Click;
             matchesButton.Click += matchesButton_Click;
+            settingButton.Click += btn_setting_Click;
         }
 
         private void rankingButton_Click(object sender, EventArgs e)
