@@ -792,7 +792,8 @@ namespace TadaPlay
                                 bool success = await _webSocketService.CloseRoomAsync(_currentRoom.Id);
                                 if (success)
                                 {
-                                    e.Cancel = false;
+                                    _isClosingOrClosed = true;
+                                    this.BeginInvoke(new Action(() => this.Close()));
                                 }
                                 DebugLogger.Info($"RoomDetailForm: Đã gửi lệnh đóng phòng {_currentRoom.Id}");
                             }
@@ -834,7 +835,8 @@ namespace TadaPlay
                                 bool success = await _webSocketService.LeaveRoomAsync();
                                 if (success)
                                 {
-                                    e.Cancel = false;
+                                    _isClosingOrClosed = true;
+                                    this.BeginInvoke(new Action(() => this.Close()));
                                 }
                                 DebugLogger.Info($"RoomDetailForm: Đã gửi lệnh rời phòng {_currentRoom.Id}");
                             }
@@ -889,10 +891,16 @@ namespace TadaPlay
             {
                 if (currentUser.Username == _currentRoom.HostUsername) // Use ID for comparison, more robust
                 {
+                    // Pause the close until the server confirms it (or the user cancels the
+                    // confirmation dialog) - otherwise the window disappears immediately while
+                    // close_room/leave_room is still in flight (or never sent, if disconnected),
+                    // leaving the server thinking we're still in the room with no way back in.
+                    e.Cancel = true;
                     closeRoom(sender, e); // Host closing the room
                 }
                 else if (currentUser.CurrentRoomId == _currentRoom.Id) // Ensure they are in THIS room
                 {
+                    e.Cancel = true;
                     leaveRoom(sender, e); // Member leaving the room
                 }
             }

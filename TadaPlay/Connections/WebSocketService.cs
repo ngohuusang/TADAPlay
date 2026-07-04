@@ -114,7 +114,7 @@ namespace TadaPlay.Websockets
                 }
                 _ws.Dispose();
             }
-            //TODO Enable if needed StopPing();
+            StopPing();
 
             _ws = new ClientWebSocket();
             _ws.Options.KeepAliveInterval = TimeSpan.FromSeconds(30);
@@ -133,7 +133,7 @@ namespace TadaPlay.Websockets
                 DebugLogger.Info("✅ WebSocketService: Connected.");
                 OnConnected?.Invoke(this, EventArgs.Empty);
                 OnConnectionStatusChanged?.Invoke(this, "Connected");
-                //TODO Enable if needed StartPing();
+                StartPing();
 
                 _ = ReceiveLoopAsync(_receiveCts.Token);
             }
@@ -159,7 +159,7 @@ namespace TadaPlay.Websockets
         {
             _isExplicitlyDisconnected = true;
             StopReconnectTimer(); // Stop it
-            //StopPing();
+            StopPing();
 
             if (_ws != null && (_ws.State == WebSocketState.Open || _ws.State == WebSocketState.Connecting))
             {
@@ -177,11 +177,14 @@ namespace TadaPlay.Websockets
             _ws = null;
             DebugLogger.Info("WebSocketService: Explicitly disconnected and disposed.");
             OnConnectionStatusChanged?.Invoke(this, "Disconnected (User action)");
+            OnDisconnected?.Invoke(this, EventArgs.Empty);
         }
 
         private void HandleConnectionLoss()
         {
             if (_isExplicitlyDisconnected) return;
+
+            OnDisconnected?.Invoke(this, EventArgs.Empty);
 
             _reconnectAttempt++;
             if (_reconnectAttempt > MaxReconnectAttempts)
@@ -262,36 +265,36 @@ namespace TadaPlay.Websockets
         }
 
         // --- Ping/Pong Logic ---
-        //public void StartPing()
-        //{
-        //    if (_pingTimer == null)
-        //    {
-        //        _pingTimer = new System.Timers.Timer(PingInterval);
-        //        _pingTimer.Elapsed += async (s, e) => await SendPingAsync(); // Async lambda for ping
-        //    }
-        //    _pingTimer.Start();
-        //    DebugLogger.Info("WebSocketService: Ping timer started."); // Changed to DebugLogger.Info
-        //}
+        public void StartPing()
+        {
+            if (_pingTimer == null)
+            {
+                _pingTimer = new System.Timers.Timer(PingInterval);
+                _pingTimer.Elapsed += async (s, e) => await SendPingAsync(); // Async lambda for ping
+            }
+            _pingTimer.Start();
+            DebugLogger.Info("WebSocketService: Ping timer started.");
+        }
 
-        //public void StopPing()
-        //{
-        //    _pingTimer?.Stop();
-        //    _pingTimer?.Dispose();
-        //    _pingTimer = null;
-        //    DebugLogger.Info("WebSocketService: Ping timer stopped and disposed."); // Changed to DebugLogger.Info
-        //}
+        public void StopPing()
+        {
+            _pingTimer?.Stop();
+            _pingTimer?.Dispose();
+            _pingTimer = null;
+            DebugLogger.Info("WebSocketService: Ping timer stopped and disposed.");
+        }
 
-        //private async Task SendPingAsync()
-        //{
-        //    if (_ws != null && _ws.State == WebSocketState.Open)
-        //    {
-        //        long ts = GetUnixTimeMilliseconds();
-        //        var pingMsg = new { ping = true, ts = ts };
-        //        string json = JsonConvert.SerializeObject(pingMsg);
-        //        await SendRawAsync(json);
-        //        DebugLogger.Info("📡 WebSocketService: Ping sent"); // Changed to DebugLogger.Info
-        //    }
-        //}
+        private async Task SendPingAsync()
+        {
+            if (_ws != null && _ws.State == WebSocketState.Open)
+            {
+                long ts = GetUnixTimeMilliseconds();
+                var pingMsg = new { ping = true, ts = ts };
+                string json = JsonConvert.SerializeObject(pingMsg);
+                await SendRawAsync(json);
+                DebugLogger.Info("📡 WebSocketService: Ping sent");
+            }
+        }
 
         // --- Receiving Messages ---
         private async Task ReceiveLoopAsync(CancellationToken cancellationToken)

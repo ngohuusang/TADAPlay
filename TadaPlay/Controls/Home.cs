@@ -436,7 +436,7 @@ namespace TadaPlay.Controls
 
         private async void createRoomButton_Click(object sender, EventArgs e)
         {
-            createRoom();
+            await createRoom();
         }
 
         private void roomTable_CellClick(object sender, AntdUI.TableClickEventArgs e)
@@ -512,6 +512,21 @@ namespace TadaPlay.Controls
             var currentUser = appContext.GetCurrentUser();
             if (currentUser?.CurrentRoomId != null)
             {
+                // The server still has us in a room - e.g. a previous close/leave command
+                // never reached it because the connection dropped at the time. Resume that
+                // room's UI instead of dead-ending here with no way back into it.
+                if (roomTable.DataSource is IReadOnlyList<ClientRoom> myRooms)
+                {
+                    var myRoom = myRooms.FirstOrDefault(r => r.Id == currentUser.CurrentRoomId);
+                    if (myRoom != null)
+                    {
+                        RoomDetailForm resumeForm = serviceProvider.GetRequiredService<RoomDetailForm>();
+                        resumeForm.SetRoom(myRoom);
+                        resumeForm.ShowDialog(mainForm);
+                        return;
+                    }
+                }
+
                 AntdUI.Modal.open(new AntdUI.Modal.Config(mainForm,
                     AntdUI.Localization.Get("Error", "Lỗi"),
                     AntdUI.Localization.Get("AlreadyInRoom", "Bạn đã ở trong một phòng. Vui lòng rời khỏi trước."),
