@@ -16,6 +16,10 @@ public interface IAppContext
 
     public string GetGameFolder();
 
+    public void SetGameExecutablePath(string exePath);
+
+    public string GetGameExecutablePath();
+
     public void SetMinimapPosition(string position);
 
     public string GetMinimapPosition();

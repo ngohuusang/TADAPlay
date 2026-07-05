@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Drawing;
 using System.IO;
 using System.Linq;
@@ -237,6 +238,8 @@ namespace TadaPlay.Controls
                 printLog("[Bắt đầu] Đã đồng bộ tên trong game với tài khoản.", Color.DarkGreen);
             }
 
+            LaunchGame();
+
             _gameStartedAtUtc = DateTime.UtcNow;
             _recordUploaded = false;
             _watchedRecordPath = null;
@@ -251,6 +254,36 @@ namespace TadaPlay.Controls
             }
             _recordWatchTimer.Start();
             UpdateStartButtonState();
+        }
+
+        private void LaunchGame()
+        {
+            string exePath = appContext.GetGameExecutablePath();
+            if (string.IsNullOrWhiteSpace(exePath))
+            {
+                printLog("[Bắt đầu] Chưa cấu hình file khởi chạy game. Vào Cài đặt để chọn file (vd: Voobly.exe).", Color.Orange);
+                return;
+            }
+            if (!File.Exists(exePath))
+            {
+                printLog($"[Bắt đầu] Không tìm thấy file khởi chạy game: {exePath}", Color.Red);
+                return;
+            }
+
+            try
+            {
+                Process.Start(new ProcessStartInfo(exePath)
+                {
+                    UseShellExecute = true,
+                    WorkingDirectory = Path.GetDirectoryName(exePath)
+                });
+                printLog($"[Bắt đầu] Đã mở '{Path.GetFileName(exePath)}'.", Color.DarkGreen);
+            }
+            catch (Exception ex)
+            {
+                DebugLogger.Error($"Home: Failed to launch game executable '{exePath}': {ex.Message}");
+                printLog($"[Bắt đầu] Không thể mở game: {ex.Message}", Color.Red);
+            }
         }
 
         private void RecordWatchTimer_Tick(object sender, EventArgs e)

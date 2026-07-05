@@ -25,6 +25,7 @@ namespace TadaPlay.Controls
 
             if (_appContext != null)
             {
+                Controls.Add(BuildGameExecutableSection());
                 Controls.Add(BuildGameFolderSection());
             }
 
@@ -32,6 +33,54 @@ namespace TadaPlay.Controls
             {
                 Controls.Add(BuildProfileSection());
             }
+        }
+
+        // Game launcher picker: the exe Start Game should open (e.g. Voobly's own launcher,
+        // not necessarily the raw age2_x1.exe). Persisted immediately.
+        private GroupBox BuildGameExecutableSection()
+        {
+            var group = new GroupBox
+            {
+                Text = "Khởi chạy game",
+                Dock = DockStyle.Top,
+                Height = 95,
+                Padding = new Padding(8)
+            };
+
+            var label = new Label
+            {
+                Text = "File chạy game khi bấm \"Bắt đầu\" (vd: Voobly.exe):",
+                Dock = DockStyle.Top,
+                Height = 20
+            };
+
+            var pathBox = new TextBox
+            {
+                Dock = DockStyle.Top,
+                ReadOnly = true,
+                Text = _appContext.GetGameExecutablePath() ?? string.Empty
+            };
+
+            var browseButton = new Button { Text = "Chọn file...", Dock = DockStyle.Top, Height = 28 };
+            browseButton.Click += (s, e) =>
+            {
+                using var dialog = new OpenFileDialog
+                {
+                    Title = "Chọn file khởi chạy game",
+                    Filter = "Chương trình (*.exe)|*.exe",
+                    FileName = _appContext.GetGameExecutablePath() ?? string.Empty
+                };
+                if (dialog.ShowDialog(this) == DialogResult.OK)
+                {
+                    _appContext.SetGameExecutablePath(dialog.FileName);
+                    pathBox.Text = dialog.FileName;
+                }
+            };
+
+            group.Controls.Add(browseButton);
+            group.Controls.Add(pathBox);
+            group.Controls.Add(label);
+            return group;
         }
 
         // Game folder picker: where AoE2 saves recorded games (.mgz). Persisted immediately.

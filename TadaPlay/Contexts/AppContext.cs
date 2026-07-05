@@ -85,6 +85,17 @@ public class AppContext : IAppContext
         SetRegistryValue("GameFolder", folderPath);
     }
 
+    public void SetGameExecutablePath(string exePath)
+    {
+        SetRegistryValue("GameExecutablePath", exePath);
+    }
+
+    public string GetGameExecutablePath()
+    {
+        object exePath = GetRegistryValue("GameExecutablePath");
+        return exePath != null ? exePath.ToString() : string.Empty;
+    }
+
     public void SetMinimapPosition(string position)
     {
         SetRegistryValue("GameMinimapPosition", position);
