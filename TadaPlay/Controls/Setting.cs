@@ -20,8 +20,12 @@ namespace TadaPlay.Controls
             _accountService = accountService;
 
             this.Width = 420;
-            this.AutoSize = true;
-            this.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            // Deliberately NOT using AutoSize/GrowAndShrink here: a plain UserControl's default
+            // layout engine doesn't compute preferred size from Dock=Top children (that's a
+            // FlowLayoutPanel-only behavior), so AutoSize would just fight the explicit Height
+            // set below and reset it back down once this control is re-parented into the modal
+            // - which is exactly why the dialog was rendering as an empty box.
+            this.AutoSize = false;
 
             int totalHeight = 0;
 
@@ -41,10 +45,9 @@ namespace TadaPlay.Controls
                 totalHeight += profileSection.Height;
             }
 
-            // AntdUI.Modal snapshots this control's size when it opens, and doesn't reliably
-            // pick up AutoSize/GrowAndShrink recalculating asynchronously afterwards - so set
-            // the height explicitly here rather than relying on that to "just happen" (this is
-            // what was causing the Settings dialog to render as an empty/near-zero-height box).
+            // AntdUI.Modal.open's (Form, string, object) overload does read control.Height
+            // correctly to size the dialog - it just needs a real value here, which AutoSize
+            // was never actually providing (see note above).
             this.Height = totalHeight;
         }
 
