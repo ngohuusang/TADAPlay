@@ -23,16 +23,29 @@ namespace TadaPlay.Controls
             this.AutoSize = true;
             this.AutoSizeMode = AutoSizeMode.GrowAndShrink;
 
+            int totalHeight = 0;
+
             if (_appContext != null)
             {
-                Controls.Add(BuildGameExecutableSection());
-                Controls.Add(BuildGameFolderSection());
+                var exeSection = BuildGameExecutableSection();
+                var folderSection = BuildGameFolderSection();
+                Controls.Add(exeSection);
+                Controls.Add(folderSection);
+                totalHeight += exeSection.Height + folderSection.Height;
             }
 
             if (_appContext != null && _accountService != null)
             {
-                Controls.Add(BuildProfileSection());
+                var profileSection = BuildProfileSection();
+                Controls.Add(profileSection);
+                totalHeight += profileSection.Height;
             }
+
+            // AntdUI.Modal snapshots this control's size when it opens, and doesn't reliably
+            // pick up AutoSize/GrowAndShrink recalculating asynchronously afterwards - so set
+            // the height explicitly here rather than relying on that to "just happen" (this is
+            // what was causing the Settings dialog to render as an empty/near-zero-height box).
+            this.Height = totalHeight;
         }
 
         // Game launcher picker: the exe Start Game should open directly (e.g. age2_x1-WK.exe) -
