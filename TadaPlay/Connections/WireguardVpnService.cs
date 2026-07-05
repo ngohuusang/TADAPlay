@@ -384,9 +384,12 @@ namespace TadaPlay.Connections
 
         private void AddArch()
         {
-            string[] first = { Environment.GetEnvironmentVariable("PATH") ?? string.Empty };
-            string[] second = { Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "x86"), Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "x64") };
-            Environment.SetEnvironmentVariable("PATH", string.Join(Path.PathSeparator.ToString(), first.Concat(second)));
+            // Only expose the folder matching this process's own bitness. Adding both would let
+            // the wrong-architecture wireguard.dll shadow the right one in the PATH search order,
+            // failing to load with ERROR_BAD_FORMAT (0x8007000B) even in a correctly-built process.
+            string archDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, Environment.Is64BitProcess ? "x64" : "x86");
+            string currentPath = Environment.GetEnvironmentVariable("PATH") ?? string.Empty;
+            Environment.SetEnvironmentVariable("PATH", currentPath + Path.PathSeparator + archDir);
         }
 
         public void Dispose()
