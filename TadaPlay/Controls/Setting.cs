@@ -35,8 +35,9 @@ namespace TadaPlay.Controls
             }
         }
 
-        // Game launcher picker: the exe Start Game should open (e.g. Voobly's own launcher,
-        // not necessarily the raw age2_x1.exe). Persisted immediately.
+        // Game launcher picker: the exe Start Game should open directly (e.g. age2_x1-WK.exe) -
+        // no Voobly in the loop, since players connect peer-to-peer over the VPN using the
+        // game's own Direct IP multiplayer. Persisted immediately.
         private GroupBox BuildGameExecutableSection()
         {
             var group = new GroupBox
@@ -49,7 +50,7 @@ namespace TadaPlay.Controls
 
             var label = new Label
             {
-                Text = "File chạy game khi bấm \"Bắt đầu\" (vd: Voobly.exe):",
+                Text = "File chạy game khi bấm \"Bắt đầu\" (vd: age2_x1-WK.exe):",
                 Dock = DockStyle.Top,
                 Height = 20
             };

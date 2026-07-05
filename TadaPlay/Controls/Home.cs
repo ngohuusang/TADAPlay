@@ -261,7 +261,7 @@ namespace TadaPlay.Controls
             string exePath = appContext.GetGameExecutablePath();
             if (string.IsNullOrWhiteSpace(exePath))
             {
-                printLog("[Bắt đầu] Chưa cấu hình file khởi chạy game. Vào Cài đặt để chọn file (vd: Voobly.exe).", Color.Orange);
+                printLog("[Bắt đầu] Chưa cấu hình file khởi chạy game. Vào Cài đặt để chọn file (vd: age2_x1-WK.exe).", Color.Orange);
                 return;
             }
             if (!File.Exists(exePath))
