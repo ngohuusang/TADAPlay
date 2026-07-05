@@ -86,16 +86,7 @@ namespace TadaPlay
         {
             accountService.GetAllAsync();
             var setting = new Setting(this, appContext, accountService);
-            if (AntdUI.Modal.open(this, AntdUI.Localization.Get("Setting", "Cài đặt"), setting) == DialogResult.OK)
-            {
-                AntdUI.Config.Animation = setting.Animation;
-                AntdUI.Config.ShadowEnabled = setting.ShadowEnabled;
-                AntdUI.Config.ShowInWindow = setting.ShowInWindow;
-                AntdUI.Config.ScrollBarHide = setting.ScrollBarHide;
-                if (AntdUI.Config.TextRenderingHighQuality == setting.TextRenderingHighQuality) return;
-                AntdUI.Config.TextRenderingHighQuality = setting.TextRenderingHighQuality;
-                Refresh();
-            }
+            AntdUI.Modal.open(this, AntdUI.Localization.Get("Setting", "Cài đặt"), setting);
         }
 
         // Helper method to switch UserControls in a dedicated content panel

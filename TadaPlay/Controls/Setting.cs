@@ -12,72 +12,89 @@ namespace TadaPlay.Controls
         private readonly IAppContext _appContext;
         private readonly IAccountService _accountService;
 
-        public bool Animation, ShadowEnabled, ShowInWindow, ScrollBarHide, TextRenderingHighQuality;
         public Setting(Form _form, IAppContext appContext = null, IAccountService accountService = null)
         {
             InitializeComponent();
             form = _form;
             _appContext = appContext;
             _accountService = accountService;
-            switch1.Checked = Animation = AntdUI.Config.Animation;
-            switch2.Checked = ShadowEnabled = AntdUI.Config.ShadowEnabled;
-            switch3.Checked = ShowInWindow = AntdUI.Config.ShowInWindow;
-            switch4.Checked = ScrollBarHide = AntdUI.Config.ScrollBarHide;
-            switch5.Checked = TextRenderingHighQuality = AntdUI.Config.TextRenderingHighQuality;
 
-            switch1.CheckedChanged += (s, e) =>
-            {
-                Animation = e.Value;
-            };
-
-            switch2.CheckedChanged += (s, e) =>
-            {
-                ShadowEnabled = e.Value;
-            };
-
-            switch3.CheckedChanged += (s, e) =>
-            {
-                ShowInWindow = e.Value;
-            };
-
-            switch4.CheckedChanged += (s, e) =>
-            {
-                ScrollBarHide = e.Value;
-            };
-
-            switch5.CheckedChanged += (s, e) =>
-            {
-                TextRenderingHighQuality = e.Value;
-            };
+            this.Width = 420;
+            this.AutoSize = true;
+            this.AutoSizeMode = AutoSizeMode.GrowAndShrink;
 
             if (_appContext != null)
             {
-                BuildGameFolderRow();
+                Controls.Add(BuildGameFolderSection());
             }
 
             if (_appContext != null && _accountService != null)
             {
-                BuildProfileSection();
+                Controls.Add(BuildProfileSection());
             }
+        }
+
+        // Game folder picker: where AoE2 saves recorded games (.mgz). Persisted immediately.
+        private GroupBox BuildGameFolderSection()
+        {
+            var group = new GroupBox
+            {
+                Text = "Thư mục game",
+                Dock = DockStyle.Top,
+                Height = 95,
+                Padding = new Padding(8)
+            };
+
+            var label = new Label
+            {
+                Text = "Thư mục cài đặt AoE2 (chứa SaveGame):",
+                Dock = DockStyle.Top,
+                Height = 20
+            };
+
+            var pathBox = new TextBox
+            {
+                Dock = DockStyle.Top,
+                ReadOnly = true,
+                Text = _appContext.GetGameFolder() ?? string.Empty
+            };
+
+            var browseButton = new Button { Text = "Chọn thư mục...", Dock = DockStyle.Top, Height = 28 };
+            browseButton.Click += (s, e) =>
+            {
+                using var dialog = new FolderBrowserDialog
+                {
+                    Description = "Chọn thư mục cài đặt AoE2 (nơi chứa thư mục SaveGame).",
+                    SelectedPath = _appContext.GetGameFolder() ?? string.Empty
+                };
+                if (dialog.ShowDialog(this) == DialogResult.OK)
+                {
+                    _appContext.SetGameFolder(dialog.SelectedPath);
+                    pathBox.Text = dialog.SelectedPath;
+                }
+            };
+
+            // Dock=Top within the same parent stacks in reverse add order: the group's
+            // GroupBox padding puts the frame around everything, so add bottom-most first.
+            group.Controls.Add(browseButton);
+            group.Controls.Add(pathBox);
+            group.Controls.Add(label);
+            return group;
         }
 
         // Profile editor: full name, in-game display name (nick_name), and optional password
         // change, via the existing update-user endpoint. The server always requires the
         // current password to confirm any change, even if only the name is being updated.
-        private void BuildProfileSection()
+        private GroupBox BuildProfileSection()
         {
-            this.Height = Math.Max(this.Height, 620);
-
             var currentUser = _appContext.GetCurrentUser();
 
-            var panel = new Panel { Dock = DockStyle.Bottom, Height = 260, Padding = new Padding(3, 8, 3, 3) };
-
-            var title = new Label
+            var group = new GroupBox
             {
                 Text = "Thông tin tài khoản",
                 Dock = DockStyle.Top,
-                Height = 22,
-                Font = new Font("Segoe UI", 9.75F, FontStyle.Bold)
+                Height = 300,
+                Padding = new Padding(8)
             };
 
             var fullNameLabel = new Label { Text = "Họ tên:", Dock = DockStyle.Top, Height = 20 };
@@ -154,64 +171,19 @@ namespace TadaPlay.Controls
                 }
             };
 
-            // Docked Top stacks in reverse add order: add bottom-most control first.
-            panel.Controls.Add(saveButton);
-            panel.Controls.Add(confirmPasswordBox);
-            panel.Controls.Add(confirmPasswordLabel);
-            panel.Controls.Add(newPasswordBox);
-            panel.Controls.Add(newPasswordLabel);
-            panel.Controls.Add(currentPasswordBox);
-            panel.Controls.Add(currentPasswordLabel);
-            panel.Controls.Add(nickNameBox);
-            panel.Controls.Add(nickNameLabel);
-            panel.Controls.Add(fullNameBox);
-            panel.Controls.Add(fullNameLabel);
-            panel.Controls.Add(title);
-            Controls.Add(panel);
-        }
-
-        // Game folder picker: where AoE2 saves recorded games (.mgz). Persisted immediately.
-        private void BuildGameFolderRow()
-        {
-            this.Height = Math.Max(this.Height, 360);
-
-            var panel = new Panel { Dock = DockStyle.Bottom, Height = 90, Padding = new Padding(3, 8, 3, 3) };
-
-            var label = new Label
-            {
-                Text = "Thư mục game (chứa SaveGame):",
-                Dock = DockStyle.Top,
-                Height = 22,
-                Font = new Font("Segoe UI", 9.75F)
-            };
-
-            var pathBox = new TextBox
-            {
-                Dock = DockStyle.Top,
-                ReadOnly = true,
-                Text = _appContext.GetGameFolder() ?? string.Empty
-            };
-
-            var browseButton = new Button { Text = "Chọn thư mục...", Dock = DockStyle.Top, Height = 30 };
-            browseButton.Click += (s, e) =>
-            {
-                using var dialog = new FolderBrowserDialog
-                {
-                    Description = "Chọn thư mục cài đặt AoE2 (nơi chứa thư mục SaveGame).",
-                    SelectedPath = _appContext.GetGameFolder() ?? string.Empty
-                };
-                if (dialog.ShowDialog(this) == DialogResult.OK)
-                {
-                    _appContext.SetGameFolder(dialog.SelectedPath);
-                    pathBox.Text = dialog.SelectedPath;
-                }
-            };
-
-            // Docked Top stacks in reverse add order: add button, then path, then label.
-            panel.Controls.Add(browseButton);
-            panel.Controls.Add(pathBox);
-            panel.Controls.Add(label);
-            Controls.Add(panel);
+            // Dock=Top stacks in reverse add order: add bottom-most control first.
+            group.Controls.Add(saveButton);
+            group.Controls.Add(confirmPasswordBox);
+            group.Controls.Add(confirmPasswordLabel);
+            group.Controls.Add(newPasswordBox);
+            group.Controls.Add(newPasswordLabel);
+            group.Controls.Add(currentPasswordBox);
+            group.Controls.Add(currentPasswordLabel);
+            group.Controls.Add(nickNameBox);
+            group.Controls.Add(nickNameLabel);
+            group.Controls.Add(fullNameBox);
+            group.Controls.Add(fullNameLabel);
+            return group;
         }
     }
 }
