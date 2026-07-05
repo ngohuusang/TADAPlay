@@ -70,16 +70,18 @@ namespace TadaPlay
 
         private void AppContext_OnVpnProfileUpdated(object sender, EventArgs e)
         {
-            this.BeginInvoke(() => {
+            UiUtils.InvokeOnUiThread(this, () =>
+            {
                 DebugLogger.Info($"Home: Current vpn profile updated by AppContext.");
                 wireGuardVpnService.InitAdapter(appContext.GetVpnProfile()?.ConfigContent).ContinueWith(task =>
                 {
                     if (!task.IsCompletedSuccessfully)
                     {
-                        AntdUI.Notification.error(this, AntdUI.Localization.Get("VPNProfileUpdateError", "Lỗi cập nhật cấu hình VPN"), AntdUI.Localization.Get("VPNProfileUpdateErrorContent", task.Exception!.InnerException!.Message), AntdUI.TAlignFrom.Bottom);
+                        UiUtils.InvokeOnUiThread(this, () =>
+                            AntdUI.Notification.error(this, AntdUI.Localization.Get("VPNProfileUpdateError", "Lỗi cập nhật cấu hình VPN"), AntdUI.Localization.Get("VPNProfileUpdateErrorContent", task.Exception!.InnerException!.Message), AntdUI.TAlignFrom.Bottom));
                     }
                 });
-            });
+            }, "MAINFORM_VPN_PROFILE");
         }
 
         private void btn_setting_Click(object sender, EventArgs e)
