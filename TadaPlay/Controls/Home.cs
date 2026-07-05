@@ -42,6 +42,8 @@ namespace TadaPlay.Controls
         private int _stableTicks;
         private const int RecordWatchIntervalMs = 5000;
         private const int StableTicksToFinish = 3; // ~15s with no further writes
+        private const int GiveUpSearchingAfterMinutes = 10; // no record file appeared at all
+        private const int GiveUpWatchingAfterMinutes = 240; // record found but never went quiet
 
         public event EventHandler LogoutRequested;
 
@@ -291,10 +293,22 @@ namespace TadaPlay.Controls
             string gameFolder = appContext.GetGameFolder();
             if (string.IsNullOrWhiteSpace(gameFolder)) return;
 
+            TimeSpan elapsed = DateTime.UtcNow - (_gameStartedAtUtc ?? DateTime.UtcNow);
+
             if (_watchedRecordPath == null)
             {
                 string latest = RecordedGameFinder.FindLatestRecord(gameFolder, _gameStartedAtUtc);
-                if (latest == null) return;
+                if (latest == null)
+                {
+                    if (elapsed.TotalMinutes >= GiveUpSearchingAfterMinutes)
+                    {
+                        _recordWatchTimer.Stop();
+                        printLog($"[Bắt đầu] Không tìm thấy file record sau {GiveUpSearchingAfterMinutes} phút - " +
+                                 "kiểm tra lại thư mục game trong Cài đặt. Đã dừng theo dõi.", Color.Red);
+                        UiUtils.InvokeOnUiThread(this, UpdateStartButtonState);
+                    }
+                    return;
+                }
 
                 _watchedRecordPath = latest;
                 var fi = new FileInfo(latest);
@@ -302,6 +316,14 @@ namespace TadaPlay.Controls
                 _lastKnownWriteTimeUtc = fi.LastWriteTimeUtc;
                 _stableTicks = 0;
                 printLog($"[Bắt đầu] Đã phát hiện file record: {fi.Name}", Color.DarkGreen);
+                return;
+            }
+
+            if (elapsed.TotalMinutes >= GiveUpWatchingAfterMinutes)
+            {
+                _recordWatchTimer.Stop();
+                printLog("[Bắt đầu] Theo dõi quá lâu không có kết quả, đã dừng. Có thể tải lên thủ công.", Color.Red);
+                UiUtils.InvokeOnUiThread(this, UpdateStartButtonState);
                 return;
             }
 
