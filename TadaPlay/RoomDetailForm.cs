@@ -512,6 +512,15 @@ namespace TadaPlay
             {
                 try
                 {
+                    // Best-effort: make sure AoE2's own profile shows the account's in-game
+                    // name, so the replay it records lines up with this account (see
+                    // GameProfileNameWriter for the file format this rewrites).
+                    string inGameName = currentUser.NickName;
+                    if (!string.IsNullOrWhiteSpace(inGameName))
+                    {
+                        GameProfileNameWriter.SyncPlayerName(_appContext.GetGameFolder(), inGameName);
+                    }
+
                     // The server only recognizes "update_room_status" (see GameLobbyServer.php's
                     // command switch) - "start_game" isn't a command it knows and was silently
                     // getting back an "Unknown command" error, so Start Game did nothing.
