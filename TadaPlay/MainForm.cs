@@ -130,7 +130,7 @@ namespace TadaPlay
             //AntdUI.Localization.SetLanguage("en-US");
 
             _loginControl = new Login(this, accountService, appContext);
-            _homeControl = new Home(this, webSocketService, appContext, serviceProvider);
+            _homeControl = new Home(this, webSocketService, appContext, wireGuardVpnService, accountService);
             _homeControl.LogoutRequested += Home_LogoutRequested;
             _loginControl.LoginSuccessful += (s, e) =>
             {
@@ -170,9 +170,12 @@ namespace TadaPlay
 
                     if (loggedOut)
                     {
-                        // Disconnect WebSocket connection
+                        // Disconnect WebSocket and tear down the VPN tunnel
                         webSocketService.Disconnect();
-
+                        if (wireGuardVpnService.IsConnected)
+                        {
+                            await wireGuardVpnService.DisconnectAsync();
+                        }
 
                         DebugLogger.Info("User logged out successfully. Navigating back to login.");
                         // Navigate back to login screen

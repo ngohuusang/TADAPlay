@@ -9,6 +9,11 @@ namespace TadaPlay.Websockets.Models
     public class PingUpdateEventArgs : EventArgs
     {
         public long PingMs { get; }
-        public PingUpdateEventArgs(long pingMs) { PingMs = pingMs; }
+        public bool IsHighPing { get; }
+        public PingUpdateEventArgs(long pingMs, bool isHighPing = false)
+        {
+            PingMs = pingMs;
+            IsHighPing = isHighPing;
+        }
     }
 }

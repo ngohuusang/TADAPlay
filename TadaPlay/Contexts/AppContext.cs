@@ -14,8 +14,6 @@ public class AppContext : IAppContext
 
     private User? _currentUser;
     private List<User> _allOnlineUsers = new List<User>();
-    private List<ClientRoom> _allActiveRooms = new List<ClientRoom>();
-    private ClientRoom _currentRoomDetails;
     private VpnProfile _currentVpnProfile;
 
     private static object? GetRegistryValue(string name)
@@ -129,14 +127,10 @@ public class AppContext : IAppContext
     }
 
     public IReadOnlyList<User> AllOnlineUsers => _allOnlineUsers.AsReadOnly();
-    public IReadOnlyList<ClientRoom> AllActiveRooms => _allActiveRooms.AsReadOnly();
-    public ClientRoom CurrentRoomDetails => _currentRoomDetails;
 
     // --- Events ---
     public event EventHandler OnCurrentUserUpdated;
     public event EventHandler OnOnlineUsersUpdated;
-    public event EventHandler OnActiveRoomsUpdated;
-    public event EventHandler OnCurrentRoomDetailsUpdated;
 
     public event EventHandler OnVpnProfileUpdated;
 
@@ -149,54 +143,20 @@ public class AppContext : IAppContext
 
             if (messageType == "user_list")
             {
-                // Update AllOnlineUsers
                 var newOnlineUsers = (data["users"] as JArray)?
                                      .Select(u => JsonConvert.DeserializeObject<User>(u.ToString()))
                                      .ToList() ?? new List<User>();
-                // Update our internal list
                 _allOnlineUsers = newOnlineUsers;
                 OnOnlineUsersUpdated?.Invoke(this, EventArgs.Empty); // Notify subscribers
 
-                // Update AllActiveRooms
-                var newActiveRooms = (data["rooms"] as JArray)?
-                                     .Select(r => JsonConvert.DeserializeObject<ClientRoom>(r.ToString()))
-                                     .ToList() ?? new List<ClientRoom>();
-                _allActiveRooms = newActiveRooms;
-                OnActiveRoomsUpdated?.Invoke(this, EventArgs.Empty); // Notify subscribers
-
-                // Also update CurrentUser's latest status and CurrentRoomDetails
                 var updatedCurrentUser = _allOnlineUsers.FirstOrDefault(u => u.Username == _currentUser?.Username);
-                if (updatedCurrentUser != null)
+                if (updatedCurrentUser != null && _currentUser != null)
                 {
-                    // Only update properties that might change, to avoid replacing the whole object if it has events/bindings
-                    if (_currentUser != null)
-                    {
-                        _currentUser.Status = updatedCurrentUser.Status;
-                        _currentUser.CurrentRoomId = updatedCurrentUser.CurrentRoomId;
-                    }
-                    else
-                    {
-                        _currentUser = updatedCurrentUser; // Set it if it was null
-                    }
+                    _currentUser.Status = updatedCurrentUser.Status;
                     OnCurrentUserUpdated?.Invoke(this, EventArgs.Empty);
                 }
 
-                // Update CurrentRoomDetails if the user is in a room
-                var currentUsersRoom = _allActiveRooms.FirstOrDefault(r => r.Id == _currentUser?.CurrentRoomId);
-                if (currentUsersRoom != null)
-                {
-                    // Deep copy or update properties if you want to avoid direct reference.
-                    // For simplicity, directly assign the new object.
-                    _currentRoomDetails = currentUsersRoom;
-                }
-                else
-                {
-                    _currentRoomDetails = null; // User is no longer in a room
-                }
-                OnCurrentRoomDetailsUpdated?.Invoke(this, EventArgs.Empty); // Notify
-
-
-                DebugLogger.Info("AppContext: Lobby state updated from WebSocket message.");
+                DebugLogger.Info("AppContext: Online users updated from WebSocket message.");
             }
             // Handle other message types if AppContext needs to process them
             // e.g., notifications directly (though UI might also subscribe directly)

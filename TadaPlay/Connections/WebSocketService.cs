@@ -372,7 +372,7 @@ namespace TadaPlay.Websockets
                     long pingMs = now - tsSent;
 
                     DebugLogger.Info($"📡 WebSocketService: Ping received: {pingMs} ms"); // Changed to DebugLogger.Info
-                    OnPingUpdate?.Invoke(this, new PingUpdateEventArgs(pingMs));
+                    OnPingUpdate?.Invoke(this, new PingUpdateEventArgs(pingMs, pingMs > HighPingThreshold));
 
                     if (pingMs > HighPingThreshold)
                     {
@@ -407,54 +407,6 @@ namespace TadaPlay.Websockets
             return DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         }
 
-        /// <summary>
-        /// Sends a command to kick a specific user from a room.
-        /// Only the room host should be able to execute this.
-        /// </summary>
-        /// <param name="roomId">The ID of the room.</param>
-        /// <param name="userIdToKick">The WebSocket User ID of the user to kick.</param>
-        public async Task<bool> KickUserFromRoomAsync(string roomId, string userIdToKick)
-        {
-            if (string.IsNullOrEmpty(roomId) || string.IsNullOrEmpty(userIdToKick))
-            {
-                DebugLogger.Error("WebSocketService: KickUserFromRoomAsync: Room ID or User ID to kick cannot be empty.");
-                OnErrorOccurred?.Invoke(this, "Room ID or User ID to kick is missing.");
-                return false;
-            }
-            await SendMessageAsync(new
-            {
-                command = "kick_user",
-                room_id = roomId,
-                user_id_to_kick = userIdToKick
-            });
-            DebugLogger.Info($"WebSocketService: Sent kick_user command for user {userIdToKick} in room {roomId}");
-
-            return true; // Indicate success
-        }
-
-        /// <summary>
-        /// Sends a command to close a specific room.
-        /// Only the room host should be able to execute this.
-        /// </summary>
-        /// <param name="roomId">The ID of the room to close.</param>
-        public async Task<bool> CloseRoomAsync(string roomId)
-        {
-            if (string.IsNullOrEmpty(roomId))
-            {
-                DebugLogger.Error("WebSocketService: CloseRoomAsync: Room ID cannot be empty.");
-                OnErrorOccurred?.Invoke(this, "Room ID is missing for close_room command.");
-                return false;
-            }
-            await SendMessageAsync(new
-            {
-                command = "close_room",
-                room_id = roomId
-            });
-            DebugLogger.Info($"WebSocketService: Sent close_room command for room {roomId}");
-
-            return true; // Indicate success
-        }
-
         // --- IDisposable Implementation ---
         public void Dispose()
         {
@@ -475,19 +427,9 @@ namespace TadaPlay.Websockets
             // No unmanaged resources in this class that require explicit handling
         }
 
-        public Task<bool> CreateRoomAsync(string roomName)
-        {
-            return SendMessageAsync(new { command = "create_room", room_name = roomName });
-        }
-
         public async void RefreshAsync()
         {
             await SendMessageAsync(new { refresh = "refresh" });
-        }
-
-        public Task<bool> LeaveRoomAsync()
-        {
-           return SendMessageAsync(new { command = "leave_room" });
         }
 
         // Finalizer (destructor)

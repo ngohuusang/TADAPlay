@@ -12,6 +12,7 @@ namespace TadaPlay.Connections.Interface
         event EventHandler<string> OnErrorOccurred; // Error messages
         event EventHandler OnConnected; // VPN connection established
         event EventHandler OnDisconnected; // VPN disconnected
+        event EventHandler<string> OnIpAddressChanged; // Fired with the tunnel's local IP once known/changed
 
         bool IsConnected { get; }
 

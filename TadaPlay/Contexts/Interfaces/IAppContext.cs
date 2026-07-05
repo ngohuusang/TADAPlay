@@ -29,13 +29,9 @@ public interface IAppContext
     public VpnProfile GetVpnProfile();
 
     IReadOnlyList<User> AllOnlineUsers { get; }
-    IReadOnlyList<ClientRoom> AllActiveRooms { get; }
-    ClientRoom CurrentRoomDetails { get; }
 
     event System.EventHandler OnCurrentUserUpdated;
     event System.EventHandler OnOnlineUsersUpdated;
-    event System.EventHandler OnActiveRoomsUpdated;
-    event System.EventHandler OnCurrentRoomDetailsUpdated;
 
     event System.EventHandler OnVpnProfileUpdated;
 

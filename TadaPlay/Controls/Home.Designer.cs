@@ -1,13 +1,13 @@
-﻿namespace TadaPlay.Controls
+namespace TadaPlay.Controls
 {
     partial class Home
     {
-        /// <summary> 
+        /// <summary>
         /// Required designer variable.
         /// </summary>
         private System.ComponentModel.IContainer components = null;
 
-        /// <summary> 
+        /// <summary>
         /// Clean up any resources being used.
         /// </summary>
         /// <param name="disposing">true if managed resources should be disposed; otherwise, false.</param>
@@ -22,8 +22,8 @@
 
         #region Component Designer generated code
 
-        /// <summary> 
-        /// Required method for Designer support - do not modify 
+        /// <summary>
+        /// Required method for Designer support - do not modify
         /// the contents of this method with the code editor.
         /// </summary>
         private void InitializeComponent()
@@ -34,11 +34,14 @@
             AntdUI.TimelineItem timelineItem2 = new AntdUI.TimelineItem();
             AntdUI.TimelineItem timelineItem3 = new AntdUI.TimelineItem();
             homeGridPanel = new AntdUI.GridPanel();
-            roomTableLayoutPanel = new TableLayoutPanel();
-            refreshRoomButton = new AntdUI.Button();
-            createRoomButton = new AntdUI.Button();
-            label2 = new AntdUI.Label();
-            roomTable = new AntdUI.Table();
+            playPanel = new Panel();
+            logRichTextBox = new RichTextBox();
+            uploadRecordButton = new AntdUI.Button();
+            startGameButton = new AntdUI.Button();
+            pingLabel = new Label();
+            ipAddressLabel = new Label();
+            vpnStatusLabel = new Label();
+            playHeaderLabel = new AntdUI.Label();
             tableLayoutPanel1 = new TableLayoutPanel();
             userAvatar = new AntdUI.Avatar();
             logoutButton = new AntdUI.Button();
@@ -51,16 +54,16 @@
             newsCarousel = new AntdUI.Carousel();
             newsTimeline = new AntdUI.Timeline();
             homeGridPanel.SuspendLayout();
-            roomTableLayoutPanel.SuspendLayout();
+            playPanel.SuspendLayout();
             tableLayoutPanel1.SuspendLayout();
             tableLayoutPanel3.SuspendLayout();
             tableLayoutPanel2.SuspendLayout();
             gridPanel1.SuspendLayout();
             SuspendLayout();
-            // 
+            //
             // homeGridPanel
-            // 
-            homeGridPanel.Controls.Add(roomTableLayoutPanel);
+            //
+            homeGridPanel.Controls.Add(playPanel);
             homeGridPanel.Controls.Add(tableLayoutPanel1);
             homeGridPanel.Dock = DockStyle.Fill;
             homeGridPanel.Gap = 5;
@@ -70,88 +73,110 @@
             homeGridPanel.Span = "33.33% 66.66%";
             homeGridPanel.TabIndex = 0;
             homeGridPanel.Text = "gridPanel1";
-            // 
-            // roomTableLayoutPanel
-            // 
-            roomTableLayoutPanel.BackColor = Color.Snow;
-            roomTableLayoutPanel.ColumnCount = 3;
-            roomTableLayoutPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-            roomTableLayoutPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 50F));
-            roomTableLayoutPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 50F));
-            roomTableLayoutPanel.Controls.Add(refreshRoomButton, 2, 0);
-            roomTableLayoutPanel.Controls.Add(createRoomButton, 1, 0);
-            roomTableLayoutPanel.Controls.Add(label2, 0, 0);
-            roomTableLayoutPanel.Controls.Add(roomTable, 0, 1);
-            roomTableLayoutPanel.Dock = DockStyle.Fill;
-            roomTableLayoutPanel.Font = new Font("Segoe UI", 12F, FontStyle.Regular, GraphicsUnit.Point, 0);
-            roomTableLayoutPanel.Location = new Point(284, 8);
-            roomTableLayoutPanel.Name = "roomTableLayoutPanel";
-            roomTableLayoutPanel.RowCount = 2;
-            roomTableLayoutPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 50F));
-            roomTableLayoutPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-            roomTableLayoutPanel.Size = new Size(537, 324);
-            roomTableLayoutPanel.TabIndex = 1;
-            // 
-            // refreshRoomButton
-            // 
-            refreshRoomButton.AutoSizeMode = AntdUI.TAutoSize.Auto;
-            refreshRoomButton.Dock = DockStyle.Fill;
-            refreshRoomButton.IconSvg = "ReloadOutlined";
-            refreshRoomButton.LoadingWaveVertical = true;
-            refreshRoomButton.Location = new Point(490, 3);
-            refreshRoomButton.Name = "refreshRoomButton";
-            refreshRoomButton.Padding = new Padding(5);
-            refreshRoomButton.Shape = AntdUI.TShape.Circle;
-            refreshRoomButton.Size = new Size(46, 46);
-            refreshRoomButton.TabIndex = 6;
-            refreshRoomButton.Type = AntdUI.TTypeMini.Warn;
-            refreshRoomButton.Click += refreshRoomButton_Click;
-            // 
-            // createRoomButton
-            // 
-            createRoomButton.AutoSizeMode = AntdUI.TAutoSize.Auto;
-            createRoomButton.Dock = DockStyle.Fill;
-            createRoomButton.IconSvg = "PlusOutlined";
-            createRoomButton.LoadingWaveVertical = true;
-            createRoomButton.Location = new Point(440, 3);
-            createRoomButton.Name = "createRoomButton";
-            createRoomButton.Padding = new Padding(5);
-            createRoomButton.Shape = AntdUI.TShape.Circle;
-            createRoomButton.Size = new Size(46, 46);
-            createRoomButton.TabIndex = 3;
-            createRoomButton.Type = AntdUI.TTypeMini.Primary;
-            createRoomButton.Click += createRoomButton_Click;
-            // 
-            // label2
-            // 
-            label2.Dock = DockStyle.Fill;
-            label2.Font = new Font("Segoe UI Semibold", 12F, FontStyle.Bold, GraphicsUnit.Point, 0);
-            label2.IconGap = 5;
-            label2.IconRatio = 1.2F;
-            label2.Location = new Point(3, 3);
-            label2.Name = "label2";
-            label2.Padding = new Padding(10, 0, 0, 0);
-            label2.PrefixColor = Color.DarkOrange;
-            label2.PrefixSvg = "TeamOutlined";
-            label2.Size = new Size(431, 44);
-            label2.SuffixSvg = "";
-            label2.TabIndex = 2;
-            label2.Text = "Phòng game";
-            // 
-            // roomTable
-            // 
-            roomTableLayoutPanel.SetColumnSpan(roomTable, 3);
-            roomTable.Dock = DockStyle.Fill;
-            roomTable.EmptyText = "Chưa có phòng nào!";
-            roomTable.Location = new Point(3, 53);
-            roomTable.Name = "roomTable";
-            roomTable.Size = new Size(531, 268);
-            roomTable.TabIndex = 5;
-            roomTable.Text = "Phong";
-            roomTable.CellClick += roomTable_CellClick;
-            // 
+            //
+            // playPanel
+            //
+            playPanel.BackColor = Color.Snow;
+            playPanel.Controls.Add(logRichTextBox);
+            playPanel.Controls.Add(uploadRecordButton);
+            playPanel.Controls.Add(startGameButton);
+            playPanel.Controls.Add(pingLabel);
+            playPanel.Controls.Add(ipAddressLabel);
+            playPanel.Controls.Add(vpnStatusLabel);
+            playPanel.Controls.Add(playHeaderLabel);
+            playPanel.Dock = DockStyle.Fill;
+            playPanel.Location = new Point(284, 8);
+            playPanel.Name = "playPanel";
+            playPanel.Padding = new Padding(3);
+            playPanel.Size = new Size(537, 324);
+            playPanel.TabIndex = 1;
+            //
+            // logRichTextBox
+            //
+            logRichTextBox.Dock = DockStyle.Fill;
+            logRichTextBox.Location = new Point(3, 168);
+            logRichTextBox.Name = "logRichTextBox";
+            logRichTextBox.ReadOnly = true;
+            logRichTextBox.Size = new Size(531, 153);
+            logRichTextBox.TabIndex = 6;
+            logRichTextBox.Text = "";
+            //
+            // uploadRecordButton
+            //
+            uploadRecordButton.AutoSizeMode = AntdUI.TAutoSize.Auto;
+            uploadRecordButton.Dock = DockStyle.Top;
+            uploadRecordButton.IconSvg = "CloudUploadOutlined";
+            uploadRecordButton.Location = new Point(3, 128);
+            uploadRecordButton.Name = "uploadRecordButton";
+            uploadRecordButton.Padding = new Padding(5);
+            uploadRecordButton.Size = new Size(531, 40);
+            uploadRecordButton.TabIndex = 5;
+            uploadRecordButton.Text = "Tải lên record thủ công";
+            uploadRecordButton.Type = AntdUI.TTypeMini.Default;
+            //
+            // startGameButton
+            //
+            startGameButton.AutoSizeMode = AntdUI.TAutoSize.Auto;
+            startGameButton.Dock = DockStyle.Top;
+            startGameButton.Enabled = false;
+            startGameButton.IconSvg = "PlayCircleOutlined";
+            startGameButton.Location = new Point(3, 88);
+            startGameButton.Name = "startGameButton";
+            startGameButton.Padding = new Padding(5);
+            startGameButton.Size = new Size(531, 40);
+            startGameButton.TabIndex = 4;
+            startGameButton.Text = "Bắt đầu";
+            startGameButton.Type = AntdUI.TTypeMini.Primary;
+            startGameButton.Click += startGameButton_Click;
+            //
+            // pingLabel
+            //
+            pingLabel.Dock = DockStyle.Top;
+            pingLabel.Font = new Font("Segoe UI", 10F, FontStyle.Regular, GraphicsUnit.Point, 0);
+            pingLabel.Location = new Point(3, 66);
+            pingLabel.Name = "pingLabel";
+            pingLabel.Size = new Size(531, 22);
+            pingLabel.TabIndex = 3;
+            pingLabel.Text = "Ping: -";
+            //
+            // ipAddressLabel
+            //
+            ipAddressLabel.Dock = DockStyle.Top;
+            ipAddressLabel.Font = new Font("Segoe UI", 10F, FontStyle.Regular, GraphicsUnit.Point, 0);
+            ipAddressLabel.Location = new Point(3, 44);
+            ipAddressLabel.Name = "ipAddressLabel";
+            ipAddressLabel.Size = new Size(531, 22);
+            ipAddressLabel.TabIndex = 2;
+            ipAddressLabel.Text = "IP: -";
+            //
+            // vpnStatusLabel
+            //
+            vpnStatusLabel.Dock = DockStyle.Top;
+            vpnStatusLabel.Font = new Font("Segoe UI", 10F, FontStyle.Regular, GraphicsUnit.Point, 0);
+            vpnStatusLabel.Location = new Point(3, 22);
+            vpnStatusLabel.Name = "vpnStatusLabel";
+            vpnStatusLabel.Size = new Size(531, 22);
+            vpnStatusLabel.TabIndex = 1;
+            vpnStatusLabel.Text = "VPN: Chưa kết nối";
+            //
+            // playHeaderLabel
+            //
+            playHeaderLabel.Dock = DockStyle.Top;
+            playHeaderLabel.Font = new Font("Segoe UI Semibold", 12F, FontStyle.Bold, GraphicsUnit.Point, 0);
+            playHeaderLabel.IconGap = 5;
+            playHeaderLabel.IconRatio = 1.2F;
+            playHeaderLabel.Location = new Point(3, 3);
+            playHeaderLabel.Name = "playHeaderLabel";
+            playHeaderLabel.Padding = new Padding(10, 0, 0, 0);
+            playHeaderLabel.PrefixColor = Color.DarkOrange;
+            playHeaderLabel.PrefixSvg = "TeamOutlined";
+            playHeaderLabel.Size = new Size(531, 22);
+            playHeaderLabel.SuffixSvg = "";
+            playHeaderLabel.TabIndex = 0;
+            playHeaderLabel.Text = "Kết nối & Chơi game";
+            //
             // tableLayoutPanel1
-            // 
+            //
             tableLayoutPanel1.BackColor = Color.Honeydew;
             tableLayoutPanel1.ColumnCount = 3;
             tableLayoutPanel1.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 50F));
@@ -171,9 +196,9 @@
             tableLayoutPanel1.RowStyles.Add(new RowStyle(SizeType.Absolute, 20F));
             tableLayoutPanel1.Size = new Size(260, 324);
             tableLayoutPanel1.TabIndex = 0;
-            // 
+            //
             // userAvatar
-            // 
+            //
             userAvatar.BackColor = Color.FromArgb(253, 227, 207);
             userAvatar.Badge = "S";
             userAvatar.ForeColor = Color.FromArgb(245, 106, 0);
@@ -185,9 +210,9 @@
             userAvatar.Size = new Size(44, 44);
             userAvatar.TabIndex = 7;
             userAvatar.Text = "U";
-            // 
+            //
             // logoutButton
-            // 
+            //
             logoutButton.AutoSizeMode = AntdUI.TAutoSize.Auto;
             logoutButton.Dock = DockStyle.Fill;
             logoutButton.IconSvg = "LogoutOutlined";
@@ -200,9 +225,9 @@
             logoutButton.TabIndex = 4;
             logoutButton.Type = AntdUI.TTypeMini.Error;
             logoutButton.Click += logoutButton_Click;
-            // 
+            //
             // userList
-            // 
+            //
             userList.BackColor = Color.MintCream;
             userList.BadgeSvg = "";
             tableLayoutPanel1.SetColumnSpan(userList, 3);
@@ -213,9 +238,9 @@
             userList.Size = new Size(260, 274);
             userList.TabIndex = 0;
             userList.Text = "msgList1";
-            // 
+            //
             // tableLayoutPanel3
-            // 
+            //
             tableLayoutPanel3.ColumnCount = 1;
             tableLayoutPanel3.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
             tableLayoutPanel3.Controls.Add(rankLabel, 0, 1);
@@ -229,9 +254,9 @@
             tableLayoutPanel3.RowStyles.Add(new RowStyle(SizeType.Absolute, 20F));
             tableLayoutPanel3.Size = new Size(160, 43);
             tableLayoutPanel3.TabIndex = 8;
-            // 
+            //
             // rankLabel
-            // 
+            //
             rankLabel.AutoSize = true;
             rankLabel.Dock = DockStyle.Fill;
             rankLabel.Font = new Font("Segoe UI", 6.75F, FontStyle.Regular, GraphicsUnit.Point, 0);
@@ -242,9 +267,9 @@
             rankLabel.Size = new Size(154, 20);
             rankLabel.TabIndex = 2;
             rankLabel.Text = "Ranking";
-            // 
+            //
             // usernameLabel
-            // 
+            //
             usernameLabel.AutoSize = true;
             usernameLabel.Dock = DockStyle.Fill;
             usernameLabel.Font = new Font("Segoe UI Semibold", 12F, FontStyle.Bold, GraphicsUnit.Point, 0);
@@ -253,9 +278,9 @@
             usernameLabel.Size = new Size(154, 23);
             usernameLabel.TabIndex = 1;
             usernameLabel.Text = "Sang Ngo";
-            // 
+            //
             // tableLayoutPanel2
-            // 
+            //
             tableLayoutPanel2.ColumnCount = 1;
             tableLayoutPanel2.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
             tableLayoutPanel2.Controls.Add(homeGridPanel, 0, 1);
@@ -268,9 +293,9 @@
             tableLayoutPanel2.RowStyles.Add(new RowStyle(SizeType.Percent, 80F));
             tableLayoutPanel2.Size = new Size(835, 432);
             tableLayoutPanel2.TabIndex = 1;
-            // 
+            //
             // gridPanel1
-            // 
+            //
             gridPanel1.Controls.Add(newsCarousel);
             gridPanel1.Controls.Add(newsTimeline);
             gridPanel1.Dock = DockStyle.Fill;
@@ -281,9 +306,9 @@
             gridPanel1.Span = "33.33% 66.66%";
             gridPanel1.TabIndex = 1;
             gridPanel1.Text = "gridPanel1";
-            // 
+            //
             // newsCarousel
-            // 
+            //
             newsCarousel.Autodelay = 10;
             newsCarousel.Autoplay = true;
             newsCarousel.BackColor = Color.Snow;
@@ -298,9 +323,9 @@
             newsCarousel.Name = "newsCarousel";
             newsCarousel.Size = new Size(537, 64);
             newsCarousel.TabIndex = 7;
-            // 
+            //
             // newsTimeline
-            // 
+            //
             timelineItem1.Text = "19:30 14/07/2025 Team 3 vs Team 4";
             timelineItem2.Text = "19:30 15/07/2025 Team 5 vs Team 6";
             timelineItem2.Type = AntdUI.TTypeMini.Success;
@@ -314,9 +339,9 @@
             newsTimeline.Size = new Size(260, 64);
             newsTimeline.TabIndex = 6;
             newsTimeline.Text = "Lịch thi đấu";
-            // 
+            //
             // Home
-            // 
+            //
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
             Controls.Add(tableLayoutPanel2);
@@ -325,8 +350,7 @@
             Size = new Size(855, 452);
             Load += Home_Load;
             homeGridPanel.ResumeLayout(false);
-            roomTableLayoutPanel.ResumeLayout(false);
-            roomTableLayoutPanel.PerformLayout();
+            playPanel.ResumeLayout(false);
             tableLayoutPanel1.ResumeLayout(false);
             tableLayoutPanel1.PerformLayout();
             tableLayoutPanel3.ResumeLayout(false);
@@ -339,17 +363,20 @@
         #endregion
 
         private AntdUI.GridPanel homeGridPanel;
-        private TableLayoutPanel roomTableLayoutPanel;
-        private AntdUI.Label label2;
-        private AntdUI.Button createRoomButton;
-        private AntdUI.Table roomTable;
+        private Panel playPanel;
+        private AntdUI.Label playHeaderLabel;
+        private Label vpnStatusLabel;
+        private Label ipAddressLabel;
+        private Label pingLabel;
+        private AntdUI.Button startGameButton;
+        private AntdUI.Button uploadRecordButton;
+        private RichTextBox logRichTextBox;
         private TableLayoutPanel tableLayoutPanel1;
         private AntdUI.Chat.MsgList userList;
         private TableLayoutPanel tableLayoutPanel2;
         private AntdUI.GridPanel gridPanel1;
         private AntdUI.Timeline newsTimeline;
         private AntdUI.Carousel newsCarousel;
-        private AntdUI.Button refreshRoomButton;
         private AntdUI.Button logoutButton;
         private AntdUI.Avatar userAvatar;
         private TableLayoutPanel tableLayoutPanel3;

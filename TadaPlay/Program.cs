@@ -51,7 +51,6 @@ namespace TadaPlay
             services.AddSingleton<IWireGuardVpnService, WireguardVpnService>();
 
             services.AddTransient<MainForm>();
-            services.AddTransient<RoomDetailForm>();
 
             ServiceProvider = services.BuildServiceProvider();
         }
