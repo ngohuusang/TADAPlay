@@ -23,7 +23,12 @@ public class AccountService : IAccountService
     {
         System.Net.ServicePointManager.SecurityProtocol = System.Net.SecurityProtocolType.Tls12;
         _httpClient = new HttpClient();
-        _httpClient.Timeout = TimeSpan.FromSeconds(10);
+        // HttpClient.Timeout is a hard ceiling for every request on this client - a longer
+        // per-call CancellationToken (like upload_record's 5-minute one below) can't override
+        // it, only make things worse. Set it to match the longest legitimate call (record
+        // upload over a possibly slow VPN link) rather than the old 10s, which was aborting
+        // uploads that hadn't even finished sending yet.
+        _httpClient.Timeout = TimeSpan.FromMinutes(5);
         _appContext = appContext;
     }
 
