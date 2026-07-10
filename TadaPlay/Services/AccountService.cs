@@ -82,7 +82,7 @@ public class AccountService : IAccountService
             var _currentUser = apiResponse.User;
             var vpnProfile = _currentUser?.VpnProfile;
             _appContext.SetCurrentUser(_currentUser);
-            _appContext.SetVpnProfile(vpnProfile);
+            _appContext.SetVpnProfile(ResolveVpnProfile(_currentUser?.Username, vpnProfile));
 
             return true;
         }
@@ -90,6 +90,27 @@ public class AccountService : IAccountService
         {
             throw new Exception(apiResponse.Message);
         }
+    }
+
+    /// <summary>
+    /// Caches the profile the server just returned (profiles are now pinned permanently
+    /// per account, so this is stable across sessions), or falls back to a previously
+    /// cached copy if the server didn't return one this time.
+    /// </summary>
+    private VpnProfile ResolveVpnProfile(string username, VpnProfile serverProfile)
+    {
+        if (serverProfile?.ConfigContent != null)
+        {
+            TadaPlay.Utils.VpnProfileCache.Save(username, serverProfile.ConfigContent);
+            return serverProfile;
+        }
+
+        if (TadaPlay.Utils.VpnProfileCache.TryLoad(username, out string cachedConfig))
+        {
+            return new VpnProfile { ConfigContent = cachedConfig };
+        }
+
+        return null;
     }
 
     public async Task<bool> DoLoginAsync(string Username, string Password, bool AutoLogin)
@@ -122,7 +143,7 @@ public class AccountService : IAccountService
             _appContext.SetCurrentUser(_currentUser);
             _appContext.SetJwtTokenSetting(jwtToken);
             _appContext.SetAutoLoginSetting(AutoLogin);
-            _appContext.SetVpnProfile(vpnProfile);
+            _appContext.SetVpnProfile(ResolveVpnProfile(_currentUser?.Username, vpnProfile));
 
             return true;
         }
@@ -183,33 +204,32 @@ public class AccountService : IAccountService
         return true;
     }
 
-    public async Task<bool> UpdateCurrentIPToServer(string currentIp)
+    public async Task<UpdateIpResponse> UpdateCurrentIPToServer(string currentIp)
     {
-        if (currentIp == null || currentIp.Trim() == string.Empty) return false;
+        if (currentIp == null || currentIp.Trim() == string.Empty) return null;
 
         var ipData = new { ip_address = currentIp };
 
         var content = new StringContent(JsonConvert.SerializeObject(ipData), Encoding.UTF8, "application/json");
         _httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _appContext.GetJwtTokenSetting());
         var response = await _httpClient.PostAsync(BASE_URL + "?action=update-ip", content);
-       
+
+        var responseBody = await response.Content.ReadAsStringAsync();
+        var apiResponse = JsonConvert.DeserializeObject<UpdateIpResponse>(responseBody);
 
         if (!response.IsSuccessStatusCode)
         {
-            var responseBody = await response.Content.ReadAsStringAsync();
-            var apiResponse = JsonConvert.DeserializeObject<ApiResponse>(responseBody);
-
             if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
             {
-                throw new LoginException("Lỗi đăng nhập:" + apiResponse.Message);
+                throw new LoginException("Lỗi đăng nhập:" + apiResponse?.Message);
             }
             else
             {
-                throw new Exception("Lỗi cập nhật IP:" + apiResponse.Message);
+                throw new Exception("Lỗi cập nhật IP:" + apiResponse?.Message);
             }
         }
 
-        return true;
+        return apiResponse;
     }
 
     public async Task<GameRecordUploadResponse> UploadGameRecordAsync(GameRecordMetadata metadata, string recordFilePath)

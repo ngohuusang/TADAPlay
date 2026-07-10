@@ -27,23 +27,28 @@ namespace TadaPlay.Controls
         private readonly IWireGuardVpnService wireGuardVpnService;
         private readonly IAccountService accountService;
 
-        // Set when Start Game is clicked; used as a cutoff so we only pick up the
-        // record produced by this match, and guards against uploading it twice.
-        private DateTime? _gameStartedAtUtc = null;
-        private bool _recordUploaded = false;
         private bool _uploadInProgress = false;
 
-        // "Observe the record file" detection: poll for a new record, then watch it
-        // until it stops changing (no server-pushed room status to tell us the game ended).
+        // Set when an external WireGuard tunnel (e.g. the official WireGuard app) is already
+        // up at load time - in that case we skip starting TadaPlay's own adapter and just use
+        // that tunnel's IP, since bringing up a second adapter on top of it is unnecessary
+        // (and can fight over routes).
+        private string _externalVpnIp;
+
+        // "Observe the record file" detection: runs continuously from app load (not gated
+        // behind clicking Start), so a match started outside the app - or one where Start
+        // was simply forgotten - still gets picked up and uploaded automatically. Poll for
+        // a new record newer than _watchCutoffUtc, then watch it until it stops changing.
         private System.Windows.Forms.Timer _recordWatchTimer;
+        private DateTime _watchCutoffUtc; // ignore records older than this
         private string _watchedRecordPath;
+        private DateTime? _watchedRecordStartedUtc; // when we started tracking _watchedRecordPath
         private long _lastKnownLength;
         private DateTime _lastKnownWriteTimeUtc;
         private int _stableTicks;
         private const int RecordWatchIntervalMs = 5000;
         private const int StableTicksToFinish = 3; // ~15s with no further writes
-        private const int GiveUpSearchingAfterMinutes = 10; // no record file appeared at all
-        private const int GiveUpWatchingAfterMinutes = 240; // record found but never went quiet
+        private const int GiveUpWatchingFileAfterMinutes = 240; // give up on this one file, not the whole watcher
 
         public event EventHandler LogoutRequested;
 
@@ -92,10 +97,41 @@ namespace TadaPlay.Controls
             wireGuardVpnService.OnIpAddressChanged += WireGuardVpnService_OnIpAddressChanged;
 
             UpdateUiBasedOnLobbyState();
-            UpdateVpnUi();
+            StartRecordWatcher();
 
             webSocketService.Connect();
-            _ = wireGuardVpnService.ConnectAsync();
+
+            // If a WireGuard tunnel is already up outside this app (e.g. the official
+            // WireGuard client) and it's already carrying this account's own pinned VPN
+            // profile IP - not just any WireGuard-looking tunnel - use it instead of also
+            // bringing up our own adapter.
+            string pinnedIp = appContext.GetVpnProfile()?.IpAddress;
+            _externalVpnIp = ExternalVpnDetector.TryGetExternalWireGuardIp(pinnedIp);
+            if (_externalVpnIp != null)
+            {
+                printLog($"[VPN] Đã phát hiện WireGuard đang chạy sẵn (IP: {_externalVpnIp}) - không cần kết nối VPN từ TadaPlay.", Color.DarkGreen);
+                UpdateVpnUi();
+                _ = ReportIpToServerAsync(_externalVpnIp);
+            }
+            else
+            {
+                UpdateVpnUi();
+                _ = wireGuardVpnService.ConnectAsync();
+            }
+        }
+
+        // Runs for the lifetime of the app, independent of whether Start Game was clicked.
+        private void StartRecordWatcher()
+        {
+            _watchCutoffUtc = DateTime.UtcNow;
+
+            if (_recordWatchTimer == null)
+            {
+                _recordWatchTimer = new System.Windows.Forms.Timer { Interval = RecordWatchIntervalMs };
+                _recordWatchTimer.Tick += RecordWatchTimer_Tick;
+            }
+            _recordWatchTimer.Start();
+            printLog("[Theo dõi] Đang theo dõi thư mục record để tự động tải lên khi có trận đấu mới.", Color.RoyalBlue);
         }
 
         // --- VPN wiring ---
@@ -132,21 +168,73 @@ namespace TadaPlay.Controls
             {
                 ipAddressLabel.Text = $"IP: {ip}";
             }, "HOME_VPN_IP");
+
+            // Server-side ELO matching cross-checks this against the account's permanently
+            // pinned VPN profile IP, so a mismatched/spoofed identity can't earn rating
+            // even if the in-game name happens to match.
+            _ = ReportIpToServerAsync(ip);
+        }
+
+        private async System.Threading.Tasks.Task ReportIpToServerAsync(string ip)
+        {
+            try
+            {
+                UpdateIpResponse result = await accountService.UpdateCurrentIPToServer(ip);
+                if (result == null) return;
+
+                if (!result.Matched)
+                {
+                    printLog($"[Cảnh báo] IP hiện tại ({result.Ip}) khác với IP trước đó của tài khoản " +
+                             $"({result.ProfileIp}) - đã cập nhật IP mới.", Color.Firebrick);
+                }
+                else if (result.Updated)
+                {
+                    printLog($"[VPN] Đã lưu IP cho tài khoản: {result.Ip}", Color.DarkGreen);
+                }
+            }
+            catch (Exception ex)
+            {
+                DebugLogger.Error($"Home: Failed to report VPN IP to server: {ex.Message}");
+            }
         }
 
         private void UpdateVpnUi()
         {
-            bool connected = wireGuardVpnService.IsConnected;
+            bool connected = wireGuardVpnService.IsConnected || _externalVpnIp != null;
+            string ip = _externalVpnIp ?? wireGuardVpnService.CurrentIpAddress;
             vpnStatusLabel.Text = connected ? "VPN: Đã kết nối" : "VPN: Chưa kết nối";
             vpnStatusLabel.ForeColor = connected ? Color.DarkGreen : Color.Firebrick;
-            ipAddressLabel.Text = connected ? $"IP: {wireGuardVpnService.CurrentIpAddress}" : "IP: -";
+            ipAddressLabel.Text = connected ? $"IP: {ip}" : "IP: -";
+            reconnectVpnButton.Visible = !connected;
             UpdateStartButtonState();
+        }
+
+        private async void reconnectVpnButton_Click(object sender, EventArgs e)
+        {
+            reconnectVpnButton.Enabled = false;
+            printLog("[VPN] Đang thử kết nối lại VPN...", Color.RoyalBlue);
+            try
+            {
+                bool connected = await wireGuardVpnService.ConnectAsync();
+                if (!connected)
+                {
+                    printLog("[VPN] Kết nối lại VPN thất bại. Thử lại sau.", Color.Red);
+                }
+            }
+            catch (Exception ex)
+            {
+                DebugLogger.Error($"Home: Reconnect VPN thất bại: {ex.Message}");
+                printLog($"[VPN] Lỗi kết nối lại VPN: {ex.Message}", Color.Red);
+            }
+            finally
+            {
+                UiUtils.InvokeOnUiThread(this, () => reconnectVpnButton.Enabled = true);
+            }
         }
 
         private void UpdateStartButtonState()
         {
-            bool watchingOrUploading = (_recordWatchTimer?.Enabled ?? false) || _uploadInProgress;
-            startGameButton.Enabled = wireGuardVpnService.IsConnected && !watchingOrUploading;
+            startGameButton.Enabled = (wireGuardVpnService.IsConnected || _externalVpnIp != null) && !_uploadInProgress;
         }
 
         // --- WebSocket wiring ---
@@ -226,10 +314,12 @@ namespace TadaPlay.Controls
             });
         }
 
-        // --- Start Game: sync in-game name, then watch for the record file ---
+        // --- Start Game: sync in-game name, then launch. The record folder is already
+        // being watched continuously in the background (started at app load), so a match
+        // still gets picked up and uploaded even if this button is never clicked. ---
         private void startGameButton_Click(object sender, EventArgs e)
         {
-            if (!wireGuardVpnService.IsConnected) return;
+            if (!wireGuardVpnService.IsConnected && _externalVpnIp == null) return;
 
             User currentUser = appContext.GetCurrentUser();
             string gameFolder = appContext.GetGameFolder();
@@ -241,89 +331,39 @@ namespace TadaPlay.Controls
             }
 
             LaunchGame();
-
-            _gameStartedAtUtc = DateTime.UtcNow;
-            _recordUploaded = false;
-            _watchedRecordPath = null;
-            _stableTicks = 0;
-
-            printLog("[Bắt đầu] Đang theo dõi file record để phát hiện trận đấu...", Color.RoyalBlue);
-
-            if (_recordWatchTimer == null)
-            {
-                _recordWatchTimer = new System.Windows.Forms.Timer { Interval = RecordWatchIntervalMs };
-                _recordWatchTimer.Tick += RecordWatchTimer_Tick;
-            }
-            _recordWatchTimer.Start();
-            UpdateStartButtonState();
         }
 
         private void LaunchGame()
         {
-            string exePath = appContext.GetGameExecutablePath();
-            if (string.IsNullOrWhiteSpace(exePath))
+            var (status, message) = GameLauncher.Launch(appContext.GetGameExecutablePath());
+            Color color = status switch
             {
-                printLog("[Bắt đầu] Chưa cấu hình file khởi chạy game. Vào Cài đặt để chọn file (vd: age2_x1-WK.exe).", Color.Orange);
-                return;
-            }
-            if (!File.Exists(exePath))
-            {
-                printLog($"[Bắt đầu] Không tìm thấy file khởi chạy game: {exePath}", Color.Red);
-                return;
-            }
-
-            try
-            {
-                Process.Start(new ProcessStartInfo(exePath)
-                {
-                    UseShellExecute = true,
-                    WorkingDirectory = Path.GetDirectoryName(exePath)
-                });
-                printLog($"[Bắt đầu] Đã mở '{Path.GetFileName(exePath)}'.", Color.DarkGreen);
-            }
-            catch (Exception ex)
-            {
-                DebugLogger.Error($"Home: Failed to launch game executable '{exePath}': {ex.Message}");
-                printLog($"[Bắt đầu] Không thể mở game: {ex.Message}", Color.Red);
-            }
+                GameLauncher.LaunchStatus.Success => Color.DarkGreen,
+                GameLauncher.LaunchStatus.NotConfigured => Color.Orange,
+                _ => Color.Red
+            };
+            printLog($"[Bắt đầu] {message}", color);
         }
 
         private void RecordWatchTimer_Tick(object sender, EventArgs e)
         {
+            if (_uploadInProgress) return; // let the in-flight upload finish first
+
             string gameFolder = appContext.GetGameFolder();
             if (string.IsNullOrWhiteSpace(gameFolder)) return;
 
-            TimeSpan elapsed = DateTime.UtcNow - (_gameStartedAtUtc ?? DateTime.UtcNow);
-
             if (_watchedRecordPath == null)
             {
-                string latest = RecordedGameFinder.FindLatestRecord(gameFolder, _gameStartedAtUtc);
-                if (latest == null)
-                {
-                    if (elapsed.TotalMinutes >= GiveUpSearchingAfterMinutes)
-                    {
-                        _recordWatchTimer.Stop();
-                        printLog($"[Bắt đầu] Không tìm thấy file record sau {GiveUpSearchingAfterMinutes} phút - " +
-                                 "kiểm tra lại thư mục game trong Cài đặt. Đã dừng theo dõi.", Color.Red);
-                        UiUtils.InvokeOnUiThread(this, UpdateStartButtonState);
-                    }
-                    return;
-                }
+                string latest = RecordedGameFinder.FindLatestRecord(gameFolder, _watchCutoffUtc);
+                if (latest == null) return; // nothing new yet - keep waiting indefinitely
 
                 _watchedRecordPath = latest;
+                _watchedRecordStartedUtc = DateTime.UtcNow;
                 var fi = new FileInfo(latest);
                 _lastKnownLength = fi.Length;
                 _lastKnownWriteTimeUtc = fi.LastWriteTimeUtc;
                 _stableTicks = 0;
-                printLog($"[Bắt đầu] Đã phát hiện file record: {fi.Name}", Color.DarkGreen);
-                return;
-            }
-
-            if (elapsed.TotalMinutes >= GiveUpWatchingAfterMinutes)
-            {
-                _recordWatchTimer.Stop();
-                printLog("[Bắt đầu] Theo dõi quá lâu không có kết quả, đã dừng. Có thể tải lên thủ công.", Color.Red);
-                UiUtils.InvokeOnUiThread(this, UpdateStartButtonState);
+                printLog($"[Theo dõi] Đã phát hiện file record mới: {fi.Name}", Color.DarkGreen);
                 return;
             }
 
@@ -334,14 +374,26 @@ namespace TadaPlay.Controls
                 return;
             }
 
+            TimeSpan elapsed = DateTime.UtcNow - (_watchedRecordStartedUtc ?? DateTime.UtcNow);
+            if (elapsed.TotalMinutes >= GiveUpWatchingFileAfterMinutes)
+            {
+                printLog($"[Theo dõi] File '{current.Name}' không ổn định sau {GiveUpWatchingFileAfterMinutes} phút - " +
+                         "bỏ qua và tiếp tục theo dõi file mới. Có thể tải lên thủ công.", Color.Orange);
+                _watchCutoffUtc = DateTime.UtcNow; // don't pick this same stuck file back up
+                _watchedRecordPath = null;
+                return;
+            }
+
             if (current.Length == _lastKnownLength && current.LastWriteTimeUtc == _lastKnownWriteTimeUtc)
             {
                 _stableTicks++;
                 if (_stableTicks >= StableTicksToFinish)
                 {
-                    _recordWatchTimer.Stop();
-                    printLog("[Bắt đầu] Trận đấu có vẻ đã kết thúc, đang tải lên record...", Color.Orange);
-                    _ = UploadRecordAsync(isAutomatic: true);
+                    printLog("[Theo dõi] Trận đấu có vẻ đã kết thúc, đang tải lên record...", Color.Orange);
+                    string finishedRecordPath = _watchedRecordPath;
+                    _watchCutoffUtc = DateTime.UtcNow; // don't re-detect this same file next tick
+                    _watchedRecordPath = null;
+                    _ = UploadRecordAsync(isAutomatic: true, recordPathOverride: finishedRecordPath);
                 }
             }
             else
@@ -359,12 +411,12 @@ namespace TadaPlay.Controls
 
         /// <summary>
         /// Locates the recorded game and uploads it (with metadata) to the server.
-        /// Safe to call from any thread. When <paramref name="isAutomatic"/> is true the call is
-        /// skipped silently if a record was already uploaded for this session.
+        /// Safe to call from any thread. Pass <paramref name="recordPathOverride"/> when the
+        /// caller already knows which file just finished (the background watcher); otherwise
+        /// falls back to whatever's newest under the configured game folder.
         /// </summary>
-        private async System.Threading.Tasks.Task UploadRecordAsync(bool isAutomatic)
+        private async System.Threading.Tasks.Task UploadRecordAsync(bool isAutomatic, string recordPathOverride = null)
         {
-            if (isAutomatic && (_recordUploaded || _uploadInProgress)) return;
             if (_uploadInProgress)
             {
                 printLog("[Record] Đang tải lên, vui lòng đợi...", Color.Orange);
@@ -388,7 +440,7 @@ namespace TadaPlay.Controls
                     return;
                 }
 
-                string recordPath = _watchedRecordPath ?? RecordedGameFinder.FindLatestRecord(gameFolder, _gameStartedAtUtc);
+                string recordPath = recordPathOverride ?? RecordedGameFinder.FindLatestRecord(gameFolder);
                 if (string.IsNullOrEmpty(recordPath))
                 {
                     string msg = "Không tìm thấy file record (.mgz) của trận đấu trong thư mục game. " +
@@ -417,10 +469,15 @@ namespace TadaPlay.Controls
                 printLog($"[Record] Đang tải lên '{metadata.RecordFileName}'...", Color.RoyalBlue);
 
                 GameRecordUploadResponse response = await accountService.UploadGameRecordAsync(metadata, recordPath);
-                _recordUploaded = true;
                 printLog("[Record] Tải lên record thành công.", Color.DarkGreen);
 
                 GameRecordInfo info = response.Record;
+
+                if (info != null && info.Duplicate)
+                {
+                    printLog("[Record] Trận đấu này đã được người chơi khác tải lên trước đó.", Color.RoyalBlue);
+                    return;
+                }
 
                 if (info != null && !string.IsNullOrEmpty(info.Mvp))
                 {

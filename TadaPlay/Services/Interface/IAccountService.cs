@@ -17,7 +17,7 @@ public interface IAccountService
 
     Task<bool> UpdateUserInfo(string full_name, string nick_name, string current_password, string new_password);
 
-    Task<bool> UpdateCurrentIPToServer(string currentIp);
+    Task<UpdateIpResponse> UpdateCurrentIPToServer(string currentIp);
 
     Task<GameRecordUploadResponse> UploadGameRecordAsync(GameRecordMetadata metadata, string recordFilePath);
 

@@ -28,17 +28,13 @@ namespace TadaPlay.Controls
         /// </summary>
         private void InitializeComponent()
         {
-            AntdUI.CarouselItem carouselItem1 = new AntdUI.CarouselItem();
-            AntdUI.CarouselItem carouselItem2 = new AntdUI.CarouselItem();
-            AntdUI.TimelineItem timelineItem1 = new AntdUI.TimelineItem();
-            AntdUI.TimelineItem timelineItem2 = new AntdUI.TimelineItem();
-            AntdUI.TimelineItem timelineItem3 = new AntdUI.TimelineItem();
             homeGridPanel = new AntdUI.GridPanel();
             playPanel = new Panel();
             logRichTextBox = new RichTextBox();
             uploadRecordButton = new AntdUI.Button();
             startGameButton = new AntdUI.Button();
             pingLabel = new Label();
+            reconnectVpnButton = new AntdUI.Button();
             ipAddressLabel = new Label();
             vpnStatusLabel = new Label();
             playHeaderLabel = new AntdUI.Label();
@@ -49,16 +45,10 @@ namespace TadaPlay.Controls
             tableLayoutPanel3 = new TableLayoutPanel();
             rankLabel = new Label();
             usernameLabel = new Label();
-            tableLayoutPanel2 = new TableLayoutPanel();
-            gridPanel1 = new AntdUI.GridPanel();
-            newsCarousel = new AntdUI.Carousel();
-            newsTimeline = new AntdUI.Timeline();
             homeGridPanel.SuspendLayout();
             playPanel.SuspendLayout();
             tableLayoutPanel1.SuspendLayout();
             tableLayoutPanel3.SuspendLayout();
-            tableLayoutPanel2.SuspendLayout();
-            gridPanel1.SuspendLayout();
             SuspendLayout();
             //
             // homeGridPanel
@@ -67,9 +57,9 @@ namespace TadaPlay.Controls
             homeGridPanel.Controls.Add(tableLayoutPanel1);
             homeGridPanel.Dock = DockStyle.Fill;
             homeGridPanel.Gap = 5;
-            homeGridPanel.Location = new Point(3, 89);
+            homeGridPanel.Location = new Point(10, 10);
             homeGridPanel.Name = "homeGridPanel";
-            homeGridPanel.Size = new Size(829, 340);
+            homeGridPanel.Size = new Size(835, 432);
             homeGridPanel.Span = "33.33% 66.66%";
             homeGridPanel.TabIndex = 0;
             homeGridPanel.Text = "gridPanel1";
@@ -82,6 +72,7 @@ namespace TadaPlay.Controls
             playPanel.Controls.Add(startGameButton);
             playPanel.Controls.Add(pingLabel);
             playPanel.Controls.Add(ipAddressLabel);
+            playPanel.Controls.Add(reconnectVpnButton);
             playPanel.Controls.Add(vpnStatusLabel);
             playPanel.Controls.Add(playHeaderLabel);
             playPanel.Dock = DockStyle.Fill;
@@ -94,10 +85,11 @@ namespace TadaPlay.Controls
             // logRichTextBox
             //
             logRichTextBox.Dock = DockStyle.Fill;
-            logRichTextBox.Location = new Point(3, 168);
+            logRichTextBox.Font = new Font("Segoe UI", 11F, FontStyle.Regular, GraphicsUnit.Point, 0);
+            logRichTextBox.Location = new Point(3, 188);
             logRichTextBox.Name = "logRichTextBox";
             logRichTextBox.ReadOnly = true;
-            logRichTextBox.Size = new Size(531, 153);
+            logRichTextBox.Size = new Size(531, 133);
             logRichTextBox.TabIndex = 6;
             logRichTextBox.Text = "";
             //
@@ -105,11 +97,12 @@ namespace TadaPlay.Controls
             //
             uploadRecordButton.AutoSizeMode = AntdUI.TAutoSize.Auto;
             uploadRecordButton.Dock = DockStyle.Top;
+            uploadRecordButton.Font = new Font("Segoe UI", 11F, FontStyle.Regular, GraphicsUnit.Point, 0);
             uploadRecordButton.IconSvg = "CloudUploadOutlined";
-            uploadRecordButton.Location = new Point(3, 128);
+            uploadRecordButton.Location = new Point(3, 143);
             uploadRecordButton.Name = "uploadRecordButton";
             uploadRecordButton.Padding = new Padding(5);
-            uploadRecordButton.Size = new Size(531, 40);
+            uploadRecordButton.Size = new Size(531, 45);
             uploadRecordButton.TabIndex = 5;
             uploadRecordButton.Text = "Tải lên record thủ công";
             uploadRecordButton.Type = AntdUI.TTypeMini.Default;
@@ -119,11 +112,12 @@ namespace TadaPlay.Controls
             startGameButton.AutoSizeMode = AntdUI.TAutoSize.Auto;
             startGameButton.Dock = DockStyle.Top;
             startGameButton.Enabled = false;
+            startGameButton.Font = new Font("Segoe UI Semibold", 16F, FontStyle.Bold, GraphicsUnit.Point, 0);
             startGameButton.IconSvg = "PlayCircleOutlined";
-            startGameButton.Location = new Point(3, 88);
+            startGameButton.Location = new Point(3, 98);
             startGameButton.Name = "startGameButton";
-            startGameButton.Padding = new Padding(5);
-            startGameButton.Size = new Size(531, 40);
+            startGameButton.Padding = new Padding(8);
+            startGameButton.Size = new Size(531, 70);
             startGameButton.TabIndex = 4;
             startGameButton.Text = "Bắt đầu";
             startGameButton.Type = AntdUI.TTypeMini.Primary;
@@ -132,37 +126,53 @@ namespace TadaPlay.Controls
             // pingLabel
             //
             pingLabel.Dock = DockStyle.Top;
-            pingLabel.Font = new Font("Segoe UI", 10F, FontStyle.Regular, GraphicsUnit.Point, 0);
-            pingLabel.Location = new Point(3, 66);
+            pingLabel.Font = new Font("Segoe UI", 12F, FontStyle.Regular, GraphicsUnit.Point, 0);
+            pingLabel.Location = new Point(3, 74);
             pingLabel.Name = "pingLabel";
-            pingLabel.Size = new Size(531, 22);
+            pingLabel.Size = new Size(531, 24);
             pingLabel.TabIndex = 3;
             pingLabel.Text = "Ping: -";
             //
             // ipAddressLabel
             //
             ipAddressLabel.Dock = DockStyle.Top;
-            ipAddressLabel.Font = new Font("Segoe UI", 10F, FontStyle.Regular, GraphicsUnit.Point, 0);
-            ipAddressLabel.Location = new Point(3, 44);
+            ipAddressLabel.Font = new Font("Segoe UI", 12F, FontStyle.Regular, GraphicsUnit.Point, 0);
+            ipAddressLabel.Location = new Point(3, 50);
             ipAddressLabel.Name = "ipAddressLabel";
-            ipAddressLabel.Size = new Size(531, 22);
+            ipAddressLabel.Size = new Size(531, 24);
             ipAddressLabel.TabIndex = 2;
             ipAddressLabel.Text = "IP: -";
+            //
+            // reconnectVpnButton
+            //
+            reconnectVpnButton.AutoSizeMode = AntdUI.TAutoSize.Auto;
+            reconnectVpnButton.Dock = DockStyle.Top;
+            reconnectVpnButton.Font = new Font("Segoe UI", 10F, FontStyle.Regular, GraphicsUnit.Point, 0);
+            reconnectVpnButton.IconSvg = "ReloadOutlined";
+            reconnectVpnButton.Location = new Point(3, 50);
+            reconnectVpnButton.Name = "reconnectVpnButton";
+            reconnectVpnButton.Padding = new Padding(5);
+            reconnectVpnButton.Size = new Size(531, 34);
+            reconnectVpnButton.TabIndex = 9;
+            reconnectVpnButton.Text = "Kết nối lại VPN";
+            reconnectVpnButton.Type = AntdUI.TTypeMini.Warn;
+            reconnectVpnButton.Visible = false;
+            reconnectVpnButton.Click += reconnectVpnButton_Click;
             //
             // vpnStatusLabel
             //
             vpnStatusLabel.Dock = DockStyle.Top;
-            vpnStatusLabel.Font = new Font("Segoe UI", 10F, FontStyle.Regular, GraphicsUnit.Point, 0);
-            vpnStatusLabel.Location = new Point(3, 22);
+            vpnStatusLabel.Font = new Font("Segoe UI", 12F, FontStyle.Regular, GraphicsUnit.Point, 0);
+            vpnStatusLabel.Location = new Point(3, 26);
             vpnStatusLabel.Name = "vpnStatusLabel";
-            vpnStatusLabel.Size = new Size(531, 22);
+            vpnStatusLabel.Size = new Size(531, 24);
             vpnStatusLabel.TabIndex = 1;
             vpnStatusLabel.Text = "VPN: Chưa kết nối";
             //
             // playHeaderLabel
             //
             playHeaderLabel.Dock = DockStyle.Top;
-            playHeaderLabel.Font = new Font("Segoe UI Semibold", 12F, FontStyle.Bold, GraphicsUnit.Point, 0);
+            playHeaderLabel.Font = new Font("Segoe UI Semibold", 14F, FontStyle.Bold, GraphicsUnit.Point, 0);
             playHeaderLabel.IconGap = 5;
             playHeaderLabel.IconRatio = 1.2F;
             playHeaderLabel.Location = new Point(3, 3);
@@ -170,7 +180,7 @@ namespace TadaPlay.Controls
             playHeaderLabel.Padding = new Padding(10, 0, 0, 0);
             playHeaderLabel.PrefixColor = Color.DarkOrange;
             playHeaderLabel.PrefixSvg = "TeamOutlined";
-            playHeaderLabel.Size = new Size(531, 22);
+            playHeaderLabel.Size = new Size(531, 23);
             playHeaderLabel.SuffixSvg = "";
             playHeaderLabel.TabIndex = 0;
             playHeaderLabel.Text = "Kết nối & Chơi game";
@@ -187,7 +197,7 @@ namespace TadaPlay.Controls
             tableLayoutPanel1.Controls.Add(userList, 0, 1);
             tableLayoutPanel1.Controls.Add(tableLayoutPanel3, 1, 0);
             tableLayoutPanel1.Dock = DockStyle.Fill;
-            tableLayoutPanel1.Font = new Font("Segoe UI", 12F, FontStyle.Regular, GraphicsUnit.Point, 0);
+            tableLayoutPanel1.Font = new Font("Segoe UI", 13F, FontStyle.Regular, GraphicsUnit.Point, 0);
             tableLayoutPanel1.Location = new Point(8, 8);
             tableLayoutPanel1.Name = "tableLayoutPanel1";
             tableLayoutPanel1.RowCount = 2;
@@ -259,7 +269,7 @@ namespace TadaPlay.Controls
             //
             rankLabel.AutoSize = true;
             rankLabel.Dock = DockStyle.Fill;
-            rankLabel.Font = new Font("Segoe UI", 6.75F, FontStyle.Regular, GraphicsUnit.Point, 0);
+            rankLabel.Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point, 0);
             rankLabel.ForeColor = SystemColors.GrayText;
             rankLabel.Location = new Point(3, 23);
             rankLabel.Name = "rankLabel";
@@ -272,79 +282,18 @@ namespace TadaPlay.Controls
             //
             usernameLabel.AutoSize = true;
             usernameLabel.Dock = DockStyle.Fill;
-            usernameLabel.Font = new Font("Segoe UI Semibold", 12F, FontStyle.Bold, GraphicsUnit.Point, 0);
+            usernameLabel.Font = new Font("Segoe UI Semibold", 14F, FontStyle.Bold, GraphicsUnit.Point, 0);
             usernameLabel.Location = new Point(3, 0);
             usernameLabel.Name = "usernameLabel";
             usernameLabel.Size = new Size(154, 23);
             usernameLabel.TabIndex = 1;
             usernameLabel.Text = "Sang Ngo";
             //
-            // tableLayoutPanel2
-            //
-            tableLayoutPanel2.ColumnCount = 1;
-            tableLayoutPanel2.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-            tableLayoutPanel2.Controls.Add(homeGridPanel, 0, 1);
-            tableLayoutPanel2.Controls.Add(gridPanel1, 0, 0);
-            tableLayoutPanel2.Dock = DockStyle.Fill;
-            tableLayoutPanel2.Location = new Point(10, 10);
-            tableLayoutPanel2.Name = "tableLayoutPanel2";
-            tableLayoutPanel2.RowCount = 2;
-            tableLayoutPanel2.RowStyles.Add(new RowStyle(SizeType.Percent, 20F));
-            tableLayoutPanel2.RowStyles.Add(new RowStyle(SizeType.Percent, 80F));
-            tableLayoutPanel2.Size = new Size(835, 432);
-            tableLayoutPanel2.TabIndex = 1;
-            //
-            // gridPanel1
-            //
-            gridPanel1.Controls.Add(newsCarousel);
-            gridPanel1.Controls.Add(newsTimeline);
-            gridPanel1.Dock = DockStyle.Fill;
-            gridPanel1.Gap = 5;
-            gridPanel1.Location = new Point(3, 3);
-            gridPanel1.Name = "gridPanel1";
-            gridPanel1.Size = new Size(829, 80);
-            gridPanel1.Span = "33.33% 66.66%";
-            gridPanel1.TabIndex = 1;
-            gridPanel1.Text = "gridPanel1";
-            //
-            // newsCarousel
-            //
-            newsCarousel.Autodelay = 10;
-            newsCarousel.Autoplay = true;
-            newsCarousel.BackColor = Color.Snow;
-            newsCarousel.Dock = DockStyle.Fill;
-            newsCarousel.DotPosition = AntdUI.TAlignMini.Bottom;
-            newsCarousel.DotSize = new Size(10, 4);
-            carouselItem1.Img = Properties.Resources._1;
-            carouselItem2.Img = Properties.Resources._2;
-            newsCarousel.Image.Add(carouselItem1);
-            newsCarousel.Image.Add(carouselItem2);
-            newsCarousel.Location = new Point(284, 8);
-            newsCarousel.Name = "newsCarousel";
-            newsCarousel.Size = new Size(537, 64);
-            newsCarousel.TabIndex = 7;
-            //
-            // newsTimeline
-            //
-            timelineItem1.Text = "19:30 14/07/2025 Team 3 vs Team 4";
-            timelineItem2.Text = "19:30 15/07/2025 Team 5 vs Team 6";
-            timelineItem2.Type = AntdUI.TTypeMini.Success;
-            timelineItem3.Text = "9:00 30/07/2025 Offline Sai Gon";
-            timelineItem3.Type = AntdUI.TTypeMini.Error;
-            newsTimeline.Items.Add(timelineItem1);
-            newsTimeline.Items.Add(timelineItem2);
-            newsTimeline.Items.Add(timelineItem3);
-            newsTimeline.Location = new Point(8, 8);
-            newsTimeline.Name = "newsTimeline";
-            newsTimeline.Size = new Size(260, 64);
-            newsTimeline.TabIndex = 6;
-            newsTimeline.Text = "Lịch thi đấu";
-            //
             // Home
             //
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
-            Controls.Add(tableLayoutPanel2);
+            Controls.Add(homeGridPanel);
             Name = "Home";
             Padding = new Padding(10);
             Size = new Size(855, 452);
@@ -355,8 +304,6 @@ namespace TadaPlay.Controls
             tableLayoutPanel1.PerformLayout();
             tableLayoutPanel3.ResumeLayout(false);
             tableLayoutPanel3.PerformLayout();
-            tableLayoutPanel2.ResumeLayout(false);
-            gridPanel1.ResumeLayout(false);
             ResumeLayout(false);
         }
 
@@ -368,15 +315,12 @@ namespace TadaPlay.Controls
         private Label vpnStatusLabel;
         private Label ipAddressLabel;
         private Label pingLabel;
+        private AntdUI.Button reconnectVpnButton;
         private AntdUI.Button startGameButton;
         private AntdUI.Button uploadRecordButton;
         private RichTextBox logRichTextBox;
         private TableLayoutPanel tableLayoutPanel1;
         private AntdUI.Chat.MsgList userList;
-        private TableLayoutPanel tableLayoutPanel2;
-        private AntdUI.GridPanel gridPanel1;
-        private AntdUI.Timeline newsTimeline;
-        private AntdUI.Carousel newsCarousel;
         private AntdUI.Button logoutButton;
         private AntdUI.Avatar userAvatar;
         private TableLayoutPanel tableLayoutPanel3;
