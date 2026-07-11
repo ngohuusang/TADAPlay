@@ -11,6 +11,8 @@ public class AppContext : IAppContext
 {
 
     private const string REGISTRY_SUB_KEY = @"SOFTWARE\TadaPlay";
+    private const string WINDOWS_RUN_REGISTRY_KEY = @"SOFTWARE\Microsoft\Windows\CurrentVersion\Run";
+    private const string WINDOWS_RUN_VALUE_NAME = "TadaPlay";
 
     private User? _currentUser;
     private List<User> _allOnlineUsers = new List<User>();
@@ -78,6 +80,46 @@ public class AppContext : IAppContext
     {
         object AutoLogin = GetRegistryValue("AutoLogin");
         return AutoLogin != null && Convert.ToBoolean(AutoLogin);
+    }
+
+    // Reads/writes the real Windows "Run" key rather than our own settings key, so this
+    // reflects whether Windows will actually launch the app on login - not just whatever
+    // this app last remembers, which would drift if the entry were ever removed some other
+    // way (e.g. Task Manager's Startup tab).
+    public void SetRunOnStartupSetting(bool runOnStartup)
+    {
+        try
+        {
+            using RegistryKey key = Registry.CurrentUser.OpenSubKey(WINDOWS_RUN_REGISTRY_KEY, writable: true);
+            if (key == null) return;
+
+            if (runOnStartup)
+            {
+                string exePath = System.Windows.Forms.Application.ExecutablePath;
+                key.SetValue(WINDOWS_RUN_VALUE_NAME, $"\"{exePath}\" --minimized");
+            }
+            else
+            {
+                key.DeleteValue(WINDOWS_RUN_VALUE_NAME, throwOnMissingValue: false);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine("Error updating startup registry: " + ex.Message);
+        }
+    }
+
+    public bool GetRunOnStartupSetting()
+    {
+        try
+        {
+            using RegistryKey key = Registry.CurrentUser.OpenSubKey(WINDOWS_RUN_REGISTRY_KEY);
+            return key?.GetValue(WINDOWS_RUN_VALUE_NAME) != null;
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     public void SetGameFolder(string folderPath)

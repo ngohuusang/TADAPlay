@@ -25,8 +25,8 @@ namespace TadaPlay.Utils
     /// </summary>
     public static class GameProfileNameWriter
     {
-        private const int NameOffset = 20;
-        private const int NameBufferSize = 256;
+        internal const int NameOffset = 20;
+        internal const int NameBufferSize = 256;
         private const int MinDecompressedSize = NameOffset + NameBufferSize;
 
         private static readonly string[] ProfilePatterns = { "player*.nfx", "player*.nfz" };
@@ -84,7 +84,7 @@ namespace TadaPlay.Utils
             }
         }
 
-        private static byte[] Inflate(byte[] compressed)
+        internal static byte[] Inflate(byte[] compressed)
         {
             using var input = new MemoryStream(compressed);
             using var deflate = new DeflateStream(input, CompressionMode.Decompress);
@@ -93,7 +93,7 @@ namespace TadaPlay.Utils
             return output.ToArray();
         }
 
-        private static byte[] Deflate(byte[] raw)
+        internal static byte[] Deflate(byte[] raw)
         {
             using var output = new MemoryStream();
             using (var deflate = new DeflateStream(output, CompressionLevel.Optimal, leaveOpen: true))

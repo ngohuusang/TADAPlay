@@ -56,18 +56,28 @@ namespace TadaPlay.Controls
                 Dock = DockStyle.Fill,
                 View = View.Details,
                 FullRowSelect = true,
-                GridLines = true,
+                GridLines = false,
                 MultiSelect = false,
-                HeaderStyle = ColumnHeaderStyle.Nonclickable
+                HeaderStyle = ColumnHeaderStyle.Nonclickable,
+                Font = new Font("Segoe UI", 10F),
+                BorderStyle = BorderStyle.FixedSingle
             };
+            // Taller, more breathable rows - ListView row height tracks the SmallImageList's
+            // item size, so a blank placeholder image is the usual way to bump it (no real icons).
+            var rowSizer = new ImageList { ImageSize = new Size(1, 32) };
+            rowSizer.Images.Add(new Bitmap(1, 32));
+            _listView.SmallImageList = rowSizer;
             _listView.Columns.Add("Thời gian", 130, HorizontalAlignment.Left);
             _listView.Columns.Add("Phòng", 120, HorizontalAlignment.Left);
             _listView.Columns.Add("Đội 1", 170, HorizontalAlignment.Left);
             _listView.Columns.Add("Đội 2", 170, HorizontalAlignment.Left);
-            _listView.Columns.Add("Kết quả", 90, HorizontalAlignment.Left);
-            _listView.Columns.Add("MVP", 110, HorizontalAlignment.Left);
+            _listView.Columns.Add("Kết quả", 100, HorizontalAlignment.Left);
+            _listView.Columns.Add("MVP", 130, HorizontalAlignment.Left);
             _listView.SelectedIndexChanged += (s, e) => UpdateReplayButton();
             _listView.DoubleClick += (s, e) => ShowScoreboard();
+            // Stretch the MVP column to fill any leftover width so row backgrounds (zebra
+            // stripes) span the full list instead of leaving a blank gap on the right.
+            _listView.Resize += (s, e) => UiUtils.StretchLastListViewColumn(_listView, 130);
 
             var footer = new Panel { Dock = DockStyle.Bottom, Height = 48, Padding = new Padding(12, 6, 12, 6) };
             _replayButton = new Button { Text = "Phát lại", Dock = DockStyle.Right, Width = 120, Enabled = false };
@@ -127,20 +137,34 @@ namespace TadaPlay.Controls
 
                 _listView.BeginUpdate();
                 _listView.Items.Clear();
-                foreach (var m in matches)
+                for (int i = 0; i < matches.Count; i++)
                 {
-                    var item = new ListViewItem(FormatTime(m.FinishedAt));
+                    var m = matches[i];
+                    var item = new ListViewItem(FormatTime(m.FinishedAt))
+                    {
+                        UseItemStyleForSubItems = false,
+                        // Zebra striping so long lists stay readable without gridlines.
+                        BackColor = i % 2 == 0 ? Color.White : UiColors.ZebraStripe
+                    };
                     item.SubItems.Add(m.RoomName ?? "");
                     item.SubItems.Add(TeamText(m, "1"));
                     item.SubItems.Add(TeamText(m, "2"));
-                    item.SubItems.Add(ResultText(m));
+
+                    bool hasWinner = m.WinnerTeam == 1 || m.WinnerTeam == 2;
+                    var resultSubItem = item.SubItems.Add(ResultText(m));
+                    resultSubItem.ForeColor = hasWinner ? UiColors.Winner : Color.Gray;
+                    resultSubItem.Font = new Font(_listView.Font, hasWinner ? FontStyle.Bold : FontStyle.Regular);
+
                     // Prefer the winning team's MVP; fall back to the overall game MVP.
                     string headlineMvp = !string.IsNullOrEmpty(m.WinnerMvp) ? m.WinnerMvp : m.Mvp;
-                    item.SubItems.Add(string.IsNullOrEmpty(headlineMvp) ? "—" : "⭐ " + headlineMvp);
+                    var mvpSubItem = item.SubItems.Add(string.IsNullOrEmpty(headlineMvp) ? "—" : "⭐ " + headlineMvp);
+                    if (!string.IsNullOrEmpty(headlineMvp)) mvpSubItem.ForeColor = UiColors.Mvp;
+
                     item.Tag = m;
                     _listView.Items.Add(item);
                 }
                 _listView.EndUpdate();
+                UiUtils.StretchLastListViewColumn(_listView, 130);
 
                 _statusLabel.Text = matches.Count == 0
                     ? "Chưa có trận đấu nào."
@@ -176,31 +200,231 @@ namespace TadaPlay.Controls
             }
             if (match.Players == null || match.Players.Count == 0)
             {
-                MessageBox.Show("Trận này chưa có dữ liệu điểm số (record chưa được phân tích).",
-                    "Chi tiết", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                UiUtils.ShowAntdModal(FindForm(), "Chi tiết",
+                    "Trận này chưa có dữ liệu điểm số (record chưa được phân tích).", AntdUI.TType.Info);
                 return;
             }
 
-            var sb = new System.Text.StringBuilder();
-            sb.AppendLine($"Phòng: {match.RoomName}    Kết quả: {ResultText(match)}");
-            if (!string.IsNullOrEmpty(match.WinnerMvp)) sb.AppendLine($"MVP đội thắng: ⭐ {match.WinnerMvp}");
-            if (!string.IsNullOrEmpty(match.LoserMvp)) sb.AppendLine($"MVP đội thua: ⭐ {match.LoserMvp}");
-            if (string.IsNullOrEmpty(match.WinnerMvp) && string.IsNullOrEmpty(match.LoserMvp)
-                && !string.IsNullOrEmpty(match.Mvp)) sb.AppendLine($"MVP: ⭐ {match.Mvp}");
-            sb.AppendLine();
-            foreach (var team in new[] { 1, 2 })
+            AntdUI.Modal.open(FindForm(), "Bảng điểm trận đấu", BuildScoreboardDialog(match));
+        }
+
+        private static Panel BuildScoreboardDialog(MatchSummary match)
+        {
+            const int DialogWidth = 620;
+            var root = new Panel { Width = DialogWidth, AutoSize = false };
+
+            // --- Header: room name + finished time (topmost - added first) ---
+            var header = new Panel { Dock = DockStyle.Top, Height = 56, Padding = new Padding(0, 0, 0, 8) };
+            var roomLabel = new Label
             {
-                bool teamWon = match.WinnerTeam == team;
-                sb.AppendLine($"— Đội {team}{(teamWon ? " (Thắng)" : "")} —");
-                foreach (var p in match.Players.Where(p => p.Team == team).OrderByDescending(p => p.Score ?? 0))
+                Text = string.IsNullOrWhiteSpace(match.RoomName) ? "Trận đấu" : match.RoomName,
+                Dock = DockStyle.Top,
+                Height = 30,
+                Font = new Font("Segoe UI Semibold", 14F, FontStyle.Bold)
+            };
+            var timeLabel = new Label
+            {
+                Text = FormatTime(match.FinishedAt),
+                Dock = DockStyle.Top,
+                Height = 20,
+                ForeColor = Color.Gray,
+                Font = new Font("Segoe UI", 9.5F)
+            };
+            header.Controls.Add(roomLabel);
+            header.Controls.Add(timeLabel);
+
+            // --- Result banner ---
+            bool hasWinner = match.WinnerTeam == 1 || match.WinnerTeam == 2;
+            var resultBanner = new Label
+            {
+                Text = (hasWinner ? "🏆 " : "") + ResultText(match),
+                Dock = DockStyle.Top,
+                Height = 36,
+                Font = new Font("Segoe UI Semibold", 11.5F, FontStyle.Bold),
+                ForeColor = Color.White,
+                BackColor = hasWinner ? UiColors.Winner : UiColors.Loser,
+                TextAlign = ContentAlignment.MiddleCenter,
+                Margin = new Padding(0, 0, 0, 10)
+            };
+
+            // --- MVP line(s) ---
+            string mvpText = BuildMvpText(match);
+            Label mvpLabel = null;
+            if (mvpText != null)
+            {
+                mvpLabel = new Label
                 {
-                    string star = p.Mvp ? " ⭐MVP" : "";
-                    sb.AppendLine($"   {p.Name,-16} điểm: {p.Score,-6} eapm: {p.Eapm}{star}");
-                }
-                sb.AppendLine();
+                    Text = mvpText,
+                    Dock = DockStyle.Top,
+                    Height = 26,
+                    Font = new Font("Segoe UI", 10F),
+                    ForeColor = UiColors.Mvp,
+                    TextAlign = ContentAlignment.MiddleCenter
+                };
             }
 
-            MessageBox.Show(sb.ToString(), "Bảng điểm trận đấu", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            var team1Panel = BuildTeamPanel(match, 1);
+            var team2Panel = BuildTeamPanel(match, 2);
+
+            var body = new Panel { Dock = DockStyle.Top, AutoSize = false, Padding = new Padding(0, 8, 0, 0) };
+            body.Controls.Add(team2Panel);
+            body.Controls.Add(team1Panel);
+            body.Height = team1Panel.Height + team2Panel.Height + body.Padding.Top;
+
+            root.Controls.Add(body);
+            if (mvpLabel != null) root.Controls.Add(mvpLabel);
+            root.Controls.Add(resultBanner);
+            root.Controls.Add(header);
+
+            // AntdUI.Modal.open reads Height at call time (not via AutoSize/layout events), so
+            // sum it explicitly - same reason Setting.cs avoids AutoSize for its own dialog.
+            root.Height = header.Height + resultBanner.Height + resultBanner.Margin.Vertical
+                + (mvpLabel?.Height ?? 0) + body.Height;
+
+            return root;
+        }
+
+        private static string BuildMvpText(MatchSummary match)
+        {
+            if (!string.IsNullOrEmpty(match.WinnerMvp) || !string.IsNullOrEmpty(match.LoserMvp))
+            {
+                var parts = new System.Collections.Generic.List<string>();
+                if (!string.IsNullOrEmpty(match.WinnerMvp)) parts.Add($"⭐ MVP đội thắng: {match.WinnerMvp}");
+                if (!string.IsNullOrEmpty(match.LoserMvp)) parts.Add($"⭐ MVP đội thua: {match.LoserMvp}");
+                return string.Join("      ", parts);
+            }
+            if (!string.IsNullOrEmpty(match.Mvp))
+            {
+                return $"⭐ MVP: {match.Mvp}";
+            }
+            return null;
+        }
+
+        // One team's card: a tinted header row (name + win/loss tag) above a small table of
+        // players (name / score / eapm / MVP star), sorted by score. Explicit heights throughout
+        // so the whole dialog's total height can be summed reliably (see BuildScoreboardDialog).
+        private static Panel BuildTeamPanel(MatchSummary match, int team)
+        {
+            bool teamWon = match.WinnerTeam == team;
+            bool resultKnown = match.WinnerTeam == 1 || match.WinnerTeam == 2;
+            Color accent = !resultKnown ? Color.FromArgb(217, 217, 217) : (teamWon ? UiColors.Winner : UiColors.Loser);
+            Color tint = !resultKnown ? Color.FromArgb(250, 250, 250) : (teamWon ? UiColors.WinnerTint : UiColors.LoserTint);
+
+            var players = match.Players.Where(p => p.Team == team).OrderByDescending(p => p.Score ?? 0).ToList();
+            const int RowHeight = 30;
+            const int HeaderHeight = 34;
+            int cardHeight = HeaderHeight + Math.Max(players.Count, 1) * RowHeight;
+
+            var card = new Panel
+            {
+                Dock = DockStyle.Top,
+                Height = cardHeight + 12,
+                Padding = new Padding(0, 0, 0, 12)
+            };
+
+            var inner = new Panel
+            {
+                Dock = DockStyle.Fill,
+                BackColor = tint,
+                Padding = new Padding(1)
+            };
+
+            var teamHeader = new Panel { Dock = DockStyle.Top, Height = HeaderHeight, BackColor = accent };
+            var teamNameLabel = new Label
+            {
+                Text = $"Đội {team}",
+                Dock = DockStyle.Left,
+                Width = 200,
+                Padding = new Padding(10, 0, 0, 0),
+                Font = new Font("Segoe UI Semibold", 10.5F, FontStyle.Bold),
+                ForeColor = Color.White,
+                TextAlign = ContentAlignment.MiddleLeft
+            };
+            var tagLabel = new Label
+            {
+                Text = resultKnown ? (teamWon ? "THẮNG" : "THUA") : "",
+                Dock = DockStyle.Right,
+                Width = 90,
+                Padding = new Padding(0, 0, 10, 0),
+                Font = new Font("Segoe UI Semibold", 9.5F, FontStyle.Bold),
+                ForeColor = Color.White,
+                TextAlign = ContentAlignment.MiddleRight
+            };
+            teamHeader.Controls.Add(tagLabel);
+            teamHeader.Controls.Add(teamNameLabel);
+
+            var rowsPanel = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 4,
+                RowCount = Math.Max(players.Count, 1),
+                BackColor = tint
+            };
+            rowsPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 46));
+            rowsPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 22));
+            rowsPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 22));
+            rowsPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 10));
+
+            if (players.Count == 0)
+            {
+                rowsPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, RowHeight));
+                rowsPanel.Controls.Add(new Label
+                {
+                    Text = "(không có người chơi)",
+                    Dock = DockStyle.Fill,
+                    ForeColor = Color.Gray,
+                    TextAlign = ContentAlignment.MiddleLeft,
+                    Padding = new Padding(10, 0, 0, 0)
+                }, 0, 0);
+                rowsPanel.SetColumnSpan(rowsPanel.Controls[0], 4);
+            }
+            else
+            {
+                for (int i = 0; i < players.Count; i++)
+                {
+                    var p = players[i];
+                    rowsPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, RowHeight));
+
+                    rowsPanel.Controls.Add(new Label
+                    {
+                        Text = p.Name,
+                        Dock = DockStyle.Fill,
+                        Padding = new Padding(10, 0, 0, 0),
+                        Font = new Font("Segoe UI", 9.5F, p.Mvp ? FontStyle.Bold : FontStyle.Regular),
+                        TextAlign = ContentAlignment.MiddleLeft,
+                        AutoEllipsis = true
+                    }, 0, i);
+                    rowsPanel.Controls.Add(new Label
+                    {
+                        Text = $"Điểm: {p.Score ?? 0}",
+                        Dock = DockStyle.Fill,
+                        Font = new Font("Segoe UI", 9.5F),
+                        ForeColor = Color.DimGray,
+                        TextAlign = ContentAlignment.MiddleLeft
+                    }, 1, i);
+                    rowsPanel.Controls.Add(new Label
+                    {
+                        Text = $"EAPM: {p.Eapm ?? 0}",
+                        Dock = DockStyle.Fill,
+                        Font = new Font("Segoe UI", 9.5F),
+                        ForeColor = Color.DimGray,
+                        TextAlign = ContentAlignment.MiddleLeft
+                    }, 2, i);
+                    rowsPanel.Controls.Add(new Label
+                    {
+                        Text = p.Mvp ? "⭐" : "",
+                        Dock = DockStyle.Fill,
+                        Font = new Font("Segoe UI", 11F),
+                        ForeColor = UiColors.Mvp,
+                        TextAlign = ContentAlignment.MiddleCenter
+                    }, 3, i);
+                }
+            }
+
+            inner.Controls.Add(rowsPanel);
+            inner.Controls.Add(teamHeader);
+            card.Controls.Add(inner);
+            return card;
         }
 
         private async System.Threading.Tasks.Task ReplaySelectedAsync()
@@ -234,25 +458,20 @@ namespace TadaPlay.Controls
             {
                 await _accountService.DownloadRecordAsync(match.Id, destPath);
 
-                _statusLabel.ForeColor = Color.DarkGreen;
-                _statusLabel.Text = $"Đã tải về: {destPath}";
+                // Launch the game via the executable configured in Settings, passing the
+                // downloaded record as its argument (same as double-clicking a .mgz/.mgx file)
+                // so it opens straight into the replay - no folder window, no extra dialog.
+                var (status, launchMessage) = GameLauncher.Launch(_appContext.GetGameExecutablePath(), destPath);
+                _statusLabel.ForeColor = status == GameLauncher.LaunchStatus.Success ? Color.DarkGreen : Color.DarkOrange;
+                _statusLabel.Text = launchMessage;
 
-                // Reveal the file in Explorer; it will also show in the game's Replays list.
-                try
+                if (status != GameLauncher.LaunchStatus.Success)
                 {
-                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("explorer.exe", $"/select,\"{destPath}\"")
-                    {
-                        UseShellExecute = true
-                    });
+                    MessageBox.Show(
+                        $"Đã tải record vào thư mục lưu của AoE2 DE, nhưng không thể tự mở game ({launchMessage})\n\n" +
+                        "Mở Age of Empires II: DE → mục \"Replays\" (Xem lại) để phát lại trận đấu.",
+                        "Phát lại", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 }
-                catch (Exception ex)
-                {
-                    DebugLogger.Warn($"Matches: could not open Explorer: {ex.Message}");
-                }
-
-                MessageBox.Show(
-                    "Đã tải record vào thư mục lưu của AoE2 DE.\n\nMở Age of Empires II: DE → mục \"Replays\" (Xem lại) để phát lại trận đấu.",
-                    "Phát lại", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
             catch (Exception ex)
             {

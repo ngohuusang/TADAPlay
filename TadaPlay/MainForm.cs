@@ -25,6 +25,8 @@ namespace TadaPlay
         private Home _homeControl;
         private Ranking _rankingControl;
         private Matches _matchesControl;
+        private bool _trayBalloonShown;
+        private bool _isExiting;
 
         public MainForm(IAccountService _accountService, IAppContext _appContext, IWebSocketService _webSocketService, IWireGuardVpnService _wireGuardVpnService, IServiceProvider _serviceProvider)
         {
@@ -36,6 +38,9 @@ namespace TadaPlay
             wireGuardVpnService = _wireGuardVpnService;
 
             appContext.OnVpnProfileUpdated += AppContext_OnVpnProfileUpdated;
+
+            // Always run with Windows, starting hidden in the tray - no user-facing toggle for this.
+            appContext.SetRunOnStartupSetting(true);
 
             rankingButton.Click += rankingButton_Click;
             matchesButton.Click += matchesButton_Click;
@@ -148,6 +153,13 @@ namespace TadaPlay
             };
 
             ShowControl(_loginControl, "Đăng nhập", false, false);
+
+            // Launched via the Windows "Run at startup" entry (see AppContext.SetRunOnStartupSetting) -
+            // go straight to the tray instead of flashing the main window on screen.
+            if (Program.StartMinimized)
+            {
+                Hide();
+            }
         }
 
         private void MainForm_Resize(object sender, EventArgs e)
@@ -157,6 +169,56 @@ namespace TadaPlay
                 control.Left = (this.ClientSize.Width - control.Width) / 2;
                 control.Top = (this.ClientSize.Height - control.Height) / 2;
             }
+
+            if (WindowState == FormWindowState.Minimized)
+            {
+                MinimizeToTray();
+            }
+        }
+
+        private void MainForm_FormClosing(object sender, FormClosingEventArgs e)
+        {
+            // Clicking the window's X should hide to tray, not quit - only "Thoát" from the
+            // tray's right-click menu (which sets _isExiting first) actually closes the app.
+            if (!_isExiting && e.CloseReason == CloseReason.UserClosing)
+            {
+                e.Cancel = true;
+                MinimizeToTray();
+            }
+        }
+
+        private void MinimizeToTray()
+        {
+            // Hide() alone removes the taskbar entry - deliberately not touching ShowInTaskbar
+            // here: toggling it while the handle already exists forces WinForms to recreate the
+            // window handle (and cascades into child controls recreating theirs too), which was
+            // re-firing Home's Load logic - re-connecting the VPN and starting a duplicate record
+            // watcher - every single time the window was hidden/restored.
+            Hide();
+
+            if (!_trayBalloonShown)
+            {
+                trayIcon.ShowBalloonTip(2000, "TADA Play", "Ứng dụng vẫn đang chạy trong khay hệ thống.", ToolTipIcon.Info);
+                _trayBalloonShown = true;
+            }
+        }
+
+        private void RestoreFromTray()
+        {
+            Show();
+            WindowState = FormWindowState.Normal;
+            Activate();
+        }
+
+        private void trayIcon_Click(object sender, EventArgs e) => RestoreFromTray();
+
+        private void trayShowMenuItem_Click(object sender, EventArgs e) => RestoreFromTray();
+
+        private void trayExitMenuItem_Click(object sender, EventArgs e)
+        {
+            _isExiting = true;
+            trayIcon.Visible = false;
+            Application.Exit();
         }
 
         private async void Home_LogoutRequested(object sender, EventArgs e)

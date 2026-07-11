@@ -75,5 +75,27 @@ namespace TadaPlay.Utils
                 });
             }, "SHOW_ANTD_MODAL");
         }
+
+        /// <summary>
+        /// Stretches a Details-view ListView's last column to fill any remaining width, so rows
+        /// (and zebra-stripe backgrounds) span the full control instead of leaving a blank gap
+        /// on the right when the window is wider than the sum of the defined column widths.
+        /// Call once after adding columns, and wire to the ListView's Resize event.
+        /// </summary>
+        public static void StretchLastListViewColumn(ListView listView, int minWidth)
+        {
+            if (listView.Columns.Count == 0) return;
+
+            int othersWidth = 0;
+            for (int i = 0; i < listView.Columns.Count - 1; i++)
+            {
+                othersWidth += listView.Columns[i].Width;
+            }
+
+            // Leave a little room for the vertical scrollbar so the stretched column doesn't
+            // get clipped under it once the list has enough rows to scroll.
+            int available = listView.ClientSize.Width - othersWidth - SystemInformation.VerticalScrollBarWidth;
+            listView.Columns[listView.Columns.Count - 1].Width = Math.Max(minWidth, available);
+        }
     }
 }

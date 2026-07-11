@@ -4,6 +4,7 @@ using System.Drawing;
 using System.Windows.Forms;
 using TadaPlay.Logger;
 using TadaPlay.Services.Interface;
+using TadaPlay.Utils;
 
 namespace TadaPlay.Controls
 {
@@ -55,17 +56,27 @@ namespace TadaPlay.Controls
                 Dock = DockStyle.Fill,
                 View = View.Details,
                 FullRowSelect = true,
-                GridLines = true,
+                GridLines = false,
                 MultiSelect = false,
-                HeaderStyle = ColumnHeaderStyle.Nonclickable
+                HeaderStyle = ColumnHeaderStyle.Nonclickable,
+                Font = new Font("Segoe UI", 10F),
+                BorderStyle = BorderStyle.FixedSingle
             };
+            // Taller, more breathable rows - ListView row height tracks the SmallImageList's
+            // item size, so a blank placeholder image is the usual way to bump it (no real icons).
+            var rowSizer = new ImageList { ImageSize = new Size(1, 32) };
+            rowSizer.Images.Add(new Bitmap(1, 32));
+            _listView.SmallImageList = rowSizer;
             _listView.Columns.Add("#", 50, HorizontalAlignment.Center);
             _listView.Columns.Add("Người chơi", 200, HorizontalAlignment.Left);
             _listView.Columns.Add("ELO", 80, HorizontalAlignment.Right);
             _listView.Columns.Add("Trận", 70, HorizontalAlignment.Right);
             _listView.Columns.Add("Thắng", 70, HorizontalAlignment.Right);
             _listView.Columns.Add("Bại", 70, HorizontalAlignment.Right);
-            _listView.Columns.Add("Tỉ lệ thắng", 100, HorizontalAlignment.Right);
+            _listView.Columns.Add("Tỉ lệ thắng", 110, HorizontalAlignment.Right);
+            // Stretch the win-rate column to fill any leftover width so row backgrounds (zebra
+            // stripes) span the full list instead of leaving a blank gap on the right.
+            _listView.Resize += (s, e) => UiUtils.StretchLastListViewColumn(_listView, 110);
 
             _statusLabel = new Label
             {
@@ -93,19 +104,34 @@ namespace TadaPlay.Controls
 
                 _listView.BeginUpdate();
                 _listView.Items.Clear();
-                foreach (var p in players)
+                for (int i = 0; i < players.Count; i++)
                 {
+                    var p = players[i];
                     string rankText = p.Rank switch { 1 => "🥇", 2 => "🥈", 3 => "🥉", _ => p.Rank.ToString() };
-                    var item = new ListViewItem(rankText);
+                    var item = new ListViewItem(rankText)
+                    {
+                        UseItemStyleForSubItems = false,
+                        // Zebra striping so long lists stay readable without gridlines.
+                        BackColor = i % 2 == 0 ? Color.White : UiColors.ZebraStripe,
+                        Font = new Font(_listView.Font, p.Rank <= 3 ? FontStyle.Bold : FontStyle.Regular)
+                    };
                     item.SubItems.Add(p.DisplayName ?? p.Username);
-                    item.SubItems.Add(p.Rating.ToString());
+
+                    var eloSubItem = item.SubItems.Add(p.Rating.ToString());
+                    eloSubItem.Font = new Font(_listView.Font, FontStyle.Bold);
+
                     item.SubItems.Add(p.GamesPlayed.ToString());
                     item.SubItems.Add(p.Wins.ToString());
                     item.SubItems.Add(p.Losses.ToString());
-                    item.SubItems.Add(p.WinRate + "%");
+
+                    var winRateSubItem = item.SubItems.Add(p.WinRate + "%");
+                    winRateSubItem.ForeColor = p.WinRate >= 50 ? UiColors.Winner : Color.Gray;
+                    winRateSubItem.Font = new Font(_listView.Font, p.WinRate >= 50 ? FontStyle.Bold : FontStyle.Regular);
+
                     _listView.Items.Add(item);
                 }
                 _listView.EndUpdate();
+                UiUtils.StretchLastListViewColumn(_listView, 110);
 
                 _statusLabel.Text = players.Count == 0
                     ? "Chưa có trận đấu nào được xếp hạng."

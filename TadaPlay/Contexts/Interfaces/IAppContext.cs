@@ -12,6 +12,10 @@ public interface IAppContext
 
     public bool GetAutoLoginSetting();
 
+    public void SetRunOnStartupSetting(bool runOnStartup);
+
+    public bool GetRunOnStartupSetting();
+
     public void SetGameFolder(string folderPath);
 
     public string GetGameFolder();

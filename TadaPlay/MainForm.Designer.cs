@@ -28,6 +28,7 @@
         /// </summary>
         private void InitializeComponent()
         {
+            components = new System.ComponentModel.Container();
             System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(MainForm));
             windowBar = new AntdUI.PageHeader();
             rankingButton = new AntdUI.Button();
@@ -35,7 +36,12 @@
             settingButton = new AntdUI.Button();
             virtualPanel = new AntdUI.VirtualPanel();
             rankingTooltip = new AntdUI.TooltipComponent();
+            trayIcon = new NotifyIcon(components);
+            trayContextMenu = new ContextMenuStrip(components);
+            trayShowMenuItem = new ToolStripMenuItem();
+            trayExitMenuItem = new ToolStripMenuItem();
             windowBar.SuspendLayout();
+            trayContextMenu.SuspendLayout();
             SuspendLayout();
             // 
             // windowBar
@@ -117,11 +123,36 @@
 
             // 
             // rankingTooltip
-            // 
+            //
             rankingTooltip.ArrowAlign = AntdUI.TAlign.Bottom;
-            // 
+            //
+            // trayContextMenu
+            //
+            trayContextMenu.Items.AddRange(new ToolStripItem[] { trayShowMenuItem, trayExitMenuItem });
+            trayContextMenu.Name = "trayContextMenu";
+            trayContextMenu.Size = new Size(181, 48);
+            //
+            // trayShowMenuItem
+            //
+            trayShowMenuItem.Name = "trayShowMenuItem";
+            trayShowMenuItem.Text = "Mở TADA Play";
+            trayShowMenuItem.Click += trayShowMenuItem_Click;
+            //
+            // trayExitMenuItem
+            //
+            trayExitMenuItem.Name = "trayExitMenuItem";
+            trayExitMenuItem.Text = "Thoát";
+            trayExitMenuItem.Click += trayExitMenuItem_Click;
+            //
+            // trayIcon
+            //
+            trayIcon.ContextMenuStrip = trayContextMenu;
+            trayIcon.Text = "TADA Play";
+            trayIcon.Visible = true;
+            trayIcon.Click += trayIcon_Click;
+            //
             // MainForm
-            // 
+            //
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
             ClientSize = new Size(1024, 720);
@@ -133,8 +164,12 @@
             Text = "TADA Play - aoe2.io.vn";
             Load += MainForm_Load;
             Resize += MainForm_Resize;
+            FormClosing += MainForm_FormClosing;
             windowBar.ResumeLayout(false);
+            trayContextMenu.ResumeLayout(false);
             ResumeLayout(false);
+
+            trayIcon.Icon = Icon;
         }
 
         #endregion
@@ -145,5 +180,9 @@
         private AntdUI.Button settingButton;
         private AntdUI.Button rankingButton;
         private AntdUI.Button matchesButton;
+        private NotifyIcon trayIcon;
+        private ContextMenuStrip trayContextMenu;
+        private ToolStripMenuItem trayShowMenuItem;
+        private ToolStripMenuItem trayExitMenuItem;
     }
 }

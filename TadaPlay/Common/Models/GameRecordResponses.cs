@@ -48,6 +48,10 @@ namespace TadaPlay.Common.Models
 
         [JsonProperty("review_reason")]
         public string ReviewReason { get; set; }
+
+        /// <summary>True when another player already uploaded this same match (matched by replay GUID).</summary>
+        [JsonProperty("duplicate")]
+        public bool Duplicate { get; set; }
     }
 
     /// <summary>Response from api.php?action=report_result.</summary>

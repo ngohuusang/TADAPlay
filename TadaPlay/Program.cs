@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Linq;
 using System.Net;
 using Microsoft.Extensions.DependencyInjection;
 using TadaPlay.Connections;
@@ -17,9 +18,15 @@ namespace TadaPlay
 
         private static IServiceProvider ServiceProvider { get; set; }
 
+        // Set when launched with "--minimized" (used by the Windows "Run at startup" entry),
+        // so MainForm can start hidden in the tray instead of popping up the window.
+        public static bool StartMinimized { get; private set; }
+
         [STAThread]
-        static void Main()
+        static void Main(string[] args)
         {
+            StartMinimized = args.Any(a => a.Equals("--minimized", StringComparison.OrdinalIgnoreCase));
+
             ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
 
             ApplicationConfiguration.Initialize();

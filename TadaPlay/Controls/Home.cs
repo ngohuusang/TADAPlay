@@ -50,6 +50,13 @@ namespace TadaPlay.Controls
         private const int StableTicksToFinish = 3; // ~15s with no further writes
         private const int GiveUpWatchingFileAfterMinutes = 240; // give up on this one file, not the whole watcher
 
+        // The game keeps rewriting its own player*.nfx/nfz profile files while the player
+        // browses its in-game profile picker, so a one-off name sync (Start Game click) isn't
+        // enough to keep the account name "selected" there. Re-stamp them on a short interval,
+        // for the lifetime of the app, independent of whether Start Game was clicked.
+        private System.Windows.Forms.Timer _profileEnforceTimer;
+        private const int ProfileEnforceIntervalMs = 10000;
+
         public event EventHandler LogoutRequested;
 
         public Home(MainForm _mainForm, IWebSocketService _webSocketService, IAppContext _appContext,
@@ -98,6 +105,7 @@ namespace TadaPlay.Controls
 
             UpdateUiBasedOnLobbyState();
             StartRecordWatcher();
+            StartProfileEnforcer();
 
             webSocketService.Connect();
 
@@ -118,6 +126,35 @@ namespace TadaPlay.Controls
                 UpdateVpnUi();
                 _ = wireGuardVpnService.ConnectAsync();
             }
+
+            EnsureGameFolderConfigured();
+        }
+
+        // The game folder drives name-sync, record watching, and upload - without it none of
+        // that can work, so nudge the user to set it up right away instead of only failing
+        // silently later when Start Game or the background watcher needs it.
+        private void EnsureGameFolderConfigured()
+        {
+            if (!string.IsNullOrWhiteSpace(appContext.GetGameFolder())) return;
+
+            AntdUI.Modal.open(new AntdUI.Modal.Config(mainForm, "Chưa cấu hình thư mục game",
+                "Bạn cần chọn thư mục cài đặt AoE2 (nơi chứa SaveGame) trong Cài đặt để TadaPlay có thể đồng bộ tên, theo dõi và tải lên record trận đấu.",
+                AntdUI.TType.Warn)
+            {
+                OkText = "Mở cài đặt",
+                CancelText = "Để sau",
+                OnOk = config =>
+                {
+                    OpenSettingsDialog();
+                    return true;
+                }
+            });
+        }
+
+        private void OpenSettingsDialog()
+        {
+            var setting = new Setting(mainForm, appContext, accountService);
+            AntdUI.Modal.open(mainForm, AntdUI.Localization.Get("Setting", "Cài đặt"), setting);
         }
 
         // Runs for the lifetime of the app, independent of whether Start Game was clicked.
@@ -132,6 +169,28 @@ namespace TadaPlay.Controls
             }
             _recordWatchTimer.Start();
             printLog("[Theo dõi] Đang theo dõi thư mục record để tự động tải lên khi có trận đấu mới.", Color.RoyalBlue);
+        }
+
+        // Runs for the lifetime of the app: repeatedly forces the account name back into every
+        // in-game profile file, since the game itself keeps rewriting them.
+        private void StartProfileEnforcer()
+        {
+            if (_profileEnforceTimer == null)
+            {
+                _profileEnforceTimer = new System.Windows.Forms.Timer { Interval = ProfileEnforceIntervalMs };
+                _profileEnforceTimer.Tick += ProfileEnforceTimer_Tick;
+            }
+            _profileEnforceTimer.Start();
+            ProfileEnforceTimer_Tick(this, EventArgs.Empty); // don't wait a full interval for the first pass
+        }
+
+        private void ProfileEnforceTimer_Tick(object sender, EventArgs e)
+        {
+            string gameFolder = appContext.GetGameFolder();
+            string playerName = appContext.GetCurrentUser()?.NickName;
+            if (string.IsNullOrWhiteSpace(gameFolder) || string.IsNullOrWhiteSpace(playerName)) return;
+
+            ProfileTemplateEnforcer.EnforceOnce(gameFolder, playerName);
         }
 
         // --- VPN wiring ---
@@ -321,8 +380,14 @@ namespace TadaPlay.Controls
         {
             if (!wireGuardVpnService.IsConnected && _externalVpnIp == null) return;
 
-            User currentUser = appContext.GetCurrentUser();
             string gameFolder = appContext.GetGameFolder();
+            if (string.IsNullOrWhiteSpace(gameFolder))
+            {
+                EnsureGameFolderConfigured();
+                return;
+            }
+
+            User currentUser = appContext.GetCurrentUser();
 
             if (currentUser != null && !string.IsNullOrWhiteSpace(currentUser.NickName))
             {

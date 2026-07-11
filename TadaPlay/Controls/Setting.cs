@@ -8,6 +8,10 @@ namespace TadaPlay.Controls
 {
     public partial class Setting : UserControl
     {
+        // Shared across every label/textbox/button/groupbox below so the whole dialog reads at
+        // one consistent, larger size instead of the WinForms default ~9pt.
+        private static readonly Font ControlFont = new Font("Segoe UI", 11F);
+
         Form form;
         private readonly IAppContext _appContext;
         private readonly IAccountService _accountService;
@@ -19,7 +23,8 @@ namespace TadaPlay.Controls
             _appContext = appContext;
             _accountService = accountService;
 
-            this.Width = 420;
+            this.Font = ControlFont;
+            this.Width = 560;
             // Deliberately NOT using AutoSize/GrowAndShrink here: a plain UserControl's default
             // layout engine doesn't compute preferred size from Dock=Top children (that's a
             // FlowLayoutPanel-only behavior), so AutoSize would just fight the explicit Height
@@ -60,15 +65,15 @@ namespace TadaPlay.Controls
             {
                 Text = "Khởi chạy game",
                 Dock = DockStyle.Top,
-                Height = 95,
-                Padding = new Padding(8)
+                Height = 140,
+                Padding = new Padding(10)
             };
 
             var label = new Label
             {
                 Text = "File chạy game khi bấm \"Bắt đầu\" (vd: age2_x1-WK.exe):",
                 Dock = DockStyle.Top,
-                Height = 20
+                Height = 32
             };
 
             var pathBox = new TextBox
@@ -78,7 +83,7 @@ namespace TadaPlay.Controls
                 Text = _appContext.GetGameExecutablePath() ?? string.Empty
             };
 
-            var browseButton = new Button { Text = "Chọn file...", Dock = DockStyle.Top, Height = 28 };
+            var browseButton = new Button { Text = "Chọn file...", Dock = DockStyle.Top, Height = 38 };
             browseButton.Click += (s, e) =>
             {
                 using var dialog = new OpenFileDialog
@@ -107,15 +112,15 @@ namespace TadaPlay.Controls
             {
                 Text = "Thư mục game",
                 Dock = DockStyle.Top,
-                Height = 95,
-                Padding = new Padding(8)
+                Height = 140,
+                Padding = new Padding(10)
             };
 
             var label = new Label
             {
                 Text = "Thư mục cài đặt AoE2 (chứa SaveGame):",
                 Dock = DockStyle.Top,
-                Height = 20
+                Height = 32
             };
 
             var pathBox = new TextBox
@@ -125,7 +130,7 @@ namespace TadaPlay.Controls
                 Text = _appContext.GetGameFolder() ?? string.Empty
             };
 
-            var browseButton = new Button { Text = "Chọn thư mục...", Dock = DockStyle.Top, Height = 28 };
+            var browseButton = new Button { Text = "Chọn thư mục...", Dock = DockStyle.Top, Height = 38 };
             browseButton.Click += (s, e) =>
             {
                 using var dialog = new FolderBrowserDialog
@@ -159,26 +164,26 @@ namespace TadaPlay.Controls
             {
                 Text = "Thông tin tài khoản",
                 Dock = DockStyle.Top,
-                Height = 300,
-                Padding = new Padding(8)
+                Height = 430,
+                Padding = new Padding(10)
             };
 
-            var fullNameLabel = new Label { Text = "Họ tên:", Dock = DockStyle.Top, Height = 20 };
+            var fullNameLabel = new Label { Text = "Họ tên:", Dock = DockStyle.Top, Height = 32 };
             var fullNameBox = new TextBox { Dock = DockStyle.Top, Text = currentUser?.FullName ?? string.Empty };
 
-            var nickNameLabel = new Label { Text = "Tên hiển thị trong game:", Dock = DockStyle.Top, Height = 20 };
+            var nickNameLabel = new Label { Text = "Tên hiển thị trong game:", Dock = DockStyle.Top, Height = 32 };
             var nickNameBox = new TextBox { Dock = DockStyle.Top, Text = currentUser?.NickName ?? string.Empty };
 
-            var currentPasswordLabel = new Label { Text = "Mật khẩu hiện tại (bắt buộc):", Dock = DockStyle.Top, Height = 20 };
+            var currentPasswordLabel = new Label { Text = "Mật khẩu hiện tại (bắt buộc):", Dock = DockStyle.Top, Height = 32 };
             var currentPasswordBox = new TextBox { Dock = DockStyle.Top, PasswordChar = '*' };
 
-            var newPasswordLabel = new Label { Text = "Mật khẩu mới (để trống nếu không đổi):", Dock = DockStyle.Top, Height = 20 };
+            var newPasswordLabel = new Label { Text = "Mật khẩu mới (để trống nếu không đổi):", Dock = DockStyle.Top, Height = 32 };
             var newPasswordBox = new TextBox { Dock = DockStyle.Top, PasswordChar = '*' };
 
-            var confirmPasswordLabel = new Label { Text = "Xác nhận mật khẩu mới:", Dock = DockStyle.Top, Height = 20 };
+            var confirmPasswordLabel = new Label { Text = "Xác nhận mật khẩu mới:", Dock = DockStyle.Top, Height = 32 };
             var confirmPasswordBox = new TextBox { Dock = DockStyle.Top, PasswordChar = '*' };
 
-            var saveButton = new Button { Text = "Lưu thông tin", Dock = DockStyle.Top, Height = 30 };
+            var saveButton = new Button { Text = "Lưu thông tin", Dock = DockStyle.Top, Height = 40 };
             saveButton.Click += async (s, e) =>
             {
                 string fullName = fullNameBox.Text.Trim();
