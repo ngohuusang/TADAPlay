@@ -3,8 +3,9 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Net;
+using System.Threading;
 using System.Threading.Tasks;
-using System.Timers; 
+using System.Timers;
 using TadaPlay.Logger;
 using TadaPlay.Connections.Interface;
 using Vanara.PInvoke;
@@ -38,6 +39,15 @@ namespace TadaPlay.Connections
         // Injected IAppContext to retrieve config content for reconnects
         private readonly IAppContext _appContext;
 
+        // Serializes every operation that reads or mutates _adapter/_wgConfig/_adapterGuid/_adapterLuid.
+        // Login fires two independent triggers in quick succession - AppContext.OnVpnProfileUpdated
+        // (-> InitAdapter) and Home_Load (-> ConnectAsync, which also calls InitAdapter if needed) -
+        // both against this same singleton. Without this lock the second one can call SetStateUp()
+        // (or re-run InitAdapter and swap out _adapter) while the first's InitAdapter is still
+        // mid-flight on its background Task.Run, bringing up a half-configured adapter or racing the
+        // adapter reference itself. This was the root cause of "first login doesn't connect."
+        private readonly SemaphoreSlim _adapterLock = new SemaphoreSlim(1, 1);
+
 
         public event EventHandler<string> OnStatusChanged;
         public event EventHandler<string> OnErrorOccurred;
@@ -65,7 +75,15 @@ namespace TadaPlay.Connections
                 _reconnectTimer.Stop();
                 // When reconnecting, fetch the config content from AppContext
                 string reconnectConfig = _appContext.GetVpnProfile()?.ConfigContent;
-                await AttemptConnectInternalAsync(reconnectConfig); // Pass config content for reconnect
+                await _adapterLock.WaitAsync();
+                try
+                {
+                    await AttemptConnectInternalAsyncCore(reconnectConfig); // Pass config content for reconnect
+                }
+                finally
+                {
+                    _adapterLock.Release();
+                }
             };
         }
 
@@ -76,6 +94,22 @@ namespace TadaPlay.Connections
         /// <param name="configContent">The WireGuard configuration content string.</param>
         /// <returns>True if adapter initialization is successful, false otherwise.</returns>
         public async Task<bool> InitAdapter(string configContent)
+        {
+            await _adapterLock.WaitAsync();
+            try
+            {
+                return await InitAdapterCore(configContent);
+            }
+            finally
+            {
+                _adapterLock.Release();
+            }
+        }
+
+        // Lock-free core - callers that already hold _adapterLock (e.g. AttemptConnectInternalAsyncCore)
+        // must call this directly rather than the public InitAdapter, which would otherwise deadlock
+        // trying to re-acquire the non-reentrant semaphore.
+        private async Task<bool> InitAdapterCore(string configContent)
         {
             if (string.IsNullOrWhiteSpace(configContent))
             {
@@ -229,7 +263,15 @@ namespace TadaPlay.Connections
             // --- Pass configContent to InitAdapter, then connect ---
             // If InitAdapter succeeds, then proceed to bring adapter up.
             // This is the core retry loop now.
-            return await AttemptConnectInternalAsync(reconnectConfig);
+            await _adapterLock.WaitAsync();
+            try
+            {
+                return await AttemptConnectInternalAsyncCore(reconnectConfig);
+            }
+            finally
+            {
+                _adapterLock.Release();
+            }
         }
 
         public async Task DisconnectAsync()
@@ -237,6 +279,19 @@ namespace TadaPlay.Connections
             _isExplicitlyDisconnected = true;
             StopReconnectTimer(); // This stops the timer
 
+            await _adapterLock.WaitAsync();
+            try
+            {
+                await DisconnectAsyncCore();
+            }
+            finally
+            {
+                _adapterLock.Release();
+            }
+        }
+
+        private async Task DisconnectAsyncCore()
+        {
             if (_adapter != null)
             {
                 try
@@ -269,7 +324,9 @@ namespace TadaPlay.Connections
         // --- Internal Connect/Reconnect Logic ---
         // Now responsible for initiating connection, and retrying if SetStateUp fails.
         // Assumes InitAdapter has already succeeded.
-        private async Task<bool> AttemptConnectInternalAsync(string configContent = null) // ConfigContent is only for initial InitAdapter if _adapter is null
+        // Lock-free core - every caller (ConnectAsync, the reconnect timer) must hold _adapterLock
+        // before calling this, so the null-check on _adapter below can't race a concurrent InitAdapter.
+        private async Task<bool> AttemptConnectInternalAsyncCore(string configContent = null) // ConfigContent is only for initial InitAdapter if _adapter is null
         {
             if (_isExplicitlyDisconnected)
             {
@@ -288,7 +345,7 @@ namespace TadaPlay.Connections
                 if (_adapter == null)
                 {
                     DebugLogger.Info("WireguardVPNService: Adapter not initialized. Attempting InitAdapter.");
-                    bool initSuccess = await InitAdapter(configContent); // Call InitAdapter here
+                    bool initSuccess = await InitAdapterCore(configContent); // Call InitAdapter here
                     if (!initSuccess)
                     {
                         // If InitAdapter fails, that's a serious issue, handle as connection loss.
