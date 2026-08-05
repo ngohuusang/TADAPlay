@@ -184,6 +184,20 @@ namespace TadaPlay.Connections
                     unicastIpAddressRow.OnLinkPrefixLength = _wgConfig.InterfaceNetwork.Cidr;
                     unicastIpAddressRow.DadState = NL_DAD_STATE.IpDadStatePreferred;
                     lastError = CreateUnicastIpAddressEntry(ref unicastIpAddressRow);
+
+                    // A TADAVPNAdapter left over from a previous session (app killed, or Windows
+                    // just hasn't finished reaping it yet) still holds this same tunnel IP, so the
+                    // fresh adapter's CreateUnicastIpAddressEntry fails with
+                    // ERROR_OBJECT_ALREADY_EXISTS. That was the real reason first-login VPN start
+                    // failed for ~50s of retries until the OS freed the address on its own.
+                    // Actively reclaim the stale IP and retry once instead of waiting it out.
+                    if (lastError == Win32Error.ERROR_OBJECT_ALREADY_EXISTS)
+                    {
+                        DebugLogger.Warn("WireguardVPNService: tunnel IP already assigned (stale adapter from a previous session). Reclaiming and retrying.");
+                        RemoveConflictingUnicastIp(_wgConfig.InterfaceAddress.GetAddressBytes());
+                        lastError = CreateUnicastIpAddressEntry(ref unicastIpAddressRow);
+                    }
+
                     if (lastError.Failed) { OnErrorOccurred?.Invoke(this, "Failed to set IP address: " + lastError); DebugLogger.Error("WireguardVPNService: CreateUnicastIpAddressEntry failed: " + lastError); return false; }
 
                     InitializeIpInterfaceEntry(out MIB_IPINTERFACE_ROW ipInterfaceRow);
@@ -439,6 +453,35 @@ namespace TadaPlay.Connections
             }
         }
 
+        // Deletes any existing IPv4 unicast address entry matching targetAddrBytes, whatever
+        // interface currently owns it - used to reclaim our tunnel IP from a leftover adapter of
+        // a prior session so a fresh CreateUnicastIpAddressEntry can succeed on the first attempt
+        // instead of failing with ERROR_OBJECT_ALREADY_EXISTS until the OS eventually frees it.
+        private static void RemoveConflictingUnicastIp(byte[] targetAddrBytes)
+        {
+            try
+            {
+                var target = new Ws2_32.IN_ADDR(targetAddrBytes);
+                var err = GetUnicastIpAddressTable(Ws2_32.ADDRESS_FAMILY.AF_INET, out MIB_UNICASTIPADDRESS_TABLE table);
+                if (err.Failed) { DebugLogger.Warn($"WireguardVPNService: GetUnicastIpAddressTable failed while reclaiming IP: {err}"); return; }
+
+                for (var i = 0; i < table.NumEntries; i++)
+                {
+                    if (table.Table[i].Address.si_family == Ws2_32.ADDRESS_FAMILY.AF_INET
+                        && table.Table[i].Address.Ipv4.sin_addr.S_addr == target.S_addr)
+                    {
+                        var delErr = DeleteUnicastIpAddressEntry(ref table.Table[i]);
+                        if (delErr.Failed) DebugLogger.Warn($"WireguardVPNService: DeleteUnicastIpAddressEntry failed: {delErr}");
+                        else DebugLogger.Info("WireguardVPNService: removed stale unicast IP entry left by a previous adapter.");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                DebugLogger.Error($"WireguardVPNService: error reclaiming stale unicast IP: {ex.Message}");
+            }
+        }
+
         private void AddArch()
         {
             // Only expose the folder matching this process's own bitness. Adding both would let
@@ -462,13 +505,22 @@ namespace TadaPlay.Connections
                 StopReconnectTimer(); // Calls _reconnectTimer.Stop()
                 _reconnectTimer?.Dispose(); // Explicitly dispose _reconnectTimer here
 
-                // Disconnect and dispose the adapter
+                // Disconnect AND dispose the adapter. SetStateDown alone only brings the tunnel
+                // down - it does NOT remove the adapter from the system; WireGuard NT only does
+                // that when the adapter handle is closed via Adapter.Dispose (WireGuardCloseAdapter).
+                // Without the Dispose, the TADAVPNAdapter (and its bound tunnel IP) survived process
+                // exit, so the next launch hit ERROR_OBJECT_ALREADY_EXISTS and couldn't start the
+                // VPN until Windows eventually reaped the orphan. This is the source-side fix for
+                // that leak; RemoveConflictingUnicastIp covers the crash/kill case where this
+                // graceful path never runs.
                 try
                 {
                     if (_adapter != null)
                     {
-                        DebugLogger.Info("WireguardVPNService: Disposing, attempting adapter state down.");
-                        _adapter.SetStateDown(); // Try to set state down gracefully
+                        DebugLogger.Info("WireguardVPNService: Disposing, bringing adapter down and removing it.");
+                        _adapter.SetStateDown(); // Bring the tunnel down gracefully first
+                        _adapter.Dispose();      // Then close the handle so the adapter is removed
+                        _adapter = null;
                     }
                 }
                 catch (Exception ex)
