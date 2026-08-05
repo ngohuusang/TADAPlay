@@ -3,6 +3,7 @@ using System.Drawing;
 using System.Windows.Forms;
 using TadaPlay.Contexts.Interfaces;
 using TadaPlay.Services.Interface;
+using TadaPlay.Utils;
 
 namespace TadaPlay.Controls
 {
@@ -36,11 +37,11 @@ namespace TadaPlay.Controls
 
             if (_appContext != null)
             {
-                var exeSection = BuildGameExecutableSection();
+                var displayModeSection = BuildDisplayModeSection();
                 var folderSection = BuildGameFolderSection();
-                Controls.Add(exeSection);
+                Controls.Add(displayModeSection);
                 Controls.Add(folderSection);
-                totalHeight += exeSection.Height + folderSection.Height;
+                totalHeight += displayModeSection.Height + folderSection.Height;
             }
 
             if (_appContext != null && _accountService != null)
@@ -56,51 +57,56 @@ namespace TadaPlay.Controls
             this.Height = totalHeight;
         }
 
-        // Game launcher picker: the exe Start Game should open directly (e.g. age2_x1-WK.exe) -
-        // no Voobly in the loop, since players connect peer-to-peer over the VPN using the
-        // game's own Direct IP multiplayer. Persisted immediately.
-        private GroupBox BuildGameExecutableSection()
+        // Display mode picker: which of the two app-bundled WK launcher exes (see
+        // GameExecutablePreparer) gets copied into the game's age2_x1 folder and started on
+        // "Bắt đầu" - there's no longer a free-form exe path to browse for, since the launcher
+        // is always one of these two known, app-provided files. Persisted immediately.
+        private GroupBox BuildDisplayModeSection()
         {
             var group = new GroupBox
             {
-                Text = "Khởi chạy game",
+                Text = "Chế độ hiển thị",
                 Dock = DockStyle.Top,
-                Height = 140,
+                Height = 120,
                 Padding = new Padding(10)
             };
 
             var label = new Label
             {
-                Text = "File chạy game khi bấm \"Bắt đầu\" (vd: age2_x1-WK.exe):",
+                Text = "Giao diện khi khởi chạy game:",
                 Dock = DockStyle.Top,
                 Height = 32
             };
 
-            var pathBox = new TextBox
+            string currentMode = _appContext.GetGameLaunchMode();
+
+            var wideRadio = new RadioButton
             {
+                Text = "Wide (màn hình rộng)",
                 Dock = DockStyle.Top,
-                ReadOnly = true,
-                Text = _appContext.GetGameExecutablePath() ?? string.Empty
+                Height = 28,
+                Checked = currentMode != GameExecutablePreparer.CenterMode
             };
-
-            var browseButton = new Button { Text = "Chọn file...", Dock = DockStyle.Top, Height = 38 };
-            browseButton.Click += (s, e) =>
+            var centerRadio = new RadioButton
             {
-                using var dialog = new OpenFileDialog
-                {
-                    Title = "Chọn file khởi chạy game",
-                    Filter = "Chương trình (*.exe)|*.exe",
-                    FileName = _appContext.GetGameExecutablePath() ?? string.Empty
-                };
-                if (dialog.ShowDialog(this) == DialogResult.OK)
-                {
-                    _appContext.SetGameExecutablePath(dialog.FileName);
-                    pathBox.Text = dialog.FileName;
-                }
+                Text = "Center (căn giữa)",
+                Dock = DockStyle.Top,
+                Height = 28,
+                Checked = currentMode == GameExecutablePreparer.CenterMode
             };
 
-            group.Controls.Add(browseButton);
-            group.Controls.Add(pathBox);
+            centerRadio.CheckedChanged += (s, e) =>
+            {
+                if (centerRadio.Checked) _appContext.SetGameLaunchMode(GameExecutablePreparer.CenterMode);
+            };
+            wideRadio.CheckedChanged += (s, e) =>
+            {
+                if (wideRadio.Checked) _appContext.SetGameLaunchMode(GameExecutablePreparer.WideMode);
+            };
+
+            // Dock=Top stacks in reverse add order: add bottom-most control first.
+            group.Controls.Add(centerRadio);
+            group.Controls.Add(wideRadio);
             group.Controls.Add(label);
             return group;
         }
@@ -153,9 +159,11 @@ namespace TadaPlay.Controls
             return group;
         }
 
-        // Profile editor: full name, in-game display name (nick_name), and optional password
-        // change, via the existing update-user endpoint. The server always requires the
-        // current password to confirm any change, even if only the name is being updated.
+        // Profile editor: full name and optional password change, via the existing update-user
+        // endpoint. The in-game display name is no longer a separate editable field - it's
+        // always the account's username (see Home.startGameButton_Click / ProfileEnforceTimer_Tick).
+        // The server always requires the current password to confirm any change, even if only
+        // the name is being updated.
         private GroupBox BuildProfileSection()
         {
             var currentUser = _appContext.GetCurrentUser();
@@ -164,15 +172,12 @@ namespace TadaPlay.Controls
             {
                 Text = "Thông tin tài khoản",
                 Dock = DockStyle.Top,
-                Height = 430,
+                Height = 366,
                 Padding = new Padding(10)
             };
 
             var fullNameLabel = new Label { Text = "Họ tên:", Dock = DockStyle.Top, Height = 32 };
             var fullNameBox = new TextBox { Dock = DockStyle.Top, Text = currentUser?.FullName ?? string.Empty };
-
-            var nickNameLabel = new Label { Text = "Tên hiển thị trong game:", Dock = DockStyle.Top, Height = 32 };
-            var nickNameBox = new TextBox { Dock = DockStyle.Top, Text = currentUser?.NickName ?? string.Empty };
 
             var currentPasswordLabel = new Label { Text = "Mật khẩu hiện tại (bắt buộc):", Dock = DockStyle.Top, Height = 32 };
             var currentPasswordBox = new TextBox { Dock = DockStyle.Top, PasswordChar = '*' };
@@ -187,14 +192,13 @@ namespace TadaPlay.Controls
             saveButton.Click += async (s, e) =>
             {
                 string fullName = fullNameBox.Text.Trim();
-                string nickName = nickNameBox.Text.Trim();
                 string currentPassword = currentPasswordBox.Text;
                 string newPassword = newPasswordBox.Text;
                 string confirmPassword = confirmPasswordBox.Text;
 
-                if (string.IsNullOrEmpty(fullName) || string.IsNullOrEmpty(nickName))
+                if (string.IsNullOrEmpty(fullName))
                 {
-                    AntdUI.Modal.open(new AntdUI.Modal.Config(form, "Lỗi", "Họ tên và tên hiển thị không được để trống.", AntdUI.TType.Warn)
+                    AntdUI.Modal.open(new AntdUI.Modal.Config(form, "Lỗi", "Họ tên không được để trống.", AntdUI.TType.Warn)
                     { CancelText = null, OkText = "Đóng" });
                     return;
                 }
@@ -219,13 +223,16 @@ namespace TadaPlay.Controls
 
                 try
                 {
-                    bool success = await _accountService.UpdateUserInfo(fullName, nickName, currentPassword, newPassword);
+                    // The in-game display name always mirrors the account's username now (no
+                    // separate nickname field), so keep sending it through as nick_name for the
+                    // server's existing update-user contract.
+                    bool success = await _accountService.UpdateUserInfo(fullName, currentUser?.Username ?? string.Empty, currentPassword, newPassword);
                     if (success)
                     {
                         if (currentUser != null)
                         {
                             currentUser.FullName = fullName;
-                            currentUser.NickName = nickName;
+                            currentUser.NickName = currentUser.Username;
                             _appContext.SetCurrentUser(currentUser);
                         }
                         currentPasswordBox.Text = string.Empty;
@@ -250,8 +257,6 @@ namespace TadaPlay.Controls
             group.Controls.Add(newPasswordLabel);
             group.Controls.Add(currentPasswordBox);
             group.Controls.Add(currentPasswordLabel);
-            group.Controls.Add(nickNameBox);
-            group.Controls.Add(nickNameLabel);
             group.Controls.Add(fullNameBox);
             group.Controls.Add(fullNameLabel);
             return group;

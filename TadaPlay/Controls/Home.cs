@@ -187,7 +187,7 @@ namespace TadaPlay.Controls
         private void ProfileEnforceTimer_Tick(object sender, EventArgs e)
         {
             string gameFolder = appContext.GetGameFolder();
-            string playerName = appContext.GetCurrentUser()?.NickName;
+            string playerName = appContext.GetCurrentUser()?.Username;
             if (string.IsNullOrWhiteSpace(gameFolder) || string.IsNullOrWhiteSpace(playerName)) return;
 
             ProfileTemplateEnforcer.EnforceOnce(gameFolder, playerName);
@@ -232,6 +232,21 @@ namespace TadaPlay.Controls
             // pinned VPN profile IP, so a mismatched/spoofed identity can't earn rating
             // even if the in-game name happens to match.
             _ = ReportIpToServerAsync(ip);
+
+            // The WS server's live user_list only reflects a user's IP once it receives this
+            // exact WS message (see GameLobbyServer::onMessage's "ip_address" branch) - it does
+            // NOT read the DB value the REST call above just persisted. Without this, the IP
+            // column in the online-users list stays blank for everyone until the server process
+            // restarts.
+            //
+            // Best-effort only: the VPN can connect (firing this event) before the WebSocket
+            // itself has finished connecting, and SendMessageAsync surfaces a visible error
+            // notification if called while disconnected. Skip silently here - the value gets
+            // resent once the WS actually connects (see WebSocketService_OnConnected below).
+            if (!string.IsNullOrWhiteSpace(ip) && webSocketService.IsConnected)
+            {
+                _ = webSocketService.SendMessageAsync(new { ip_address = ip });
+            }
         }
 
         private async System.Threading.Tasks.Task ReportIpToServerAsync(string ip)
@@ -304,6 +319,15 @@ namespace TadaPlay.Controls
                 DebugLogger.Info("WebSocketService reported connected. Attempting initial refresh.");
                 webSocketService.RefreshAsync();
                 UpdateUiBasedOnLobbyState();
+
+                // Re-push the already-known VPN IP - if the VPN connected (and the earlier
+                // WireGuardVpnService_OnIpAddressChanged fire) happened while the WS was down or
+                // still reconnecting, that ip_address message would have silently no-opped.
+                string currentIp = _externalVpnIp ?? wireGuardVpnService.CurrentIpAddress;
+                if (!string.IsNullOrWhiteSpace(currentIp))
+                {
+                    _ = webSocketService.SendMessageAsync(new { ip_address = currentIp });
+                }
             }, "HOME_WS_CONNECTED");
         }
 
@@ -345,7 +369,7 @@ namespace TadaPlay.Controls
                 string status = user.Status ?? "";
 
                 userItem.Icon = Properties.Resources.user_icon;
-                userItem.Text = nickname;
+                userItem.Text = string.IsNullOrWhiteSpace(user.IpAddress) ? nickname : $"{nickname} · {user.IpAddress}";
                 userItem.Name = username;
                 userItem.Time = status;
                 if (status == "online") userItem.TimeColor = Color.Green;
@@ -361,22 +385,42 @@ namespace TadaPlay.Controls
             rankLabel.Text = appContext.GetCurrentUser()?.Ranking ?? "Chưa có hạng";
         }
 
+        // logoutButton stays enabled through the confirm dialog and the async logout that
+        // follows it (MainForm.Home_LogoutRequested) unless guarded here - a user re-clicking
+        // it while that's in flight got a second stacked confirm dialog and a redundant logout
+        // attempt, which read as "have to click a few times to log out".
+        private bool _logoutInProgress;
+
         private void logoutButton_Click(object sender, EventArgs e)
         {
+            if (_logoutInProgress) return;
+
             AntdUI.Modal.open(new AntdUI.Modal.Config(mainForm, "Đăng xuất", "Bạn chắc chắn muốn thoát tài khoản?", AntdUI.TType.Warn)
             {
                 OnOk = config =>
                 {
+                    _logoutInProgress = true;
+                    logoutButton.Enabled = false;
+                    logoutButton.Loading = true;
                     LogoutRequested?.Invoke(this, EventArgs.Empty);
                     return true;
                 }
             });
         }
 
+        // Called by MainForm if the logout attempt failed, so the button becomes usable again -
+        // on success Home gets swapped out for the login screen and this never runs.
+        public void ResetLogoutButtonState()
+        {
+            _logoutInProgress = false;
+            logoutButton.Enabled = true;
+            logoutButton.Loading = false;
+        }
+
         // --- Start Game: sync in-game name, then launch. The record folder is already
         // being watched continuously in the background (started at app load), so a match
         // still gets picked up and uploaded even if this button is never clicked. ---
-        private void startGameButton_Click(object sender, EventArgs e)
+        private async void startGameButton_Click(object sender, EventArgs e)
         {
             if (!wireGuardVpnService.IsConnected && _externalVpnIp == null) return;
 
@@ -389,18 +433,35 @@ namespace TadaPlay.Controls
 
             User currentUser = appContext.GetCurrentUser();
 
-            if (currentUser != null && !string.IsNullOrWhiteSpace(currentUser.NickName))
+            // Copying the ~3MB launcher exe and starting it can take a noticeable moment
+            // (antivirus scanning a freshly-written exe, ShellExecute reputation checks, etc.).
+            // Use a dedicated LongRunning thread rather than Task.Run/the shared ThreadPool -
+            // the WebSocket ping timer's callback is also ThreadPool-scheduled, and this
+            // synchronous blocking I/O was starving it long enough to spike reported ping.
+            startGameButton.Enabled = false;
+            try
             {
-                GameProfileNameWriter.SyncPlayerName(gameFolder, currentUser.NickName);
-                printLog("[Bắt đầu] Đã đồng bộ tên trong game với tài khoản.", Color.DarkGreen);
-            }
+                await System.Threading.Tasks.Task.Factory.StartNew(() =>
+                {
+                    if (currentUser != null && !string.IsNullOrWhiteSpace(currentUser.Username))
+                    {
+                        GameProfileNameWriter.SyncPlayerName(gameFolder, currentUser.Username);
+                        printLog("[Bắt đầu] Đã đồng bộ tên trong game với tài khoản.", Color.DarkGreen);
+                    }
 
-            LaunchGame();
+                    LaunchGame();
+                }, System.Threading.CancellationToken.None, System.Threading.Tasks.TaskCreationOptions.LongRunning, System.Threading.Tasks.TaskScheduler.Default);
+            }
+            finally
+            {
+                UpdateStartButtonState();
+            }
         }
 
         private void LaunchGame()
         {
-            var (status, message) = GameLauncher.Launch(appContext.GetGameExecutablePath());
+            string exePath = GameExecutablePreparer.PrepareAndGetExePath(appContext.GetGameFolder(), appContext.GetGameLaunchMode());
+            var (status, message) = GameLauncher.Launch(exePath);
             Color color = status switch
             {
                 GameLauncher.LaunchStatus.Success => Color.DarkGreen,

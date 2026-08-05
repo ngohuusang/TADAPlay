@@ -9,6 +9,7 @@ using TadaPlay.Websockets.Interface;
 using TadaPlay.Websockets.Models;
 using TadaPlay.Logger;
 using TadaPlay.Contexts.Interfaces;
+using System.IO;
 using System.Net.WebSockets;
 using System.Threading;
 using TadaPlay.Contexts;
@@ -299,45 +300,64 @@ namespace TadaPlay.Websockets
         // --- Receiving Messages ---
         private async Task ReceiveLoopAsync(CancellationToken cancellationToken)
         {
-            var buffer = new byte[1024 * 4]; // 4KB buffer for incoming messages
+            // Read chunk size, not a message size limit - a user_list broadcast (all online users'
+            // id/username/full_name/ip/status) commonly exceeds this once several users are online,
+            // so it arrives as multiple frames that must be reassembled below (result.EndOfMessage)
+            // before parsing. Reading only the first frame silently truncated/dropped those larger
+            // broadcasts, which is why some online users would intermittently not show up.
+            var buffer = new byte[1024 * 4];
             try
             {
                 while (_ws.State == WebSocketState.Open && !cancellationToken.IsCancellationRequested)
                 {
+                    using var messageStream = new MemoryStream();
                     WebSocketReceiveResult result;
-                    try
-                    {
-                        result = await _ws.ReceiveAsync(new ArraySegment<byte>(buffer), cancellationToken);
-                    }
-                    catch (OperationCanceledException)
-                    {
-                        DebugLogger.Info("WebSocketService: Receive operation cancelled."); // Changed to DebugLogger.Info
-                        break; // Exit loop if cancelled
-                    }
-                    catch (WebSocketException ex)
-                    {
-                        DebugLogger.Error($"WebSocketService: Receive error (WebSocketException): {ex.Message}"); // Changed to DebugLogger.Error
-                        HandleConnectionLoss(); // Attempt reconnect on receive errors
-                        break; // Exit loop on error
-                    }
-                    catch (Exception ex)
-                    {
-                        DebugLogger.Error($"WebSocketService: Unhandled error during receive: {ex.Message}"); // Changed to DebugLogger.Error
-                        OnErrorOccurred?.Invoke(this, $"Unhandled receive error: {ex.Message}");
-                        HandleConnectionLoss();
-                        break;
-                    }
+                    bool stop = false;
 
+                    do
+                    {
+                        try
+                        {
+                            result = await _ws.ReceiveAsync(new ArraySegment<byte>(buffer), cancellationToken);
+                        }
+                        catch (OperationCanceledException)
+                        {
+                            DebugLogger.Info("WebSocketService: Receive operation cancelled."); // Changed to DebugLogger.Info
+                            stop = true;
+                            break; // Exit loop if cancelled
+                        }
+                        catch (WebSocketException ex)
+                        {
+                            DebugLogger.Error($"WebSocketService: Receive error (WebSocketException): {ex.Message}"); // Changed to DebugLogger.Error
+                            HandleConnectionLoss(); // Attempt reconnect on receive errors
+                            stop = true;
+                            break; // Exit loop on error
+                        }
+                        catch (Exception ex)
+                        {
+                            DebugLogger.Error($"WebSocketService: Unhandled error during receive: {ex.Message}"); // Changed to DebugLogger.Error
+                            OnErrorOccurred?.Invoke(this, $"Unhandled receive error: {ex.Message}");
+                            HandleConnectionLoss();
+                            stop = true;
+                            break;
+                        }
 
-                    if (result.MessageType == WebSocketMessageType.Close)
+                        if (result.MessageType == WebSocketMessageType.Close)
+                        {
+                            DebugLogger.Info($"WebSocketService: Received close frame. Status: {result.CloseStatus}, Reason: {result.CloseStatusDescription}"); // Changed to DebugLogger.Info
+                            stop = true;
+                            break; // Exit receive loop
+                        }
+
+                        messageStream.Write(buffer, 0, result.Count);
+                    } while (!result.EndOfMessage);
+
+                    if (stop) break;
+
+                    if (messageStream.Length > 0)
                     {
-                        DebugLogger.Info($"WebSocketService: Received close frame. Status: {result.CloseStatus}, Reason: {result.CloseStatusDescription}"); // Changed to DebugLogger.Info
-                        break; // Exit receive loop
-                    }
-                    else if (result.MessageType == WebSocketMessageType.Text)
-                    {
-                        var message = Encoding.UTF8.GetString(buffer, 0, result.Count);
-                        HandleIncomingMessage(message); // Process the message
+                        var message = Encoding.UTF8.GetString(messageStream.ToArray());
+                        HandleIncomingMessage(message); // Process the fully-reassembled message
                     }
                 }
             }

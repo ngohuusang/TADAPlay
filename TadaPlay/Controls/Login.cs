@@ -34,30 +34,40 @@ namespace TadaPlay.Controls
             this.passwordTextBox.KeyDown += TextBox_KeyDown;
         }
 
-        private void signInButton_Click(object sender, EventArgs e)
+        private async void signInButton_Click(object sender, EventArgs e)
         {
-            AntdUI.Spin.open(form, AntdUI.Localization.Get("Loading2", "Đang đăng nhập..."), config =>
+            // AntdUI.Spin.open takes a plain Action<Config>, not an awaitable - wrapping the
+            // async login call in .ContinueWith() without awaiting it meant the "action" delegate
+            // (and with it, whatever Spin.open uses to decide the overlay is done) returned as
+            // soon as the login call hit its first await, so the spinner never actually tracked
+            // the real request duration. Button.Loading is a property we set/clear ourselves
+            // around a real await, so it can't desync from the actual work.
+            signInButton.Loading = true;
+            signInButton.Enabled = false;
+            try
             {
-                accountService.DoLoginAsync(usernameTextBox.Text, passwordTextBox.Text, autoLoginCheckbox.Checked).ContinueWith(async task =>
+                bool success = await accountService.DoLoginAsync(usernameTextBox.Text, passwordTextBox.Text, autoLoginCheckbox.Checked);
+                if (success)
                 {
-                    if (task.IsCompletedSuccessfully && task.Result)
-                    {
-                        LoginSuccessful?.Invoke(this, EventArgs.Empty);
-                    }
-                    else
-                    {
-                        AntdUI.Modal.open(new AntdUI.Modal.Config(form, AntdUI.Localization.Get("LoginError", "Lỗi đăng nhập"), AntdUI.Localization.Get("LoginErrorContent", task.Exception!.InnerException!.Message), AntdUI.TType.Error)
-                        {
-                            CancelText = null,
-                            OkText = AntdUI.Localization.Get("CloseButton", "Đóng")
-                        });
-                       
-                    }
+                    LoginSuccessful?.Invoke(this, EventArgs.Empty);
+                }
+            }
+            catch (Exception ex)
+            {
+                AntdUI.Modal.open(new AntdUI.Modal.Config(form, AntdUI.Localization.Get("LoginError", "Lỗi đăng nhập"), AntdUI.Localization.Get("LoginErrorContent", ex.InnerException?.Message ?? ex.Message), AntdUI.TType.Error)
+                {
+                    CancelText = null,
+                    OkText = AntdUI.Localization.Get("CloseButton", "Đóng")
                 });
-            });
+            }
+            finally
+            {
+                signInButton.Loading = false;
+                signInButton.Enabled = true;
+            }
         }
 
-        private void Login_Load(object sender, EventArgs e)
+        private async void Login_Load(object sender, EventArgs e)
         {
             autoLoginCheckbox.Checked = appContext.GetAutoLoginSetting();
 
@@ -65,22 +75,29 @@ namespace TadaPlay.Controls
 
             if (appContext.GetAutoLoginSetting())
             {
-                this.Visible = false;
-                AntdUI.Spin.open(form, AntdUI.Localization.Get("Loading2", "Đang đăng nhập..."), config =>
+                // Same fix as signInButton_Click: drive the loading state from a real await
+                // instead of an un-awaited .ContinueWith() under Spin.open's Action<Config>, and
+                // show it on the button itself (instead of hiding the whole form blank) so a
+                // silent auto-login attempt still gives visible feedback instead of a blank screen.
+                signInButton.Loading = true;
+                signInButton.Enabled = false;
+                try
                 {
-                    accountService.DoAuthAsync().ContinueWith(task =>
+                    bool success = await accountService.DoAuthAsync();
+                    if (success)
                     {
-                        if (task.IsCompletedSuccessfully && task.Result)
-                        {
-                            LoginSuccessful?.Invoke(this, EventArgs.Empty);
-                        }
-                        else
-                        {
-                            this.Visible = true;
-                            AntdUI.Notification.error(form, AntdUI.Localization.Get("LoginErrorTitle", "Lỗi đăng nhập"), AntdUI.Localization.Get("LoginErrorContent", task.Exception!.InnerException!.Message), AntdUI.TAlignFrom.Bottom, Font);
-                        }
-                    });
-                });
+                        LoginSuccessful?.Invoke(this, EventArgs.Empty);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    AntdUI.Notification.error(form, AntdUI.Localization.Get("LoginErrorTitle", "Lỗi đăng nhập"), AntdUI.Localization.Get("LoginErrorContent", ex.InnerException?.Message ?? ex.Message), AntdUI.TAlignFrom.Bottom, Font);
+                }
+                finally
+                {
+                    signInButton.Loading = false;
+                    signInButton.Enabled = true;
+                }
             }
         }
 

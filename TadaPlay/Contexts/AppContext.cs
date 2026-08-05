@@ -4,6 +4,7 @@ using Newtonsoft.Json;
 using TadaPlay.Common.Models;
 using TadaPlay.Contexts.Interfaces;
 using TadaPlay.Logger;
+using TadaPlay.Utils;
 
 namespace TadaPlay.Contexts;
 
@@ -82,43 +83,68 @@ public class AppContext : IAppContext
         return AutoLogin != null && Convert.ToBoolean(AutoLogin);
     }
 
-    // Reads/writes the real Windows "Run" key rather than our own settings key, so this
-    // reflects whether Windows will actually launch the app on login - not just whatever
-    // this app last remembers, which would drift if the entry were ever removed some other
-    // way (e.g. Task Manager's Startup tab).
+    // The app's manifest requests requireAdministrator, and Windows will NOT auto-elevate an
+    // entry in the HKCU "Run" key at logon - it just silently skips launching it (no UAC prompt
+    // is ever shown for Run-key startup, so a would-be-elevated entry is refused rather than
+    // asking). A Scheduled Task with "Run with highest privileges" is the supported way to
+    // launch an elevated app at logon without a prompt, since the elevation was already granted
+    // when the (already-elevated) app registered the task. See SetRunOnStartupSetting.
+    private const string STARTUP_TASK_NAME = "TadaPlay";
+
     public void SetRunOnStartupSetting(bool runOnStartup)
     {
+        // Clean up the old HKCU Run-key entry from earlier builds, if present - it never
+        // actually launched the app (see above) and would otherwise linger alongside the task.
         try
         {
             using RegistryKey key = Registry.CurrentUser.OpenSubKey(WINDOWS_RUN_REGISTRY_KEY, writable: true);
-            if (key == null) return;
-
-            if (runOnStartup)
-            {
-                string exePath = System.Windows.Forms.Application.ExecutablePath;
-                key.SetValue(WINDOWS_RUN_VALUE_NAME, $"\"{exePath}\" --minimized");
-            }
-            else
-            {
-                key.DeleteValue(WINDOWS_RUN_VALUE_NAME, throwOnMissingValue: false);
-            }
+            key?.DeleteValue(WINDOWS_RUN_VALUE_NAME, throwOnMissingValue: false);
         }
         catch (Exception ex)
         {
-            Console.WriteLine("Error updating startup registry: " + ex.Message);
+            Console.WriteLine("Error cleaning up legacy startup registry entry: " + ex.Message);
+        }
+
+        if (runOnStartup)
+        {
+            string exePath = System.Windows.Forms.Application.ExecutablePath;
+            RunSchtasks($"/Create /TN \"{STARTUP_TASK_NAME}\" /TR \"\\\"{exePath}\\\" --minimized\" /SC ONLOGON /RL HIGHEST /F");
+        }
+        else
+        {
+            RunSchtasks($"/Delete /TN \"{STARTUP_TASK_NAME}\" /F");
         }
     }
 
     public bool GetRunOnStartupSetting()
     {
+        return RunSchtasks($"/Query /TN \"{STARTUP_TASK_NAME}\"") == 0;
+    }
+
+    private static int RunSchtasks(string arguments)
+    {
         try
         {
-            using RegistryKey key = Registry.CurrentUser.OpenSubKey(WINDOWS_RUN_REGISTRY_KEY);
-            return key?.GetValue(WINDOWS_RUN_VALUE_NAME) != null;
+            using var process = new System.Diagnostics.Process
+            {
+                StartInfo = new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = "schtasks.exe",
+                    Arguments = arguments,
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                }
+            };
+            process.Start();
+            process.WaitForExit();
+            return process.ExitCode;
         }
-        catch
+        catch (Exception ex)
         {
-            return false;
+            Console.WriteLine("Error running schtasks: " + ex.Message);
+            return -1;
         }
     }
 
@@ -127,15 +153,20 @@ public class AppContext : IAppContext
         SetRegistryValue("GameFolder", folderPath);
     }
 
-    public void SetGameExecutablePath(string exePath)
+    // Which embedded WK launcher (see GameExecutablePreparer) gets copied into the game's
+    // age2_x1 folder and started on "Bắt đầu" - replaces the old free-form exe file picker now
+    // that the launcher itself is always one of these two known, app-provided files.
+    public void SetGameLaunchMode(string mode)
     {
-        SetRegistryValue("GameExecutablePath", exePath);
+        SetRegistryValue("GameLaunchMode", mode);
     }
 
-    public string GetGameExecutablePath()
+    public string GetGameLaunchMode()
     {
-        object exePath = GetRegistryValue("GameExecutablePath");
-        return exePath != null ? exePath.ToString() : string.Empty;
+        object mode = GetRegistryValue("GameLaunchMode");
+        return string.Equals(mode?.ToString(), GameExecutablePreparer.CenterMode, StringComparison.OrdinalIgnoreCase)
+            ? GameExecutablePreparer.CenterMode
+            : GameExecutablePreparer.WideMode;
     }
 
     public void SetMinimapPosition(string position)
@@ -184,6 +215,7 @@ public class AppContext : IAppContext
     // --- Events ---
     public event EventHandler OnCurrentUserUpdated;
     public event EventHandler OnOnlineUsersUpdated;
+    public event EventHandler<IReadOnlyList<User>> OnUserCameOnline;
 
     public event EventHandler OnVpnProfileUpdated;
 
@@ -199,8 +231,23 @@ public class AppContext : IAppContext
                 var newOnlineUsers = (data["users"] as JArray)?
                                      .Select(u => JsonConvert.DeserializeObject<User>(u.ToString()))
                                      .ToList() ?? new List<User>();
+
+                var previousUsernames = _allOnlineUsers.Select(u => u.Username).ToHashSet(StringComparer.OrdinalIgnoreCase);
+                var newlyOnline = newOnlineUsers
+                    .Where(u => !string.IsNullOrEmpty(u.Username)
+                                && !string.Equals(u.Username, _currentUser?.Username, StringComparison.OrdinalIgnoreCase)
+                                && !previousUsernames.Contains(u.Username))
+                    .ToList();
+
                 _allOnlineUsers = newOnlineUsers;
                 OnOnlineUsersUpdated?.Invoke(this, EventArgs.Empty); // Notify subscribers
+
+                // Skip the very first snapshot after (re)connecting - everyone already online
+                // would otherwise be reported as "just came online".
+                if (previousUsernames.Count > 0 && newlyOnline.Count > 0)
+                {
+                    OnUserCameOnline?.Invoke(this, newlyOnline);
+                }
 
                 var updatedCurrentUser = _allOnlineUsers.FirstOrDefault(u => u.Username == _currentUser?.Username);
                 if (updatedCurrentUser != null && _currentUser != null)

@@ -20,9 +20,9 @@ public interface IAppContext
 
     public string GetGameFolder();
 
-    public void SetGameExecutablePath(string exePath);
+    public void SetGameLaunchMode(string mode);
 
-    public string GetGameExecutablePath();
+    public string GetGameLaunchMode();
 
     public void SetMinimapPosition(string position);
 
@@ -40,6 +40,7 @@ public interface IAppContext
 
     event System.EventHandler OnCurrentUserUpdated;
     event System.EventHandler OnOnlineUsersUpdated;
+    event System.EventHandler<IReadOnlyList<User>> OnUserCameOnline;
 
     event System.EventHandler OnVpnProfileUpdated;
 

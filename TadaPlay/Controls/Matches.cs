@@ -434,7 +434,10 @@ namespace TadaPlay.Controls
                 return;
             }
 
-            // Find where the game looks for replays; let the user choose if we can't.
+            // The game can only browse/play records from its own SaveGame folder - a file
+            // dropped elsewhere won't show up even when launched directly. Prefix the file name
+            // so the auto-upload watcher (Home.RecordWatchTimer_Tick) can recognize and skip
+            // this download instead of treating it as a new match to upload.
             string saveDir = RecordedGameFinder.FindSaveGameDirectory(_appContext.GetGameFolder());
             if (string.IsNullOrEmpty(saveDir))
             {
@@ -446,9 +449,10 @@ namespace TadaPlay.Controls
                 saveDir = picker.SelectedPath;
             }
 
-            string fileName = string.IsNullOrWhiteSpace(match.FileName)
-                ? $"tadaplay_match_{match.Id}.mgz"
+            string baseFileName = string.IsNullOrWhiteSpace(match.FileName)
+                ? $"match_{match.Id}.mgz"
                 : Path.GetFileName(match.FileName);
+            string fileName = RecordedGameFinder.ReplayPrefix + baseFileName;
             string destPath = Path.Combine(saveDir, fileName);
 
             _replayButton.Enabled = false;
@@ -458,10 +462,19 @@ namespace TadaPlay.Controls
             {
                 await _accountService.DownloadRecordAsync(match.Id, destPath);
 
-                // Launch the game via the executable configured in Settings, passing the
-                // downloaded record as its argument (same as double-clicking a .mgz/.mgx file)
-                // so it opens straight into the replay - no folder window, no extra dialog.
-                var (status, launchMessage) = GameLauncher.Launch(_appContext.GetGameExecutablePath(), destPath);
+                // Launch the game via the WK launcher matching the display mode configured in
+                // Settings, passing the downloaded record as its argument (same as double-clicking
+                // a .mgz/.mgx file) so it opens straight into the replay - no folder window, no
+                // extra dialog. Use a dedicated LongRunning thread rather than Task.Run/the
+                // shared ThreadPool - the WebSocket ping timer's callback is also
+                // ThreadPool-scheduled, and this synchronous blocking I/O (copying the ~3MB
+                // launcher exe, antivirus scanning it, ShellExecute reputation checks) was
+                // starving it long enough to spike reported ping.
+                var (status, launchMessage) = await System.Threading.Tasks.Task.Factory.StartNew(() =>
+                {
+                    string exePath = GameExecutablePreparer.PrepareAndGetExePath(_appContext.GetGameFolder(), _appContext.GetGameLaunchMode());
+                    return GameLauncher.Launch(exePath, destPath);
+                }, System.Threading.CancellationToken.None, System.Threading.Tasks.TaskCreationOptions.LongRunning, System.Threading.Tasks.TaskScheduler.Default);
                 _statusLabel.ForeColor = status == GameLauncher.LaunchStatus.Success ? Color.DarkGreen : Color.DarkOrange;
                 _statusLabel.Text = launchMessage;
 

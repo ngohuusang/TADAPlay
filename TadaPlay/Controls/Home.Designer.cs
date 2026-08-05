@@ -110,17 +110,20 @@ namespace TadaPlay.Controls
             // startGameButton
             //
             startGameButton.AutoSizeMode = AntdUI.TAutoSize.Auto;
+            startGameButton.BorderWidth = 0F;
             startGameButton.Dock = DockStyle.Top;
             startGameButton.Enabled = false;
-            startGameButton.Font = new Font("Segoe UI Semibold", 16F, FontStyle.Bold, GraphicsUnit.Point, 0);
+            startGameButton.Font = new Font("Segoe UI Black", 22F, FontStyle.Bold, GraphicsUnit.Point, 0);
             startGameButton.IconSvg = "PlayCircleOutlined";
+            startGameButton.IconSize = new Size(32, 32);
             startGameButton.Location = new Point(3, 98);
             startGameButton.Name = "startGameButton";
-            startGameButton.Padding = new Padding(8);
-            startGameButton.Size = new Size(531, 70);
+            startGameButton.Padding = new Padding(16, 8, 16, 8);
+            startGameButton.Radius = 16;
+            startGameButton.Size = new Size(600, 140);
             startGameButton.TabIndex = 4;
-            startGameButton.Text = "Bắt đầu";
-            startGameButton.Type = AntdUI.TTypeMini.Primary;
+            startGameButton.Text = "BẮT ĐẦU";
+            startGameButton.Type = AntdUI.TTypeMini.Error;
             startGameButton.Click += startGameButton_Click;
             //
             // pingLabel

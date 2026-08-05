@@ -149,7 +149,7 @@
             trayIcon.ContextMenuStrip = trayContextMenu;
             trayIcon.Text = "TADA Play";
             trayIcon.Visible = true;
-            trayIcon.Click += trayIcon_Click;
+            trayIcon.MouseDoubleClick += trayIcon_MouseDoubleClick;
             //
             // MainForm
             //

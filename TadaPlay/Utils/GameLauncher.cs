@@ -18,13 +18,18 @@ namespace TadaPlay.Utils
         /// as the command-line argument - the same way Windows launches the game when you
         /// double-click a .mgz/.mgx file via its file association - so the game opens straight
         /// into that replay instead of the user having to find it in the in-game Replays list.
+        ///
+        /// <paramref name="exePath"/> is always a fresh copy dropped into age2_x1 by
+        /// GameExecutablePreparer right before this call, never a permanent user-owned file - so
+        /// once the game process exits, the copy is deleted again automatically.
         /// </summary>
         public static (LaunchStatus Status, string Message) Launch(string exePath, string recordFilePath = null)
         {
             if (string.IsNullOrWhiteSpace(exePath))
             {
                 return (LaunchStatus.NotConfigured,
-                    "Chưa cấu hình file khởi chạy game. Vào Cài đặt để chọn file (vd: age2_x1-WK.exe).");
+                    "Không tìm thấy file khởi chạy game. Kiểm tra lại thư mục game trong Cài đặt " +
+                    "(phải chứa thư mục con age2_x1).");
             }
             if (!File.Exists(exePath))
             {
@@ -42,7 +47,16 @@ namespace TadaPlay.Utils
                 {
                     startInfo.Arguments = $"\"{recordFilePath}\"";
                 }
-                Process.Start(startInfo);
+                Process process = Process.Start(startInfo);
+                if (process != null)
+                {
+                    process.EnableRaisingEvents = true;
+                    process.Exited += (s, e) =>
+                    {
+                        DeleteLauncherCopy(exePath);
+                        process.Dispose();
+                    };
+                }
 
                 string message = string.IsNullOrWhiteSpace(recordFilePath)
                     ? $"Đã mở '{Path.GetFileName(exePath)}'."
@@ -53,6 +67,22 @@ namespace TadaPlay.Utils
             {
                 DebugLogger.Error($"GameLauncher: failed to launch '{exePath}': {ex.Message}");
                 return (LaunchStatus.LaunchFailed, $"Không thể mở game: {ex.Message}");
+            }
+        }
+
+        private static void DeleteLauncherCopy(string exePath)
+        {
+            try
+            {
+                if (File.Exists(exePath))
+                {
+                    File.Delete(exePath);
+                    DebugLogger.Info($"GameLauncher: deleted launcher copy '{exePath}' after game exit.");
+                }
+            }
+            catch (Exception ex)
+            {
+                DebugLogger.Error($"GameLauncher: failed to delete launcher copy '{exePath}': {ex.Message}");
             }
         }
     }

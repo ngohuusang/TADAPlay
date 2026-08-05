@@ -1,7 +1,9 @@
-﻿using System.Threading.Tasks;
+﻿using System.Linq;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 using AntdUI;
 using Microsoft.VisualBasic.Logging;
+using TadaPlay.Common.Models;
 using TadaPlay.Connections.Interface;
 using TadaPlay.Contexts.Interfaces;
 using TadaPlay.Controls;
@@ -38,6 +40,7 @@ namespace TadaPlay
             wireGuardVpnService = _wireGuardVpnService;
 
             appContext.OnVpnProfileUpdated += AppContext_OnVpnProfileUpdated;
+            appContext.OnUserCameOnline += AppContext_OnUserCameOnline;
 
             // Always run with Windows, starting hidden in the tray - no user-facing toggle for this.
             appContext.SetRunOnStartupSetting(true);
@@ -77,8 +80,19 @@ namespace TadaPlay
         {
             UiUtils.InvokeOnUiThread(this, () =>
             {
+                string configContent = appContext.GetVpnProfile()?.ConfigContent;
+
+                // The profile is cleared (set to null) as part of a normal logout - there's no
+                // config to apply in that case, so re-initializing the adapter would only
+                // produce a spurious "empty config" error rather than a real failure.
+                if (string.IsNullOrWhiteSpace(configContent))
+                {
+                    DebugLogger.Info("Home: VPN profile cleared by AppContext (e.g. logout) - skipping adapter re-init.");
+                    return;
+                }
+
                 DebugLogger.Info($"Home: Current vpn profile updated by AppContext.");
-                wireGuardVpnService.InitAdapter(appContext.GetVpnProfile()?.ConfigContent).ContinueWith(task =>
+                wireGuardVpnService.InitAdapter(configContent).ContinueWith(task =>
                 {
                     if (!task.IsCompletedSuccessfully)
                     {
@@ -87,6 +101,21 @@ namespace TadaPlay
                     }
                 });
             }, "MAINFORM_VPN_PROFILE");
+        }
+
+        private void AppContext_OnUserCameOnline(object sender, IReadOnlyList<User> newlyOnlineUsers)
+        {
+            UiUtils.InvokeOnUiThread(this, () =>
+            {
+                if (!trayIcon.Visible || newlyOnlineUsers.Count == 0) return;
+
+                string names = string.Join(", ", newlyOnlineUsers.Select(u => u.FullName ?? u.Username));
+                string message = newlyOnlineUsers.Count == 1
+                    ? $"{names} vừa online."
+                    : $"{newlyOnlineUsers.Count} người vừa online: {names}";
+
+                trayIcon.ShowBalloonTip(3000, "TADA Play", message, ToolTipIcon.Info);
+            }, "MAINFORM_USER_ONLINE");
         }
 
         private void btn_setting_Click(object sender, EventArgs e)
@@ -210,7 +239,13 @@ namespace TadaPlay
             Activate();
         }
 
-        private void trayIcon_Click(object sender, EventArgs e) => RestoreFromTray();
+        // Left-click alone does nothing - NotifyIcon.Click fires for both mouse buttons, which
+        // used to also pop the window open behind the right-click context menu. Only a genuine
+        // left double-click (or the "Mở TADA Play" menu item) restores the window now.
+        private void trayIcon_MouseDoubleClick(object sender, MouseEventArgs e)
+        {
+            if (e.Button == MouseButtons.Left) RestoreFromTray();
+        }
 
         private void trayShowMenuItem_Click(object sender, EventArgs e) => RestoreFromTray();
 
@@ -225,44 +260,46 @@ namespace TadaPlay
         {
             DebugLogger.Info("Logout requested from Home control.");
 
-            await AntdUI.Spin.open(this, AntdUI.Localization.Get("Loading2", "Đang đăng xuất..."), async config => 
+            // logoutButton.Loading (set in Home.logoutButton_Click) already gives visible loading
+            // feedback, driven straight off this same await chain - no need for a separate
+            // Spin.open overlay whose Action<Config>-based timing doesn't reliably track an
+            // async operation's real completion (see the same fix in Login.signInButton_Click).
+            try
             {
-                try
+                // Call the AccountService to handle actual logout (clears AppContext, releases VPN profile via API)
+                bool loggedOut = await accountService.DoLogoutAsync();
+
+                if (loggedOut)
                 {
-                    // Call the AccountService to handle actual logout (clears AppContext, releases VPN profile via API)
-                    bool loggedOut = await accountService.DoLogoutAsync();
-
-                    if (loggedOut)
+                    // Disconnect WebSocket and tear down the VPN tunnel
+                    webSocketService.Disconnect();
+                    if (wireGuardVpnService.IsConnected)
                     {
-                        // Disconnect WebSocket and tear down the VPN tunnel
-                        webSocketService.Disconnect();
-                        if (wireGuardVpnService.IsConnected)
-                        {
-                            await wireGuardVpnService.DisconnectAsync();
-                        }
-
-                        DebugLogger.Info("User logged out successfully. Navigating back to login.");
-                        // Navigate back to login screen
-                        ShowControl(_loginControl, "Đăng nhập", false, false);
-
-                        // Hide global buttons
-                        settingButton.Visible = false;
-                        rankingButton.Visible = false;
-                        matchesButton.Visible = false;
+                        await wireGuardVpnService.DisconnectAsync();
                     }
-                    else
-                    {
-                        DebugLogger.Error("Failed to complete logout process.");
-                        AntdUI.Notification.error(this, AntdUI.Localization.Get("LoginOutTitle", "Lỗi đăng xuất"), AntdUI.Localization.Get("LogoutErrorContent", "Đăng xuất không thành công, hãy mở lại ứng dụng và thử lại."), AntdUI.TAlignFrom.Bottom, Font);
-                    }
+
+                    DebugLogger.Info("User logged out successfully. Navigating back to login.");
+                    // Navigate back to login screen
+                    ShowControl(_loginControl, "Đăng nhập", false, false);
+
+                    // Hide global buttons
+                    settingButton.Visible = false;
+                    rankingButton.Visible = false;
+                    matchesButton.Visible = false;
                 }
-                catch (Exception ex)
+                else
                 {
-                    DebugLogger.Error($"Exception during logout: {ex.Message}");
+                    DebugLogger.Error("Failed to complete logout process.");
                     AntdUI.Notification.error(this, AntdUI.Localization.Get("LoginOutTitle", "Lỗi đăng xuất"), AntdUI.Localization.Get("LogoutErrorContent", "Đăng xuất không thành công, hãy mở lại ứng dụng và thử lại."), AntdUI.TAlignFrom.Bottom, Font);
+                    _homeControl.ResetLogoutButtonState();
                 }
-
-            });
+            }
+            catch (Exception ex)
+            {
+                DebugLogger.Error($"Exception during logout: {ex.Message}");
+                AntdUI.Notification.error(this, AntdUI.Localization.Get("LoginOutTitle", "Lỗi đăng xuất"), AntdUI.Localization.Get("LogoutErrorContent", "Đăng xuất không thành công, hãy mở lại ứng dụng và thử lại."), AntdUI.TAlignFrom.Bottom, Font);
+                _homeControl.ResetLogoutButtonState();
+            }
         }
     }
 }

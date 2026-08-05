@@ -70,7 +70,12 @@ namespace TadaPlay.Utils
             {
                 AntdUI.Modal.open(new AntdUI.Modal.Config(owner, title, message, type)
                 {
-                    CancelText = cancelText ?? AntdUI.Localization.Get("CloseButton", "Đóng"),
+                    // CancelText = null hides the Cancel button (AntdUI's documented way to do
+                    // so) - these are single-action alert dialogs, so unless a caller explicitly
+                    // asks for a two-button confirm/cancel dialog via cancelText, only show the
+                    // one dismiss button. Previously this defaulted both buttons to "Đóng",
+                    // rendering two identical "Đóng" buttons on every alert (e.g. upload errors).
+                    CancelText = cancelText,
                     OkText = okText ?? AntdUI.Localization.Get("CloseButton", "Đóng")
                 });
             }, "SHOW_ANTD_MODAL");

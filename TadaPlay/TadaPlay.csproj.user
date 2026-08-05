@@ -7,13 +7,19 @@
     <Compile Update="Controls\Login.cs">
       <SubType>UserControl</SubType>
     </Compile>
+    <Compile Update="Controls\Matches.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Update="Controls\Ranking.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
     <Compile Update="MainForm.cs">
       <SubType>Form</SubType>
     </Compile>
     <Compile Update="Controls\Setting.cs">
       <SubType>UserControl</SubType>
     </Compile>
-    <Compile Update="RoomDetailForm.cs">
+    <Compile Update="ReportWinnerDialog.cs">
       <SubType>Form</SubType>
     </Compile>
   </ItemGroup>

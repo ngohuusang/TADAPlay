@@ -1,9 +1,9 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Text;
 using TadaPlay.Logger;
-using TadaPlay.Properties;
 
 namespace TadaPlay.Utils
 {
@@ -20,6 +20,7 @@ namespace TadaPlay.Utils
     public static class ProfileTemplateEnforcer
     {
         private static readonly string[] ProfilePatterns = { "player*.nfx", "player*.nfz" };
+        private const string TemplateResourceName = "TadaPlay.Resources.player.nfz.template";
 
         /// <summary>
         /// Overwrites every player*.nfx/nfz found under <paramref name="gameFolder"/> with the
@@ -64,7 +65,7 @@ namespace TadaPlay.Utils
         /// <summary>Rebuilds the compressed profile bytes from the bundled template with a new name.</summary>
         private static byte[] BuildProfileBytes(string playerName)
         {
-            byte[] template = Resources.player_nfz_template;
+            byte[] template = LoadTemplateBytes();
             byte[] decompressed = GameProfileNameWriter.Inflate(template);
 
             byte[] nameBytes = Encoding.ASCII.GetBytes(playerName);
@@ -74,6 +75,15 @@ namespace TadaPlay.Utils
             Array.Copy(nameBytes, 0, decompressed, GameProfileNameWriter.NameOffset, copyLen);
 
             return GameProfileNameWriter.Deflate(decompressed);
+        }
+
+        private static byte[] LoadTemplateBytes()
+        {
+            using Stream resourceStream = Assembly.GetExecutingAssembly().GetManifestResourceStream(TemplateResourceName)
+                ?? throw new InvalidOperationException($"Embedded resource '{TemplateResourceName}' not found.");
+            using var ms = new MemoryStream();
+            resourceStream.CopyTo(ms);
+            return ms.ToArray();
         }
 
         private static System.Collections.Generic.IEnumerable<string> SafeEnumerate(string root, string pattern)

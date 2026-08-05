@@ -2,6 +2,7 @@
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
+    <Version>3.0.0</Version>
     <TargetFramework>net8.0-windows</TargetFramework>
     <Nullable>enable</Nullable>
     <UseWindowsForms>true</UseWindowsForms>
@@ -58,6 +59,27 @@
     <None Update="x86\wireguard.dll">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Plain manifest-resource embedding (read via Assembly.GetManifestResourceStream), not a
+         .resx System.Byte[] ResXFileRef - deserializing a System.Byte[] .resx entry needs
+         System.Resources.Extensions.dll at runtime, and that assembly isn't reliably present/
+         working the same way across build configs: it worked for tiny resources in a
+         framework-dependent Debug build, but the self-contained Release publish throws
+         "MissingMethodException: Constructor on type 'System.Byte[]' not found" for every
+         System.Byte[] resource regardless of size (found deploying WK-center.exe/WK-wide.exe,
+         then again for the much smaller player.nfz.template). Manifest-resource streams have no
+         such dependency, so they're the reliable choice for any embedded binary here. -->
+    <EmbeddedResource Include="Resources\WK-center.exe">
+      <LogicalName>TadaPlay.Resources.WK-center.exe</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Resources\WK-wide.exe">
+      <LogicalName>TadaPlay.Resources.WK-wide.exe</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Resources\player.nfz.template">
+      <LogicalName>TadaPlay.Resources.player.nfz.template</LogicalName>
+    </EmbeddedResource>
   </ItemGroup>
 
 </Project>

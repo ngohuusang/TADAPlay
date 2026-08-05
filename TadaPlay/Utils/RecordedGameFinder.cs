@@ -19,9 +19,18 @@ namespace TadaPlay.Utils
         private static readonly string[] RecordPatterns = { "*.mgz", "*.mgx" };
 
         /// <summary>
+        /// File-name prefix stamped on records downloaded for local replay (see
+        /// Matches.ReplaySelectedAsync) - these are copies of matches already on the server, so
+        /// the auto-upload watcher must skip them instead of re-uploading as a "new" match.
+        /// </summary>
+        public const string ReplayPrefix = "tada_record_";
+
+        /// <summary>
         /// Returns the most recently written recorded game under <paramref name="gameFolder"/>,
-        /// or null if none found. <paramref name="modifiedAfterUtc"/>, when set, restricts to
-        /// files written at/after that time (pass the game's start time to avoid stale records).
+        /// or null if none found. Records previously downloaded for replay (see
+        /// <see cref="ReplayPrefix"/>) are excluded. <paramref name="modifiedAfterUtc"/>, when
+        /// set, restricts to files written at/after that time (pass the game's start time to
+        /// avoid stale records).
         /// </summary>
         public static string FindLatestRecord(string gameFolder, DateTime? modifiedAfterUtc = null)
         {
@@ -36,6 +45,7 @@ namespace TadaPlay.Utils
                 var newest = RecordPatterns
                     .SelectMany(pattern => SafeEnumerate(gameFolder, pattern))
                     .Select(path => new FileInfo(path))
+                    .Where(fi => !fi.Name.StartsWith(ReplayPrefix, StringComparison.OrdinalIgnoreCase))
                     .Where(fi => !modifiedAfterUtc.HasValue || fi.LastWriteTimeUtc >= modifiedAfterUtc.Value)
                     .OrderByDescending(fi => fi.LastWriteTimeUtc)
                     .FirstOrDefault();
