@@ -37,6 +37,16 @@ namespace TadaPlay.Utils
             }
 
             bool center = string.Equals(mode, CenterMode, StringComparison.OrdinalIgnoreCase);
+
+            // TEMPORARY: copying the app-bundled WK launcher into age2_x1 is disabled. Launch the
+            // game's own existing WK exe directly instead (the downloaded game already ships it).
+            // Re-enable the copy block below to restore the bundled-launcher behaviour.
+            string existingExe = Path.Combine(age2X1Dir, center ? "age2-WK-center.exe" : "age2-WK.exe");
+            if (!File.Exists(existingExe))
+                DebugLogger.Error($"GameExecutablePreparer: expected game launcher not found: '{existingExe}'.");
+            return existingExe; // returned even if missing - GameLauncher reports FileMissing cleanly.
+
+            /* Copy the app-bundled WK launcher into age2_x1 (disabled temporarily - see above):
             string resourceName = center ? CenterExeResourceName : WideExeResourceName;
             string fileName = center ? "WK-center.exe" : "WK-wide.exe";
             string destPath = Path.Combine(age2X1Dir, fileName);
@@ -54,6 +64,7 @@ namespace TadaPlay.Utils
                 DebugLogger.Error($"GameExecutablePreparer: failed to copy '{fileName}' to '{destPath}': {ex.Message}");
                 return null;
             }
+            */
         }
     }
 }

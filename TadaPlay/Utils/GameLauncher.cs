@@ -53,7 +53,10 @@ namespace TadaPlay.Utils
                     process.EnableRaisingEvents = true;
                     process.Exited += (s, e) =>
                     {
-                        DeleteLauncherCopy(exePath);
+                        // TEMPORARY: deleting the launcher copy on exit is disabled - the launched exe
+                        // is now the game's own WK exe (GameExecutablePreparer copy is disabled), so it
+                        // must NOT be deleted. Re-enable this together with the copy block.
+                        // DeleteLauncherCopy(exePath);
                         process.Dispose();
                     };
                 }
