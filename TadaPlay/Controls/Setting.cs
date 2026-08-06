@@ -118,7 +118,7 @@ namespace TadaPlay.Controls
             {
                 Text = "Thư mục game",
                 Dock = DockStyle.Top,
-                Height = 140,
+                Height = 196,
                 Padding = new Padding(10)
             };
 
@@ -151,8 +151,26 @@ namespace TadaPlay.Controls
                 }
             };
 
+            // Opens the in-app hotkey editor for the currently-configured game folder, so players
+            // can rebind keys / import a .hki layout without going into the game's own options menu.
+            var hotkeyButton = new Button { Text = "Chỉnh sửa phím tắt trong game...", Dock = DockStyle.Top, Height = 38 };
+            hotkeyButton.Click += (s, e) =>
+            {
+                string folder = _appContext.GetGameFolder();
+                if (string.IsNullOrWhiteSpace(folder) || !System.IO.Directory.Exists(folder))
+                {
+                    AntdUI.Modal.open(new AntdUI.Modal.Config(form, "Chưa có thư mục game",
+                        "Hãy chọn thư mục cài đặt AoE2 trước khi chỉnh sửa phím tắt.", AntdUI.TType.Warn)
+                    { CancelText = null, OkText = "Đóng" });
+                    return;
+                }
+                using var editor = new HotkeyEditorForm(folder);
+                editor.ShowDialog(form);
+            };
+
             // Dock=Top within the same parent stacks in reverse add order: the group's
             // GroupBox padding puts the frame around everything, so add bottom-most first.
+            group.Controls.Add(hotkeyButton);
             group.Controls.Add(browseButton);
             group.Controls.Add(pathBox);
             group.Controls.Add(label);
