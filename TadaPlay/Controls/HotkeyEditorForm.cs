@@ -17,7 +17,8 @@ namespace TadaPlay.Controls
     public class HotkeyEditorForm : Form
     {
         private readonly string _gameFolder;
-        private readonly List<string> _slotFiles;      // player*.hki found under the game folder
+        private readonly string _hotkeyDir;             // the Voobly "Game Data" folder the game reads player*.hki from
+        private readonly List<string> _slotFiles;       // player*.hki in _hotkeyDir
         private Dictionary<int, string> _strings;
 
         private ComboBox _slotCombo;
@@ -44,7 +45,8 @@ namespace TadaPlay.Controls
         public HotkeyEditorForm(string gameFolder)
         {
             _gameFolder = gameFolder;
-            _slotFiles = FindSlotFiles(gameFolder);
+            _hotkeyDir = ResolveHotkeyDirectory(gameFolder);
+            _slotFiles = FindSlotFiles(_hotkeyDir);
 
             Text = "Chỉnh sửa phím tắt trong game";
             StartPosition = FormStartPosition.CenterParent;
@@ -83,6 +85,9 @@ namespace TadaPlay.Controls
             var importButton = new Button { Text = "Nhập từ tệp...", Location = new Point(460, 9), Width = 130, Height = 30 };
             importButton.Click += ImportFromFile;
 
+            var deleteButton = new Button { Text = "Xóa hồ sơ", Location = new Point(600, 9), Width = 110, Height = 30 };
+            deleteButton.Click += DeleteSelectedSlot;
+
             var hint = new Label
             {
                 Text = "Nhấn vào ô phím để đặt lại. Đang thu phím: nhấn phím mới, hoặc Esc để hủy, Delete để bỏ gán.",
@@ -95,6 +100,7 @@ namespace TadaPlay.Controls
             top.Controls.Add(slotLabel);
             top.Controls.Add(_slotCombo);
             top.Controls.Add(importButton);
+            top.Controls.Add(deleteButton);
             top.Controls.Add(hint);
 
             _listPanel = new Panel { Dock = DockStyle.Fill, AutoScroll = true, Padding = new Padding(12, 6, 12, 6) };
@@ -120,13 +126,53 @@ namespace TadaPlay.Controls
             Controls.Add(top);
         }
 
-        private static List<string> FindSlotFiles(string gameFolder)
+        // The game loads player*.hki from the Voobly data mod's "Game Data" folder
+        // (e.g. "<gameFolder>\Voobly Mods\AOC\Data Mods\v1.5 Game Data"), NOT the game root - so
+        // reads and writes must target that folder for edits to reach the copy the game actually uses.
+        private static string ResolveHotkeyDirectory(string gameFolder)
         {
-            var list = new List<string>();
-            if (string.IsNullOrWhiteSpace(gameFolder) || !Directory.Exists(gameFolder)) return list;
+            if (string.IsNullOrWhiteSpace(gameFolder)) return gameFolder;
+
+            string dataMods = Path.Combine(gameFolder, "Voobly Mods", "AOC", "Data Mods");
+            if (Directory.Exists(dataMods))
+            {
+                try
+                {
+                    // Prefer a "* Game Data" subfolder that already holds player*.hki; else the first
+                    // one found; else fall back to the conventional v1.5 path.
+                    var gameDataDirs = Directory.EnumerateDirectories(dataMods, "*Game Data").ToList();
+                    string withHki = gameDataDirs.FirstOrDefault(
+                        d => Directory.EnumerateFiles(d, "player*.hki").Any());
+                    if (withHki != null) return withHki;
+                    if (gameDataDirs.Count > 0) return gameDataDirs[0];
+                }
+                catch (Exception ex)
+                {
+                    DebugLogger.Warn($"HotkeyEditor: resolving Game Data folder failed: {ex.Message}");
+                }
+                return Path.Combine(dataMods, "v1.5 Game Data");
+            }
+
+            // No Voobly layout: fall back to wherever a player*.hki already lives, else the game folder.
             try
             {
-                list = Directory.EnumerateFiles(gameFolder, "player*.hki", SearchOption.AllDirectories)
+                string any = Directory.EnumerateFiles(gameFolder, "player*.hki", SearchOption.AllDirectories)
+                    .FirstOrDefault();
+                if (any != null) return Path.GetDirectoryName(any);
+            }
+            catch { /* fall through to gameFolder */ }
+            return gameFolder;
+        }
+
+        private static List<string> FindSlotFiles(string hotkeyDir)
+        {
+            var list = new List<string>();
+            if (string.IsNullOrWhiteSpace(hotkeyDir) || !Directory.Exists(hotkeyDir)) return list;
+            try
+            {
+                // Only this folder - not subfolders - so the game-root or a nested "Data" copy can't
+                // shadow the real slot files.
+                list = Directory.EnumerateFiles(hotkeyDir, "player*.hki", SearchOption.TopDirectoryOnly)
                     .OrderBy(p => p, StringComparer.OrdinalIgnoreCase)
                     .ToList();
             }
@@ -154,6 +200,55 @@ namespace TadaPlay.Controls
                 DebugLogger.Error($"HotkeyEditor: load '{_slotFiles[idx]}' failed: {ex.Message}");
                 MessageBox.Show(this, $"Không đọc được tệp phím tắt:\n{ex.Message}", "Lỗi",
                     MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        private void DeleteSelectedSlot(object sender, EventArgs e)
+        {
+            CancelCapture();
+            int idx = _slotCombo.SelectedIndex;
+            if (idx < 0 || idx >= _slotFiles.Count) { SetStatus("Chưa chọn hồ sơ để xóa."); return; }
+
+            string path = _slotFiles[idx];
+            var r = MessageBox.Show(this,
+                $"Xóa tệp phím tắt '{Path.GetFileName(path)}'?\nHành động này không thể hoàn tác.",
+                "Xóa hồ sơ phím tắt", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+            if (r != DialogResult.Yes) return;
+
+            try
+            {
+                File.Delete(path);
+                DebugLogger.Info($"HotkeyEditor: deleted '{path}'.");
+            }
+            catch (Exception ex)
+            {
+                DebugLogger.Error($"HotkeyEditor: delete '{path}' failed: {ex.Message}");
+                MessageBox.Show(this, $"Xóa thất bại:\n{ex.Message}", "Lỗi",
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
+
+            // Rebuild the slot list from disk, keeping the selection near where it was.
+            _slotCombo.SelectedIndexChanged -= OnSlotChanged;
+            _slotFiles.Clear();
+            _slotFiles.AddRange(FindSlotFiles(_hotkeyDir));
+            _slotCombo.Items.Clear();
+            foreach (string f in _slotFiles) _slotCombo.Items.Add(Path.GetFileName(f));
+
+            if (_slotFiles.Count > 0)
+            {
+                _slotCombo.SelectedIndex = Math.Min(idx, _slotFiles.Count - 1);
+                _slotCombo.SelectedIndexChanged += OnSlotChanged;
+                LoadSelectedSlot();
+                SetStatus($"Đã xóa {Path.GetFileName(path)}.");
+            }
+            else
+            {
+                _slotCombo.SelectedIndexChanged += OnSlotChanged;
+                _file = null;
+                _dirty = false;
+                RenderList();
+                SetStatus($"Đã xóa {Path.GetFileName(path)}. Không còn hồ sơ nào.");
             }
         }
 
@@ -327,7 +422,7 @@ namespace TadaPlay.Controls
             {
                 Title = "Chọn tệp phím tắt (.hki) để nhập",
                 Filter = "Tệp phím tắt AoE2 (*.hki)|*.hki|Tất cả tệp (*.*)|*.*",
-                InitialDirectory = _slotFiles.Count > 0 ? Path.GetDirectoryName(_slotFiles[0]) : _gameFolder,
+                InitialDirectory = Directory.Exists(_hotkeyDir) ? _hotkeyDir : _gameFolder,
             };
             if (dlg.ShowDialog(this) != DialogResult.OK) return;
 
@@ -357,12 +452,9 @@ namespace TadaPlay.Controls
                 List<string> targets;
                 if (allSlots)
                 {
-                    // Write the layout to player1..player5 so it applies whichever profile the game
-                    // has selected. Base the folder on an existing slot, else the game folder root.
-                    string dir = (_slotFiles.Count > 0
-                        ? Path.GetDirectoryName(_slotFiles[0])
-                        : _gameFolder) ?? _gameFolder;
-                    targets = Enumerable.Range(1, 5).Select(i => Path.Combine(dir, $"player{i}.hki")).ToList();
+                    // Write the layout to player1..player5 in the game's hotkey folder so it applies
+                    // whichever profile the game has selected.
+                    targets = Enumerable.Range(1, 5).Select(i => Path.Combine(_hotkeyDir, $"player{i}.hki")).ToList();
                 }
                 else if (_slotCombo.SelectedIndex >= 0 && _slotCombo.SelectedIndex < _slotFiles.Count)
                 {
@@ -370,8 +462,9 @@ namespace TadaPlay.Controls
                 }
                 else
                 {
-                    // No existing slot selected (e.g. after importing into an empty folder) - create player1.
-                    targets = new List<string> { Path.Combine(_gameFolder, "player1.hki") };
+                    // No existing slot selected (e.g. after importing into an empty folder) - create
+                    // player1 in the game's hotkey folder.
+                    targets = new List<string> { Path.Combine(_hotkeyDir, "player1.hki") };
                 }
 
                 foreach (string target in targets) _file.Save(target);
@@ -399,7 +492,7 @@ namespace TadaPlay.Controls
                 ? _slotFiles[_slotCombo.SelectedIndex]
                 : justSaved.FirstOrDefault();
 
-            var refreshed = FindSlotFiles(_gameFolder);
+            var refreshed = FindSlotFiles(_hotkeyDir);
             if (refreshed.Count == _slotFiles.Count) return; // nothing new to show
 
             _slotFiles.Clear();

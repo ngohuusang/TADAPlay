@@ -8,13 +8,18 @@ namespace TadaPlay.Utils
 {
     /// <summary>
     /// Resolves AoE2 hotkey command string-ids (e.g. 19214 -> "Economic Buildings") to display
-    /// text by reading the STRINGTABLE resources out of the game's own language*.dll files.
+    /// text by reading the game's own language*.dll files, then overlaying any language.ini text
+    /// override the data mod ships.
     ///
     /// The DLLs are plain Win32 PE resource DLLs: STRINGTABLE (resource type 6) stores strings in
     /// blocks of 16, each string prefixed by a uint16 character count and encoded UTF-16LE. String
     /// number N lives in block (N/16)+1 at index N%16. We parse the PE/.rsrc directory ourselves so
     /// there's no LoadLibrary of a foreign-architecture DLL and no dependency on the current locale.
-    /// Results are cached per source folder.
+    ///
+    /// HD-era data mods (like the v1.5 mod this app targets) add newer content - Palisade Gate,
+    /// Feitoria, Genitour, Siege Tower, etc. - whose names live only in a "id=text" language.ini,
+    /// not the DLLs. The game reads that .ini, so we do too and let it override the DLL text; that's
+    /// what makes those commands show real names instead of a raw [id]. Results are cached per folder.
     /// </summary>
     public static class GameLanguageStrings
     {
@@ -47,8 +52,15 @@ namespace TadaPlay.Utils
                         DebugLogger.Warn($"GameLanguageStrings: failed reading '{dll}': {ex.Message}");
                     }
                 }
+                int fromDlls = strings.Count;
 
-                DebugLogger.Info($"GameLanguageStrings: resolved {strings.Count} strings from '{gameFolder}'.");
+                // Overlay the mod's language.ini on top (it wins) - that's where the newer, HD-era
+                // command names live and how the game itself resolves them.
+                int fromIni = 0;
+                foreach (string ini in FindLanguageInis(gameFolder))
+                    fromIni += MergeIni(ini, strings);
+
+                DebugLogger.Info($"GameLanguageStrings: resolved {strings.Count} strings from '{gameFolder}' ({fromDlls} from DLLs, {fromIni} added/overridden by language.ini).");
                 _cachedFolder = gameFolder;
                 _cache = strings;
                 return strings;
@@ -87,6 +99,57 @@ namespace TadaPlay.Utils
                 }
             }
             return result;
+        }
+
+        // The mod's language.ini usually lives in its "Data Mods\...\Game Data" folder rather than
+        // the game root, so search the whole tree. Only the exact "language.ini" is the one the game
+        // actually loads - the "language_en.ini" / "language_es.ini" siblings are inactive variants a
+        // user copies over language.ini to switch languages, so matching them would let a non-active
+        // (e.g. Spanish) file override the active text.
+        private static IEnumerable<string> FindLanguageInis(string gameFolder)
+        {
+            if (string.IsNullOrWhiteSpace(gameFolder) || !Directory.Exists(gameFolder))
+                return Array.Empty<string>();
+            try
+            {
+                // The search pattern is the literal name (no wildcard) so language_xx.ini is excluded.
+                return Directory.EnumerateFiles(gameFolder, "language.ini", SearchOption.AllDirectories);
+            }
+            catch (Exception ex)
+            {
+                DebugLogger.Warn($"GameLanguageStrings: enumerate language.ini failed: {ex.Message}");
+                return Array.Empty<string>();
+            }
+        }
+
+        // Parses "id=text" lines (skips blanks, comments and [sections]) and writes them into the
+        // map, overriding any DLL value. Latin-1 so the game's Windows-1252 text loads without a
+        // code-page provider; command names are plain ASCII so this is lossless for our purposes.
+        private static int MergeIni(string path, Dictionary<int, string> into)
+        {
+            int n = 0;
+            try
+            {
+                foreach (string raw in File.ReadLines(path, Encoding.Latin1))
+                {
+                    string line = raw.TrimStart();
+                    if (line.Length == 0 || line[0] == ';' || line[0] == '[' ||
+                        (line.Length > 1 && line[0] == '/' && line[1] == '/'))
+                        continue;
+
+                    int eq = line.IndexOf('=');
+                    if (eq <= 0) continue;
+                    if (!int.TryParse(line.Substring(0, eq).Trim(), out int id)) continue;
+
+                    into[id] = line.Substring(eq + 1).TrimEnd('\r', '\n');
+                    n++;
+                }
+            }
+            catch (Exception ex)
+            {
+                DebugLogger.Warn($"GameLanguageStrings: failed reading '{path}': {ex.Message}");
+            }
+            return n;
         }
 
         private static void ReadStringTables(byte[] d, Dictionary<int, string> into)
