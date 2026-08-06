@@ -161,6 +161,18 @@ namespace TadaPlay.Controls
         {
             var setting = new Setting(mainForm, appContext, accountService);
             AntdUI.Modal.open(mainForm, AntdUI.Localization.Get("Setting", "Cài đặt"), setting);
+            // The game folder may have been set/changed in Settings - refresh the primary button
+            // (it toggles between "Tải game" and "Bắt đầu").
+            UpdateStartButtonState();
+        }
+
+        // Opens the game downloader; on completion the game folder is configured, so refresh the
+        // primary button (it flips from "Tải game" to "Bắt đầu").
+        private void OpenGameDownload()
+        {
+            using var downloader = new GameDownloadForm(appContext);
+            downloader.ShowDialog(mainForm);
+            UpdateStartButtonState();
         }
 
         // Runs for the lifetime of the app, independent of whether Start Game was clicked.
@@ -345,9 +357,35 @@ namespace TadaPlay.Controls
             }
         }
 
+        // True only when the configured folder actually contains the game (the age2_x1 folder), not
+        // merely that some path is set - a moved/deleted/empty folder should still offer the download.
+        private bool IsGameInstalled()
+        {
+            string folder = appContext.GetGameFolder();
+            return !string.IsNullOrWhiteSpace(folder)
+                && System.IO.Directory.Exists(System.IO.Path.Combine(folder, "age2_x1"));
+        }
+
         private void UpdateStartButtonState()
         {
-            startGameButton.Enabled = (wireGuardVpnService.IsConnected || _externalVpnIp != null) && !_uploadInProgress;
+            // Give the primary button a distinct, mode-appropriate look: a bold red PLAY button when
+            // the game is ready, and an inviting blue DOWNLOAD button when it still needs installing.
+            // Download doesn't need a VPN, so it's always enabled.
+            startGameButton.WaveSize = 6;
+            if (IsGameInstalled())
+            {
+                startGameButton.Text = "BẮT ĐẦU";
+                startGameButton.IconSvg = "PlayCircleOutlined";
+                startGameButton.Type = AntdUI.TTypeMini.Error;
+                startGameButton.Enabled = (wireGuardVpnService.IsConnected || _externalVpnIp != null) && !_uploadInProgress;
+            }
+            else
+            {
+                startGameButton.Text = "TẢI GAME";
+                startGameButton.IconSvg = "DownloadOutlined";
+                startGameButton.Type = AntdUI.TTypeMini.Primary;
+                startGameButton.Enabled = !_uploadInProgress;
+            }
         }
 
         // --- WebSocket wiring ---
@@ -461,14 +499,15 @@ namespace TadaPlay.Controls
         // still gets picked up and uploaded even if this button is never clicked. ---
         private async void startGameButton_Click(object sender, EventArgs e)
         {
-            if (!wireGuardVpnService.IsConnected && _externalVpnIp == null) return;
-
-            string gameFolder = appContext.GetGameFolder();
-            if (string.IsNullOrWhiteSpace(gameFolder))
+            // No game installed yet -> the button acts as "Tải game": open the downloader (no VPN
+            // needed). Once it's installed, the button flips back to "Bắt đầu".
+            if (!IsGameInstalled())
             {
-                EnsureGameFolderConfigured();
+                OpenGameDownload();
                 return;
             }
+
+            if (!wireGuardVpnService.IsConnected && _externalVpnIp == null) return;
 
             User currentUser = appContext.GetCurrentUser();
 

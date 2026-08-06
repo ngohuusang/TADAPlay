@@ -118,7 +118,7 @@ namespace TadaPlay.Controls
             {
                 Text = "Thư mục game",
                 Dock = DockStyle.Top,
-                Height = 196,
+                Height = 244,
                 Padding = new Padding(10)
             };
 
@@ -168,9 +168,23 @@ namespace TadaPlay.Controls
                 editor.ShowDialog(form);
             };
 
+            // Downloads + installs the game from the TADA server and points the game folder at it,
+            // so a new user can get ready to play without hunting for an existing AoE2 install.
+            var downloadButton = new Button { Text = "Tải game về máy...", Dock = DockStyle.Top, Height = 38 };
+            downloadButton.Click += (s, e) =>
+            {
+                using var downloader = new GameDownloadForm(_appContext);
+                if (downloader.ShowDialog(form) == DialogResult.OK &&
+                    !string.IsNullOrWhiteSpace(downloader.InstalledGameFolder))
+                {
+                    pathBox.Text = downloader.InstalledGameFolder;
+                }
+            };
+
             // Dock=Top within the same parent stacks in reverse add order: the group's
             // GroupBox padding puts the frame around everything, so add bottom-most first.
             group.Controls.Add(hotkeyButton);
+            group.Controls.Add(downloadButton);
             group.Controls.Add(browseButton);
             group.Controls.Add(pathBox);
             group.Controls.Add(label);
