@@ -232,6 +232,40 @@ public class AccountService : IAccountService
         return apiResponse;
     }
 
+    // Reports the player's actual in-game profile name (read from player.nfz) to the server,
+    // which stores it as users.in_game_name - the key the replay matcher uses to attribute ELO.
+    // A 409 (name already owned by another account) is returned as Conflict=true rather than
+    // thrown, so the caller can prompt the user to rename their profile in-game.
+    public async Task<SetInGameNameResponse> SetInGameNameAsync(string inGameName)
+    {
+        if (string.IsNullOrWhiteSpace(inGameName)) return null;
+
+        var body = new { in_game_name = inGameName };
+        var content = new StringContent(JsonConvert.SerializeObject(body), Encoding.UTF8, "application/json");
+        _httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _appContext.GetJwtTokenSetting());
+        var response = await _httpClient.PostAsync(BASE_URL + "?action=set_in_game_name", content);
+
+        var responseBody = await response.Content.ReadAsStringAsync();
+        var apiResponse = JsonConvert.DeserializeObject<SetInGameNameResponse>(responseBody);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+            {
+                throw new LoginException("Lỗi đăng nhập:" + apiResponse?.Message);
+            }
+            // 409 Conflict is an expected, actionable outcome (name taken) - hand it back to the
+            // caller instead of throwing so it can be shown to the user.
+            if (response.StatusCode == System.Net.HttpStatusCode.Conflict)
+            {
+                return apiResponse ?? new SetInGameNameResponse { Success = false, Conflict = true };
+            }
+            throw new Exception("Lỗi cập nhật tên trong game:" + apiResponse?.Message);
+        }
+
+        return apiResponse;
+    }
+
     public async Task<GameRecordUploadResponse> UploadGameRecordAsync(GameRecordMetadata metadata, string recordFilePath)
     {
         if (metadata == null) throw new ArgumentNullException(nameof(metadata));

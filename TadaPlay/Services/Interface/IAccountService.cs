@@ -19,6 +19,8 @@ public interface IAccountService
 
     Task<UpdateIpResponse> UpdateCurrentIPToServer(string currentIp);
 
+    Task<SetInGameNameResponse> SetInGameNameAsync(string inGameName);
+
     Task<GameRecordUploadResponse> UploadGameRecordAsync(GameRecordMetadata metadata, string recordFilePath);
 
     Task<ReportResultResponse> ReportGameResultAsync(long recordId, int winningTeam);

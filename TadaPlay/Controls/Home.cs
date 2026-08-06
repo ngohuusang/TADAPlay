@@ -50,12 +50,13 @@ namespace TadaPlay.Controls
         private const int StableTicksToFinish = 3; // ~15s with no further writes
         private const int GiveUpWatchingFileAfterMinutes = 240; // give up on this one file, not the whole watcher
 
-        // The game keeps rewriting its own player*.nfx/nfz profile files while the player
-        // browses its in-game profile picker, so a one-off name sync (Start Game click) isn't
-        // enough to keep the account name "selected" there. Re-stamp them on a short interval,
-        // for the lifetime of the app, independent of whether Start Game was clicked.
-        private System.Windows.Forms.Timer _profileEnforceTimer;
-        private const int ProfileEnforceIntervalMs = 10000;
+        // Profile-name watcher: polls player.nfz's name and reports it to the server whenever it
+        // changes (the player renamed their in-game profile). Only re-reports on an actual change,
+        // so the server isn't hit on every poll. See ReportInGameNameAsync.
+        private System.Windows.Forms.Timer _profileWatchTimer;
+        private string _lastSyncedInGameName; // last name we successfully synced OR warned about
+        private const int ProfileWatchIntervalMs = 8000;
+
 
         public event EventHandler LogoutRequested;
 
@@ -105,7 +106,12 @@ namespace TadaPlay.Controls
 
             UpdateUiBasedOnLobbyState();
             StartRecordWatcher();
-            StartProfileEnforcer();
+            // TadaPlay no longer WRITES the in-game profile at all. The old ProfileTemplateEnforcer
+            // rewrote player.nfz every 10s, which wiped the game's profile<->hotkey link and reset
+            // the player's hotkeys. Instead we WATCH player.nfz and, whenever the name changes, READ
+            // it and report it to the server as the account's locked identity for replay/ELO matching
+            // (see the server's set_in_game_name endpoint + matchPlayersToAccounts).
+            StartProfileWatcher();
 
             webSocketService.Connect();
 
@@ -171,26 +177,59 @@ namespace TadaPlay.Controls
             printLog("[Theo dõi] Đang theo dõi thư mục record để tự động tải lên khi có trận đấu mới.", Color.RoyalBlue);
         }
 
-        // Runs for the lifetime of the app: repeatedly forces the account name back into every
-        // in-game profile file, since the game itself keeps rewriting them.
-        private void StartProfileEnforcer()
+        // Polls player.nfz on a short interval; ReportInGameNameAsync only actually hits the server
+        // when the name has changed, so the game can rewrite the profile as often as it likes.
+        private void StartProfileWatcher()
         {
-            if (_profileEnforceTimer == null)
+            if (_profileWatchTimer == null)
             {
-                _profileEnforceTimer = new System.Windows.Forms.Timer { Interval = ProfileEnforceIntervalMs };
-                _profileEnforceTimer.Tick += ProfileEnforceTimer_Tick;
+                _profileWatchTimer = new System.Windows.Forms.Timer { Interval = ProfileWatchIntervalMs };
+                _profileWatchTimer.Tick += (s, e) => _ = ReportInGameNameAsync();
             }
-            _profileEnforceTimer.Start();
-            ProfileEnforceTimer_Tick(this, EventArgs.Empty); // don't wait a full interval for the first pass
+            _profileWatchTimer.Start();
+            _ = ReportInGameNameAsync(); // sync the current name immediately, don't wait a full interval
         }
 
-        private void ProfileEnforceTimer_Tick(object sender, EventArgs e)
+        // Reads the player's actual in-game profile name (from player.nfz) and, if it changed since
+        // last time, reports it to the server as the account's locked identity for replay/ELO matching.
+        // Replaces the old approach of FORCING the profile name to the username (which reset in-game
+        // hotkeys). Best-effort: failures are logged and never block the app or launching the game.
+        private async Task ReportInGameNameAsync()
         {
-            string gameFolder = appContext.GetGameFolder();
-            string playerName = appContext.GetCurrentUser()?.Username;
-            if (string.IsNullOrWhiteSpace(gameFolder) || string.IsNullOrWhiteSpace(playerName)) return;
+            try
+            {
+                string gameFolder = appContext.GetGameFolder();
+                string inGameName = GameProfileNameReader.ReadActiveName(gameFolder);
+                if (string.IsNullOrWhiteSpace(inGameName)) return;
 
-            ProfileTemplateEnforcer.EnforceOnce(gameFolder, playerName);
+                // Unchanged since the last sync/warning - nothing to do (keeps the poll cheap).
+                if (string.Equals(inGameName, _lastSyncedInGameName, StringComparison.OrdinalIgnoreCase)) return;
+
+                var result = await accountService.SetInGameNameAsync(inGameName);
+                if (result == null) return;
+
+                if (!result.Success && result.Conflict)
+                {
+                    // Remember it so we don't re-warn every poll; the server has also logged this
+                    // collision to its smurf list for review.
+                    _lastSyncedInGameName = inGameName;
+                    UiUtils.InvokeOnUiThread(this, () =>
+                        AntdUI.Notification.warn(mainForm, "Tên trong game bị trùng",
+                            $"Tên hồ sơ trong game \"{inGameName}\" đã được người chơi khác sử dụng. " +
+                            "Hãy đổi tên hồ sơ trong game để trận đấu được tính điểm chính xác.",
+                            AntdUI.TAlignFrom.Bottom, Font), "HOME_INGAME_NAME_CONFLICT");
+                }
+                else if (result.Success)
+                {
+                    _lastSyncedInGameName = inGameName;
+                    printLog($"[Hồ sơ] Đã đồng bộ tên trong game \"{inGameName}\" với máy chủ.", Color.DarkGreen);
+                }
+                // Other (transient) failures: leave _lastSyncedInGameName so the next poll retries.
+            }
+            catch (Exception ex)
+            {
+                DebugLogger.Error($"Home: report in-game name failed: {ex.Message}");
+            }
         }
 
         // --- VPN wiring ---
@@ -441,14 +480,13 @@ namespace TadaPlay.Controls
             startGameButton.Enabled = false;
             try
             {
+                // Report the player's current in-game name (read, not written) before launching, so
+                // the server has their latest identity for the match they're about to play. Fire and
+                // forget - it must not delay or block starting the game.
+                _ = ReportInGameNameAsync();
+
                 await System.Threading.Tasks.Task.Factory.StartNew(() =>
                 {
-                    if (currentUser != null && !string.IsNullOrWhiteSpace(currentUser.Username))
-                    {
-                        GameProfileNameWriter.SyncPlayerName(gameFolder, currentUser.Username);
-                        printLog("[Bắt đầu] Đã đồng bộ tên trong game với tài khoản.", Color.DarkGreen);
-                    }
-
                     LaunchGame();
                 }, System.Threading.CancellationToken.None, System.Threading.Tasks.TaskCreationOptions.LongRunning, System.Threading.Tasks.TaskScheduler.Default);
             }
