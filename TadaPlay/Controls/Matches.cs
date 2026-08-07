@@ -68,10 +68,9 @@ namespace TadaPlay.Controls
             rowSizer.Images.Add(new Bitmap(1, 32));
             _listView.SmallImageList = rowSizer;
             _listView.Columns.Add("Thời gian", 130, HorizontalAlignment.Left);
-            _listView.Columns.Add("Phòng", 120, HorizontalAlignment.Left);
-            _listView.Columns.Add("Đội 1", 170, HorizontalAlignment.Left);
-            _listView.Columns.Add("Đội 2", 170, HorizontalAlignment.Left);
-            _listView.Columns.Add("Kết quả", 100, HorizontalAlignment.Left);
+            _listView.Columns.Add("Đội 1", 210, HorizontalAlignment.Left);
+            _listView.Columns.Add("Đội 2", 210, HorizontalAlignment.Left);
+            _listView.Columns.Add("Kết quả", 110, HorizontalAlignment.Left);
             _listView.Columns.Add("MVP", 130, HorizontalAlignment.Left);
             _listView.SelectedIndexChanged += (s, e) => UpdateReplayButton();
             _listView.DoubleClick += (s, e) => ShowScoreboard();
@@ -109,21 +108,40 @@ namespace TadaPlay.Controls
                 && _listView.SelectedItems[0].Tag is MatchSummary m && m.CanReplay;
         }
 
-        private static string TeamText(MatchSummary m, string teamKey)
+        // Names for a team: prefer matched account usernames; fall back to the parsed replay's
+        // in-game names grouped by team (so the team lists show up even before the record is
+        // matched to accounts).
+        private static string TeamText(MatchSummary m, int team)
         {
-            if (m.Teams != null && m.Teams.TryGetValue(teamKey, out var members) && members != null && members.Length > 0)
+            if (m.Teams != null && m.Teams.TryGetValue(team.ToString(), out var members) && members != null && members.Length > 0)
             {
                 return string.Join(", ", members);
+            }
+            if (m.Players != null)
+            {
+                var names = m.Players.Where(p => p.Team == team && !string.IsNullOrWhiteSpace(p.Name))
+                                     .Select(p => p.Name);
+                string joined = string.Join(", ", names);
+                if (!string.IsNullOrEmpty(joined)) return joined;
             }
             return "—";
         }
 
+        // The winning team (1 or 2): prefer the host-reported result, else the parser's guess
+        // carried on each player's winner flag. Null when neither is known.
+        private static int? EffectiveWinnerTeam(MatchSummary m)
+        {
+            if (m.WinnerTeam == 1 || m.WinnerTeam == 2) return m.WinnerTeam;
+            var guessed = m.Players?.FirstOrDefault(p => p.Winner == true && p.Team.HasValue)?.Team;
+            return (guessed == 1 || guessed == 2) ? guessed : (int?)null;
+        }
+
         private static string ResultText(MatchSummary m)
         {
-            if (m.Status == "needs_review") return "Chưa xác định";
-            if (m.WinnerTeam == 1) return "Đội 1 thắng";
-            if (m.WinnerTeam == 2) return "Đội 2 thắng";
-            return "Chưa báo KQ";
+            int? w = EffectiveWinnerTeam(m);
+            if (w == 1) return "Đội 1 thắng";
+            if (w == 2) return "Đội 2 thắng";
+            return "Chưa xác định";
         }
 
         private async System.Threading.Tasks.Task LoadAsync()
@@ -146,11 +164,10 @@ namespace TadaPlay.Controls
                         // Zebra striping so long lists stay readable without gridlines.
                         BackColor = i % 2 == 0 ? Color.White : UiColors.ZebraStripe
                     };
-                    item.SubItems.Add(m.RoomName ?? "");
-                    item.SubItems.Add(TeamText(m, "1"));
-                    item.SubItems.Add(TeamText(m, "2"));
+                    item.SubItems.Add(TeamText(m, 1));
+                    item.SubItems.Add(TeamText(m, 2));
 
-                    bool hasWinner = m.WinnerTeam == 1 || m.WinnerTeam == 2;
+                    bool hasWinner = EffectiveWinnerTeam(m) != null;
                     var resultSubItem = item.SubItems.Add(ResultText(m));
                     resultSubItem.ForeColor = hasWinner ? UiColors.Winner : Color.Gray;
                     resultSubItem.Font = new Font(_listView.Font, hasWinner ? FontStyle.Bold : FontStyle.Regular);
@@ -234,7 +251,7 @@ namespace TadaPlay.Controls
             header.Controls.Add(timeLabel);
 
             // --- Result banner ---
-            bool hasWinner = match.WinnerTeam == 1 || match.WinnerTeam == 2;
+            bool hasWinner = EffectiveWinnerTeam(match) != null;
             var resultBanner = new Label
             {
                 Text = (hasWinner ? "🏆 " : "") + ResultText(match),
@@ -305,8 +322,9 @@ namespace TadaPlay.Controls
         // so the whole dialog's total height can be summed reliably (see BuildScoreboardDialog).
         private static Panel BuildTeamPanel(MatchSummary match, int team)
         {
-            bool teamWon = match.WinnerTeam == team;
-            bool resultKnown = match.WinnerTeam == 1 || match.WinnerTeam == 2;
+            int? winnerTeam = EffectiveWinnerTeam(match);
+            bool teamWon = winnerTeam == team;
+            bool resultKnown = winnerTeam == 1 || winnerTeam == 2;
             Color accent = !resultKnown ? Color.FromArgb(217, 217, 217) : (teamWon ? UiColors.Winner : UiColors.Loser);
             Color tint = !resultKnown ? Color.FromArgb(250, 250, 250) : (teamWon ? UiColors.WinnerTint : UiColors.LoserTint);
 
