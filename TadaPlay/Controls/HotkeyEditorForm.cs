@@ -21,19 +21,36 @@ namespace TadaPlay.Controls
         private readonly List<string> _slotFiles;       // player*.hki in _hotkeyDir
         private Dictionary<int, string> _strings;
 
-        private ComboBox _slotCombo;
-        private Panel _listPanel;
-        private Label _statusLabel;
+        private AntdUI.Select _slotCombo;
+        private AntdUI.Input _filterBox;   // narrows both panes to commands matching this
+        private AntdUI.Menu _groupList;    // master: one row per group that has commands
+        private AntdUI.Label _detailHeader; // which group the detail pane is showing
+        private Panel _listPanel;          // detail: the selected group's bindings
+        private AntdUI.Label _statusLabel;
+
+        /// <summary>
+        /// Which group the detail pane is showing, as an index into <see cref="HotkeyFile.Groups"/>.
+        ///
+        /// Kept as the file's own index rather than the row number in the master list, because
+        /// the two do not line up: groups with no named commands are left out of the list. It
+        /// also has to survive a reload - loading another profile, importing, resetting - so the
+        /// player is put back where they were looking instead of at the top.
+        /// </summary>
+        private int _selectedGroup = -1;
         private HotkeyFile _file;                       // working copy currently being edited
         private bool _dirty;
 
         // Which key-button (if any) is waiting to capture the next key press.
-        private Button _capturing;
+        private AntdUI.Button _capturing;
         private HotkeyBinding _capturingBinding;
         private string _capturingRestoreText;
 
         // Friendly headers for the standard AoC groups; anything past the well-known ones falls
         // back to a generic "Nhóm N". The command names themselves come from the language DLLs.
+        /// <summary>Alternate-row band in the detail pane. Faint on purpose - it is a guide
+        /// between a command and its key, not a thing to look at.</summary>
+        private static readonly Color RowBandColor = Color.FromArgb(0xF4, 0xF7, 0xFA);
+
         private static readonly Dictionary<int, string> GroupTitles = new Dictionary<int, string>
         {
             { 0, "Lệnh đơn vị" },
@@ -50,8 +67,10 @@ namespace TadaPlay.Controls
 
             Text = "Chỉnh sửa phím tắt trong game";
             StartPosition = FormStartPosition.CenterParent;
-            MinimumSize = new Size(720, 640);
-            Size = new Size(760, 820);
+            // Wider than the old single list: the master pane costs horizontal room, and the
+            // detail rows still need to fit a long command name beside a key button.
+            MinimumSize = new Size(820, 640);
+            Size = new Size(920, 820);
             Font = new Font("Segoe UI", 10F);
 
             BuildLayout();
@@ -70,64 +89,173 @@ namespace TadaPlay.Controls
 
         private void BuildLayout()
         {
-            var top = new Panel { Dock = DockStyle.Top, Height = 96, Padding = new Padding(12, 10, 12, 6) };
+            // AntdUI throughout, like the settings screen: the app already ships it, and it is
+            // what gives the rounded fields, the hover states and the focus rings that would
+            // otherwise have to be painted here by hand.
+            BackColor = UiTheme.PageBg;
 
-            var slotLabel = new Label { Text = "Hồ sơ phím tắt:", AutoSize = true, Location = new Point(12, 14) };
-            _slotCombo = new ComboBox
+            // --- top bar: which profile, and what to do to it ---
+            var top = new Panel { Dock = DockStyle.Top, Height = 104, Padding = new Padding(14, 12, 14, 6), BackColor = Color.Transparent };
+
+            var slotLabel = new AntdUI.Label
             {
-                DropDownStyle = ComboBoxStyle.DropDownList,
-                Location = new Point(140, 10),
-                Width = 300,
+                Text = "Hồ sơ phím tắt",
+                Location = new Point(14, 14),
+                Size = new Size(140, 32),
+                ForeColor = UiTheme.Muted,
+                TextAlign = ContentAlignment.MiddleLeft,
+            };
+            _slotCombo = new AntdUI.Select
+            {
+                Location = new Point(150, 10),
+                Width = 260,
+                Height = 36,
+                Radius = 8,
+                PlaceholderText = "Chưa có hồ sơ",
             };
             foreach (string f in _slotFiles) _slotCombo.Items.Add(Path.GetFileName(f));
             _slotCombo.SelectedIndexChanged += OnSlotChanged;
 
-            var importButton = new Button { Text = "Nhập từ tệp...", Location = new Point(460, 9), Width = 130, Height = 30 };
+            var importButton = UiTheme.Toolbar("Nhập từ tệp...", new Point(424, 10), 132);
             importButton.Click += ImportFromFile;
 
-            var deleteButton = new Button { Text = "Xóa hồ sơ", Location = new Point(600, 9), Width = 110, Height = 30 };
-            deleteButton.Click += DeleteSelectedSlot;
-
-            // Sits on the hint row rather than beside the other two: the top row already runs
-            // out to x=710 and a third button there would fall off the form.
-            var resetButton = new Button { Text = "Đặt lại mặc định", Location = new Point(570, 52), Width = 140, Height = 30 };
+            var resetButton = UiTheme.Toolbar("Đặt lại mặc định", new Point(566, 10), 146);
             resetButton.Click += ResetToDefault;
 
-            var hint = new Label
+            // Danger-typed and last in the row: it is the only button here that destroys
+            // something, and it should not sit next to the two that do not.
+            var deleteButton = UiTheme.Toolbar("Xóa hồ sơ", new Point(722, 10), 110);
+            deleteButton.Type = AntdUI.TTypeMini.Error;
+            deleteButton.Ghost = true;
+            deleteButton.Click += DeleteSelectedSlot;
+
+            var hint = new AntdUI.Label
             {
                 Text = "Nhấn vào ô phím để đặt lại. Đang thu phím: nhấn phím mới, hoặc Esc để hủy, Delete để bỏ gán.",
-                AutoSize = false,
-                Location = new Point(12, 50),
-                Size = new Size(550, 38),
-                ForeColor = Color.DimGray,
+                Location = new Point(14, 54),
+                Size = new Size(818, 38),
+                ForeColor = UiTheme.Muted,
+                Font = new Font("Segoe UI", 9F),
+                TextAlign = ContentAlignment.MiddleLeft,
+                TextMultiLine = true,
             };
 
             top.Controls.Add(slotLabel);
             top.Controls.Add(_slotCombo);
             top.Controls.Add(importButton);
-            top.Controls.Add(deleteButton);
             top.Controls.Add(resetButton);
+            top.Controls.Add(deleteButton);
             top.Controls.Add(hint);
 
-            _listPanel = new Panel { Dock = DockStyle.Fill, AutoScroll = true, Padding = new Padding(12, 6, 12, 6) };
+            // --- master/detail. One long scroll of every group meant hunting for a heading
+            // among two hundred rows; the groups are separate in-game contexts, so picking one
+            // and seeing only its keys is how the file is actually organised. ---
+            _groupList = new AntdUI.Menu
+            {
+                Dock = DockStyle.Left,
+                Width = 250,
+                Radius = 8,
+                BackColor = Color.White,
+                Padding = new Padding(6),
+            };
+            _groupList.SelectChanged += OnGroupChanged;
 
-            var bottom = new Panel { Dock = DockStyle.Bottom, Height = 56, Padding = new Padding(12, 10, 12, 10) };
-            _statusLabel = new Label { Dock = DockStyle.Left, AutoSize = false, Width = 300, TextAlign = ContentAlignment.MiddleLeft, ForeColor = Color.DimGray };
+            _detailHeader = new AntdUI.Label
+            {
+                Dock = DockStyle.Top,
+                Height = 40,
+                Font = new Font("Segoe UI Semibold", 11F, FontStyle.Bold),
+                ForeColor = UiTheme.AccentDisplay,
+                TextAlign = ContentAlignment.MiddleLeft,
+                Padding = new Padding(14, 0, 0, 0),
+                BackColor = Color.Transparent,
+            };
 
-            var closeButton = new Button { Text = "Đóng", Dock = DockStyle.Right, Width = 110, Height = 34 };
+            _listPanel = new Panel
+            {
+                Dock = DockStyle.Fill,
+                AutoScroll = true,
+                Padding = new Padding(8, 4, 8, 8),
+                BackColor = Color.Transparent,
+            };
+
+            var detailCard = new AntdUI.Panel
+            {
+                Dock = DockStyle.Fill,
+                Radius = 8,
+                Back = Color.White,
+                BorderWidth = 1,
+                BorderColor = UiTheme.CardBorder,
+                Padding = new Padding(0),
+            };
+            detailCard.Controls.Add(_listPanel);   // Fill first, then the edges
+            detailCard.Controls.Add(_detailHeader);
+
+            var detailHost = new Panel { Dock = DockStyle.Fill, Padding = new Padding(12, 0, 0, 0), BackColor = Color.Transparent };
+            detailHost.Controls.Add(detailCard);
+
+            // Spans both panes because it narrows both: a search that only looked inside the
+            // group already open would be no help to someone who does not know which group a
+            // command lives in, which is the usual reason for searching at all.
+            var filterBar = new Panel { Dock = DockStyle.Top, Height = 52, Padding = new Padding(0, 6, 0, 8), BackColor = Color.Transparent };
+            _filterBox = new AntdUI.Input
+            {
+                Dock = DockStyle.Fill,
+                Radius = 8,
+                PlaceholderText = "Tìm lệnh... (ví dụ: pali, farm, wall)",
+                PrefixSvg = UiTheme.IconSearch,
+                AllowClear = true,      // antd's own clear button - no separate "Xóa lọc" needed
+                Font = new Font("Segoe UI", 10.5F),
+            };
+            _filterBox.TextChanged += (s, e) => OnFilterChanged();
+            filterBar.Controls.Add(_filterBox);
+
+            var centre = new Panel { Dock = DockStyle.Fill, Padding = new Padding(14, 0, 14, 8), BackColor = Color.Transparent };
+            centre.Controls.Add(detailHost);
+            centre.Controls.Add(_groupList);
+            // Added last so it docks first and spans the full width, above both panes.
+            centre.Controls.Add(filterBar);
+
+            // --- bottom bar ---
+            var bottom = new Panel { Dock = DockStyle.Bottom, Height = 64, Padding = new Padding(14, 10, 14, 12), BackColor = Color.Transparent };
+            _statusLabel = new AntdUI.Label
+            {
+                Dock = DockStyle.Fill,
+                Text = string.Empty,
+                TextAlign = ContentAlignment.MiddleLeft,
+                ForeColor = UiTheme.Muted,
+                Font = new Font("Segoe UI", 9.5F),
+                AutoEllipsis = true,
+                BackColor = Color.Transparent,
+            };
+
+            var closeButton = UiTheme.Quiet("Đóng");
+            closeButton.Dock = DockStyle.Right;
+            closeButton.Width = 110;
             closeButton.Click += (s, e) => Close();
-            var saveAllButton = new Button { Text = "Lưu cho mọi hồ sơ", Dock = DockStyle.Right, Width = 160, Height = 34 };
+
+            var saveAllButton = UiTheme.Quiet("Lưu cho mọi hồ sơ");
+            saveAllButton.Dock = DockStyle.Right;
+            saveAllButton.Width = 180;
+            saveAllButton.Margin = new Padding(8, 0, 8, 0);
             saveAllButton.Click += (s, e) => Save(allSlots: true);
-            var saveButton = new Button { Text = "Lưu", Dock = DockStyle.Right, Width = 110, Height = 34 };
+
+            var saveButton = UiTheme.Primary("Lưu", UiTheme.AccentFolder, height: 40);
+            saveButton.Dock = DockStyle.Right;
+            saveButton.Width = 130;
             saveButton.Click += (s, e) => Save(allSlots: false);
 
-            // Dock=Right stacks right-to-left in add order.
+            // Dock=Right stacks right-to-left in add order, and Fill goes in first.
             bottom.Controls.Add(_statusLabel);
             bottom.Controls.Add(closeButton);
+            bottom.Controls.Add(UiTheme.Spacer(DockStyle.Right, 8));
             bottom.Controls.Add(saveAllButton);
+            bottom.Controls.Add(UiTheme.Spacer(DockStyle.Right, 8));
             bottom.Controls.Add(saveButton);
 
-            Controls.Add(_listPanel);
+            // Docking is applied in reverse z-order, so the Fill goes in first and the edges
+            // after it - the same order the rest of this form already uses.
+            Controls.Add(centre);
             Controls.Add(bottom);
             Controls.Add(top);
         }
@@ -262,58 +390,198 @@ namespace TadaPlay.Controls
             }
         }
 
+        /// <summary>
+        /// Whether a binding should be shown at all: it has to name a command, and match the
+        /// filter if one is typed. Case-insensitive substring - the names are short and the
+        /// player is usually typing the start of one ("pali", "far").
+        /// </summary>
+        private bool Matches(HotkeyBinding b)
+        {
+            if (!b.IsCommand) return false;
+            string filter = _filterBox?.Text?.Trim();
+            if (string.IsNullOrEmpty(filter)) return true;
+            return ResolveName(b.StringId).IndexOf(filter, StringComparison.CurrentCultureIgnoreCase) >= 0;
+        }
+
+        private bool Filtering => !string.IsNullOrEmpty(_filterBox?.Text?.Trim());
+
+        /// <summary>
+        /// Re-narrows both panes. The group the player was in is kept when it still has a
+        /// match, so typing does not throw them out of the group they were working in; when it
+        /// stops matching they land on the first group that does, which is where the thing
+        /// they searched for actually is.
+        /// </summary>
+        private void OnFilterChanged()
+        {
+            RenderList();
+            if (_file == null) return;
+            if (!Filtering) { SetStatus("Đã bỏ lọc."); return; }
+
+            int hits = _file.Groups.Sum(g => g.Bindings.Count(Matches));
+            SetStatus(hits == 0
+                ? "Không có lệnh nào khớp."
+                : $"Tìm thấy {hits} lệnh khớp.");
+        }
+
+        /// <summary>Rebuilds both panes. Call after the file behind them changes.</summary>
         private void RenderList()
         {
-            _listPanel.SuspendLayout();
-            _listPanel.Controls.Clear();
+            RenderGroups();
+            RenderDetail();
+        }
 
-            int width = 660;
-            int y = 6;
-            const int rowH = 30;
+        /// <summary>
+        /// Fills the master pane with the groups that have something to show.
+        ///
+        /// Groups with no named commands are left out entirely - they are structural padding, and
+        /// a row that opens an empty pane is worse than no row. The selection is carried across a
+        /// reload where it can be, so switching profiles leaves the player looking at the same
+        /// group rather than back at the top.
+        /// </summary>
+        private void RenderGroups()
+        {
+            int wanted = _selectedGroup;
+
+            // Detached while rebuilding: setting Select on an item raises SelectChanged, and
+            // re-entering the render from inside itself leaves the panes disagreeing.
+            _groupList.SelectChanged -= OnGroupChanged;
+            _groupList.PauseLayout = true;
+            _groupList.Items.Clear();
 
             if (_file != null)
             {
                 for (int g = 0; g < _file.Groups.Count; g++)
                 {
-                    var commands = _file.Groups[g].Bindings.Where(b => b.IsCommand).ToList();
-                    if (commands.Count == 0) continue;
-
-                    string title = GroupTitles.TryGetValue(g, out string t) ? t : $"Nhóm {g + 1}";
-                    var header = new Label
+                    int count = _file.Groups[g].Bindings.Count(Matches);
+                    if (count == 0) continue;   // nothing here, under the current filter
+                    _groupList.Items.Add(new AntdUI.MenuItem(GroupTitle(g))
                     {
-                        Text = title,
-                        Font = new Font(Font, FontStyle.Bold),
-                        Location = new Point(4, y),
-                        Size = new Size(width, 26),
-                        ForeColor = Color.FromArgb(0x1E, 0x5A, 0x8A),
-                    };
-                    _listPanel.Controls.Add(header);
-                    y += 30;
-
-                    foreach (var b in commands)
-                    {
-                        var name = new Label
-                        {
-                            Text = ResolveName(b.StringId),
-                            Location = new Point(16, y + 4),
-                            Size = new Size(400, rowH - 6),
-                            TextAlign = ContentAlignment.MiddleLeft,
-                        };
-                        var keyBtn = new Button
-                        {
-                            Location = new Point(430, y),
-                            Size = new Size(210, rowH - 2),
-                            TextAlign = ContentAlignment.MiddleLeft,
-                            Tag = b,
-                        };
-                        SetKeyButtonText(keyBtn, b);
-                        keyBtn.Click += KeyButton_Click;
-                        _listPanel.Controls.Add(name);
-                        _listPanel.Controls.Add(keyBtn);
-                        y += rowH;
-                    }
-                    y += 10;
+                        // The count as an antd badge rather than "(13)" in the text: it is a
+                        // number about the row, not part of the group name. Recoloured off
+                        // antd's default red, which made every count read as an error.
+                        Badge = count.ToString(),
+                        BadgeBack = UiTheme.BadgeBack,
+                        Tag = g,
+                    });
                 }
+            }
+
+            // Put the selection back on the same GROUP, which is not the same as the same row.
+            int row = IndexOfGroup(wanted);
+            if (row < 0 && _groupList.Items.Count > 0) row = 0;
+            if (row >= 0)
+            {
+                _groupList.Items[row].Select = true;
+                _selectedGroup = (int)_groupList.Items[row].Tag;
+            }
+            else _selectedGroup = -1;
+
+            _groupList.PauseLayout = false;
+            _groupList.SelectChanged += OnGroupChanged;
+        }
+
+        private int IndexOfGroup(int group)
+        {
+            for (int i = 0; i < _groupList.Items.Count; i++)
+            {
+                if (_groupList.Items[i].Tag is int g && g == group) return i;
+            }
+            return -1;
+        }
+
+        private string GroupTitle(int group) =>
+            GroupTitles.TryGetValue(group, out string t) ? t : $"Nhóm {group + 1}";
+
+        private void OnGroupChanged(object sender, AntdUI.MenuSelectEventArgs e)
+        {
+            if (e.Value?.Tag is not int group) return;
+            _selectedGroup = group;
+            RenderDetail();
+        }
+
+        /// <summary>
+        /// Fills the detail pane with the selected group's bindings.
+        ///
+        /// Rows are anchored rather than laid out at a fixed width, so widening the window gives
+        /// the command name the extra room and leaves the key button on the right edge.
+        /// </summary>
+        private void RenderDetail()
+        {
+            // Before the controls go: cancelling restores the text of the button being captured,
+            // and that button is about to be disposed.
+            CancelCapture();
+
+            _listPanel.SuspendLayout();
+            foreach (Control old in _listPanel.Controls.Cast<Control>().ToList()) old.Dispose();
+            _listPanel.Controls.Clear();
+
+            if (_file == null || _selectedGroup < 0 || _selectedGroup >= _file.Groups.Count)
+            {
+                _detailHeader.Text = Filtering ? "Không có lệnh nào khớp bộ lọc." : string.Empty;
+                _listPanel.AutoScrollMinSize = Size.Empty;
+                _listPanel.ResumeLayout();
+                return;
+            }
+
+            var commands = _file.Groups[_selectedGroup].Bindings.Where(Matches).ToList();
+            _detailHeader.Text = Filtering
+                ? $"{GroupTitle(_selectedGroup)}  -  {commands.Count} lệnh khớp"
+                : $"{GroupTitle(_selectedGroup)}  -  {commands.Count} lệnh";
+
+            // Leave room for the scrollbar so the rows do not sit under it.
+            int width = Math.Max(360, _listPanel.ClientSize.Width - 36);
+            const int keyWidth = 190;
+            const int rowH = 30;
+            int y = 6;
+
+            for (int i = 0; i < commands.Count; i++)
+            {
+                HotkeyBinding b = commands[i];
+
+                // Each binding gets its own row panel, banded on alternate rows. The name and
+                // its key sit at opposite ends of a wide window, and with nothing joining them
+                // the eye has to work out which key belongs to which command; the band does
+                // that work. It also makes the pair one control to place and one to dispose.
+                var row = new Panel
+                {
+                    Location = new Point(8, y),
+                    Size = new Size(width, rowH),
+                    Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
+                    BackColor = i % 2 == 0 ? RowBandColor : Color.Transparent,
+                };
+
+                var name = new AntdUI.Label
+                {
+                    Text = ResolveName(b.StringId),
+                    Location = new Point(10, 4),
+                    Size = new Size(width - keyWidth - 30, rowH - 8),
+                    TextAlign = ContentAlignment.MiddleLeft,
+                    Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
+                    AutoEllipsis = true,          // a long name shortens rather than overlapping
+                    ForeColor = UiTheme.Ink,
+                    BackColor = Color.Transparent,
+                };
+                // Round, like every other button in the app now, and centred - a keycap reads as
+                // a keycap when the key is in the middle of it.
+                var keyBtn = new AntdUI.Button
+                {
+                    Location = new Point(width - keyWidth - 8, 2),
+                    Size = new Size(keyWidth, rowH - 6),
+                    Type = AntdUI.TTypeMini.Default,
+                    Shape = AntdUI.TShape.Round,
+                    BorderWidth = 1,
+                    TextAlign = ContentAlignment.MiddleCenter,
+                    Anchor = AnchorStyles.Top | AnchorStyles.Right,
+                    Cursor = Cursors.Hand,
+                    Tag = b,
+                };
+                SetKeyButtonText(keyBtn, b);
+                keyBtn.Click += KeyButton_Click;
+
+                row.Controls.Add(name);
+                row.Controls.Add(keyBtn);
+                _listPanel.Controls.Add(row);
+                y += rowH;
             }
 
             _listPanel.AutoScrollMinSize = new Size(0, y + 10);
@@ -338,23 +606,29 @@ namespace TadaPlay.Controls
             return $"[{stringId}]";
         }
 
-        private void SetKeyButtonText(Button btn, HotkeyBinding b)
+        private void SetKeyButtonText(AntdUI.Button btn, HotkeyBinding b)
         {
-            btn.Text = "  " + HotkeyKeyNames.Describe(b.KeyCode, b.Ctrl, b.Alt, b.Shift);
-            btn.ForeColor = b.KeyCode == HotkeyKeyNames.Unbound ? Color.Gray : SystemColors.ControlText;
+            bool unbound = b.KeyCode == HotkeyKeyNames.Unbound;
+            btn.Text = HotkeyKeyNames.Describe(b.KeyCode, b.Ctrl, b.Alt, b.Shift);
+            btn.ForeColor = unbound ? UiTheme.Muted : UiTheme.Ink;
+            btn.DefaultBack = Color.White;
+            btn.DefaultBorderColor = unbound ? UiTheme.CardBorder : UiTheme.KeyBorder;
+            btn.Font = new Font("Segoe UI" + (unbound ? "" : " Semibold"), 10F,
+                                unbound ? FontStyle.Regular : FontStyle.Bold);
         }
 
         private void KeyButton_Click(object sender, EventArgs e)
         {
-            var btn = (Button)sender;
+            var btn = (AntdUI.Button)sender;
             if (_capturing == btn) { CancelCapture(); return; }
             CancelCapture();
 
             _capturing = btn;
             _capturingBinding = (HotkeyBinding)btn.Tag;
             _capturingRestoreText = btn.Text;
-            btn.Text = "  Nhấn phím...";
-            btn.BackColor = Color.FromArgb(0xFF, 0xF3, 0xC4);
+            btn.Text = "Nhấn phím...";
+            btn.DefaultBack = UiTheme.CapturingBack;
+            btn.DefaultBorderColor = UiTheme.CapturingBorder;
             SetStatus("Đang thu phím... nhấn phím mới (kèm Ctrl/Alt/Shift nếu muốn), Delete để bỏ gán, Esc để hủy.");
         }
 
@@ -387,48 +661,79 @@ namespace TadaPlay.Controls
         {
             if (_capturing == null || _capturingBinding == null) return;
 
-            string conflict = FindConflict(keyCode, ctrl, alt, shift, _capturingBinding);
+            // Taken from whoever had it, not merely reported. Two commands in one group
+            // sharing a key is not a preference, it is a broken layout - in game only one of
+            // them answers, and which one is not something the player chose. Warning and
+            // leaving both bound meant the file could be saved in that state.
+            HotkeyBinding displaced = TakeKeyFrom(keyCode, ctrl, alt, shift, _capturingBinding);
+            string displacedName = displaced == null ? null : ResolveName(displaced.StringId);
 
             _capturingBinding.KeyCode = keyCode;
             _capturingBinding.Ctrl = ctrl;
             _capturingBinding.Alt = alt;
             _capturingBinding.Shift = shift;
 
+            string assignedTo = ResolveName(_capturingBinding.StringId);
+            string key = HotkeyKeyNames.Describe(keyCode, ctrl, alt, shift);
+
             SetKeyButtonText(_capturing, _capturingBinding);
-            _capturing.BackColor = SystemColors.Control;
             _capturing = null;
             _capturingBinding = null;
             _dirty = true;
 
             if (keyCode == HotkeyKeyNames.Unbound)
+            {
                 SetStatus("Đã bỏ gán.");
-            else if (conflict != null)
-                SetStatus($"Đã gán. Lưu ý: phím này trùng với \"{conflict}\" trong cùng nhóm.");
+            }
+            else if (displacedName != null)
+            {
+                // Redrawn because a second row changed - the displaced command is now blank,
+                // and it is very often not the row the player was looking at.
+                RenderDetail();
+                string message = $"Phím {key} đã chuyển sang \"{assignedTo}\". " +
+                                 $"\"{displacedName}\" trong cùng nhóm đã bị bỏ gán.";
+                SetStatus(message);
+                AntdUI.Message.warn(this, message);
+            }
             else
+            {
                 SetStatus("Đã gán phím. Nhớ bấm Lưu.");
+            }
         }
 
-        // A key is "in conflict" only within the same group (different groups are different in-game
-        // contexts and legitimately reuse keys). Returns the other command's name, or null.
-        private string FindConflict(int keyCode, bool ctrl, bool alt, bool shift, HotkeyBinding self)
+        /// <summary>
+        /// Unbinds any other command in the same group that already held this key, and returns
+        /// it so the caller can say whose key was taken.
+        ///
+        /// Same group only. Different groups are different in-game contexts and reuse keys
+        /// perfectly legitimately - clearing across groups would silently wreck a layout.
+        ///
+        /// A modifier is part of the key: Ctrl+B does not collide with B.
+        /// </summary>
+        private HotkeyBinding TakeKeyFrom(int keyCode, bool ctrl, bool alt, bool shift, HotkeyBinding self)
         {
             if (keyCode == HotkeyKeyNames.Unbound || _file == null) return null;
             var group = _file.Groups.FirstOrDefault(gr => gr.Bindings.Contains(self));
             if (group == null) return null;
+
+            HotkeyBinding displaced = null;
             foreach (var b in group.Bindings)
             {
                 if (ReferenceEquals(b, self) || !b.IsCommand) continue;
-                if (b.KeyCode == keyCode && b.Ctrl == ctrl && b.Alt == alt && b.Shift == shift)
-                    return ResolveName(b.StringId);
+                if (b.KeyCode != keyCode || b.Ctrl != ctrl || b.Alt != alt || b.Shift != shift) continue;
+
+                displaced ??= b;   // report the first; clear every one, in case of an existing clash
+                b.KeyCode = HotkeyKeyNames.Unbound;
+                b.Ctrl = b.Alt = b.Shift = false;
             }
-            return null;
+            return displaced;
         }
 
         private void CancelCapture()
         {
             if (_capturing == null) return;
             _capturing.Text = _capturingRestoreText;
-            _capturing.BackColor = SystemColors.Control;
+            if (_capturingBinding != null) SetKeyButtonText(_capturing, _capturingBinding);
             _capturing = null;
             _capturingBinding = null;
         }
@@ -450,13 +755,14 @@ namespace TadaPlay.Controls
                 _file = imported;
                 _dirty = true;
                 RenderList();
-                SetStatus($"Đã nhập từ {Path.GetFileName(dlg.FileName)}. Bấm Lưu để áp dụng cho hồ sơ đã chọn.");
+                string message = $"Đã nhập từ {Path.GetFileName(dlg.FileName)}. Bấm Lưu để áp dụng cho hồ sơ đã chọn.";
+                SetStatus(message);
+                AntdUI.Message.info(this, message);
             }
             catch (Exception ex)
             {
                 DebugLogger.Error($"HotkeyEditor: import '{dlg.FileName}' failed: {ex.Message}");
-                MessageBox.Show(this, $"Không đọc được tệp phím tắt đã chọn:\n{ex.Message}", "Lỗi",
-                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+                AntdUI.Message.error(this, $"Không đọc được tệp phím tắt đã chọn: {ex.Message}");
             }
         }
 
@@ -485,13 +791,14 @@ namespace TadaPlay.Controls
                 _file.AdoptModCommands(HasName);
                 _dirty = true;
                 RenderList();
-                SetStatus("Đã nạp phím tắt mặc định. Bấm Lưu (hoặc Lưu cho mọi hồ sơ) để áp dụng.");
+                const string message = "Đã nạp phím tắt mặc định. Bấm Lưu (hoặc Lưu cho mọi hồ sơ) để áp dụng.";
+                SetStatus(message);
+                AntdUI.Message.info(this, message);
             }
             catch (Exception ex)
             {
                 DebugLogger.Error($"HotkeyEditor: loading the default layout failed: {ex.Message}");
-                MessageBox.Show(this, $"Không nạp được phím tắt mặc định:\n{ex.Message}", "Lỗi",
-                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+                AntdUI.Message.error(this, $"Không nạp được phím tắt mặc định: {ex.Message}");
             }
         }
 
@@ -524,15 +831,20 @@ namespace TadaPlay.Controls
                 _dirty = false;
 
                 RefreshSlotList(targets);
-                SetStatus(allSlots
-                    ? $"Đã lưu cho {targets.Count} hồ sơ (player1–5)."
-                    : $"Đã lưu {Path.GetFileName(targets[0])}.");
+                string saved = allSlots
+                    ? $"Đã lưu phím tắt cho {targets.Count} hồ sơ (player1–5)."
+                    : $"Đã lưu phím tắt vào {Path.GetFileName(targets[0])}.";
+                SetStatus(saved);
+                // The status line alone was not enough: it is small, grey, at the bottom
+                // corner, and it often says roughly what it said before - so a save looked
+                // exactly like a click that did nothing. A toast is the confirmation.
+                AntdUI.Message.success(this, saved);
             }
             catch (Exception ex)
             {
                 DebugLogger.Error($"HotkeyEditor: save failed: {ex.Message}");
-                MessageBox.Show(this, $"Lưu thất bại:\n{ex.Message}", "Lỗi",
-                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+                SetStatus("Lưu thất bại.");
+                AntdUI.Message.error(this, $"Lưu phím tắt thất bại: {ex.Message}");
             }
         }
 
