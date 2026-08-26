@@ -743,6 +743,37 @@ namespace TadaPlay.Controls
             }, "HOME_PING");
         }
 
+        private static readonly Color PlayingColor = Color.FromArgb(82, 196, 26);   // antd green-6
+        private static readonly Color StartingColor = Color.FromArgb(250, 173, 20); // antd gold-6
+
+        /// <summary>
+        /// The one-line "what is this player doing" shown against their name.
+        ///
+        /// Driven by the match status broadcast with the user list, because the lobby's own
+        /// status field does not distinguish someone idle in the lobby from someone twenty
+        /// minutes into a game - it says "online" for both. Falls back to that field for
+        /// players whose build does not report a match.
+        /// </summary>
+        private static (string Label, Color Colour) DescribeActivity(User user, string status)
+        {
+            if (user.IsWatchable)
+            {
+                TimeSpan t = user.GameTime;
+                string clock = t.TotalHours >= 1
+                    ? $"{(int)t.TotalHours}:{t.Minutes:00}:{t.Seconds:00}"
+                    : $"{t.Minutes:00}:{t.Seconds:00}";
+                return ($"● đang chơi · {clock}", PlayingColor);
+            }
+
+            if (user.InGame)
+            {
+                // In a game, but nothing captured yet - watchable shortly, not now.
+                return ("đang chơi · chờ xem được", StartingColor);
+            }
+
+            return (status, status == "online" ? Color.Green : Color.Gray);
+        }
+
         private void UpdateOnlineUsersListView(IReadOnlyList<User> users)
         {
             userList.Items.Clear();
@@ -756,8 +787,12 @@ namespace TadaPlay.Controls
                 userItem.Icon = Properties.Resources.user_icon;
                 userItem.Text = string.IsNullOrWhiteSpace(user.IpAddress) ? nickname : $"{nickname} · {user.IpAddress}";
                 userItem.Name = username;
-                userItem.Time = status;
-                if (status == "online") userItem.TimeColor = Color.Green;
+                // What a player is DOING beats what the lobby calls them. The server's own
+                // status stays "online" for the whole of a match, so on its own this column
+                // never moved - the one thing anybody actually watches it for.
+                (string label, Color colour) = DescribeActivity(user, status);
+                userItem.Time = label;
+                userItem.TimeColor = colour;
                 // Clicking a row opens their live status, so the row has to carry the player
                 // it was built from - the label alone cannot be turned back into a VPN address.
                 userItem.Tag = user;
