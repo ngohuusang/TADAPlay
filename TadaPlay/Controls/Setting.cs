@@ -124,7 +124,7 @@ namespace TadaPlay.Controls
 
             var label = new Label
             {
-                Text = "Thư mục cài đặt AoE2 (chứa SaveGame):",
+                Text = "Thư mục cài đặt AoE2:",
                 Dock = DockStyle.Top,
                 Height = 32
             };

@@ -169,7 +169,7 @@ namespace TadaPlay.Controls
             if (!string.IsNullOrWhiteSpace(appContext.GetGameFolder())) return;
 
             AntdUI.Modal.open(new AntdUI.Modal.Config(mainForm, "Chưa cấu hình thư mục game",
-                "Bạn cần chọn thư mục cài đặt AoE2 (nơi chứa SaveGame) trong Cài đặt để TadaPlay có thể đồng bộ tên, theo dõi và tải lên record trận đấu.",
+                "Bạn cần chọn thư mục cài đặt AoE2 trong Cài đặt để TadaPlay có thể đồng bộ tên, theo dõi và tải lên record trận đấu.",
                 AntdUI.TType.Warn)
             {
                 OkText = "Mở cài đặt",
@@ -1221,7 +1221,7 @@ namespace TadaPlay.Controls
                 string gameFolder = appContext.GetGameFolder();
                 if (string.IsNullOrWhiteSpace(gameFolder))
                 {
-                    string cfgMsg = "Chưa cấu hình thư mục game. Vào Cài đặt để chọn thư mục cài đặt AoE2 (nơi chứa SaveGame).";
+                    string cfgMsg = "Chưa cấu hình thư mục game. Vào Cài đặt để chọn thư mục cài đặt AoE2.";
                     printLog($"[Record] {cfgMsg}", Color.Red);
                     if (!isAutomatic)
                     {
