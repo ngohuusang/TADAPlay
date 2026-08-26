@@ -1063,12 +1063,69 @@ namespace TadaPlay.Controls
 
         // Follows a match that is still being played: see LiveStreamSession.
         private LiveStreamSession _liveStream;
+        private SpectatorOverlay _overlay;
 
         private void StartLiveStream(string hostIp, string hostLabel, LiveShareClient.FetchResult fetch)
         {
-            _liveStream = new LiveStreamSession(hostIp, hostLabel, fetch,
-                (message, isProblem) => printLog(message, isProblem ? Color.Orange : Color.RoyalBlue));
+            _liveStream = new LiveStreamSession(hostIp, hostLabel, fetch, (message, isProblem) =>
+            {
+                printLog(message, isProblem ? Color.Orange : Color.RoyalBlue);
+                // A session reports its final message with IsRunning already false, so this is
+                // how the overlay learns the match is over without polling for it.
+                if (_liveStream is { IsRunning: false }) CloseOverlay();
+            });
             _liveStream.Start();
+
+            // The host's clock is in TadaPlay's dialogs, but the game is about to cover them -
+            // and that is precisely when a viewer needs it, to judge how far behind live they
+            // are. So it also floats above the game.
+            ShowOverlay(hostIp, hostLabel);
+        }
+
+        private void ShowOverlay(string hostIp, string hostLabel)
+        {
+            CloseOverlay();
+            try
+            {
+                _overlay = new SpectatorOverlay(hostIp, hostLabel);
+                // Owner-less on purpose: an overlay owned by the main window is hidden with it
+                // when the player minimises TadaPlay to get at the game. And shown without
+                // activation, so it never pulls the player out of the game it sits over.
+                _overlay.ShowNoActivate();
+                printLog("[Xem] Đồng hồ trận đấu hiện ở trên cùng màn hình - kéo để di chuyển, " +
+                         "chuột phải để tắt.", Color.RoyalBlue);
+            }
+            catch (Exception ex)
+            {
+                DebugLogger.Warn($"Home: cannot show the spectator overlay: {ex.Message}");
+            }
+        }
+
+        private void CloseOverlay()
+        {
+            SpectatorOverlay overlay = _overlay;
+            _overlay = null;
+            if (overlay == null || overlay.IsDisposed) return;
+            try
+            {
+                // Called from the stream's background loop as well as from the UI thread, and a
+                // Form may only be closed on the thread that created it.
+                if (overlay.InvokeRequired)
+                {
+                    overlay.BeginInvoke(new Action(() =>
+                    {
+                        try { overlay.Close(); overlay.Dispose(); }
+                        catch (Exception ex) { DebugLogger.Warn($"Home: overlay close failed: {ex.Message}"); }
+                    }));
+                    return;
+                }
+                overlay.Close();
+                overlay.Dispose();
+            }
+            catch (Exception ex)
+            {
+                DebugLogger.Warn($"Home: cannot close the spectator overlay: {ex.Message}");
+            }
         }
 
         private void StopLiveStream()
@@ -1076,6 +1133,7 @@ namespace TadaPlay.Controls
             LiveStreamSession session = _liveStream;
             _liveStream = null;
             session?.Dispose();
+            CloseOverlay();
         }
 
         private void uploadRecordButton_Click(object sender, EventArgs e)
