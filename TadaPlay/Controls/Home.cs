@@ -441,6 +441,7 @@ namespace TadaPlay.Controls
                 // half between updates while captures were really 10s apart.
                 MatchShareState.CaptureInterval = TimeSpan.FromMilliseconds(NextCaptureIntervalMs());
                 MatchShareState.Captured();
+                MatchStatusPublisher.Publish(webSocketService);
                 _liveCaptureBusy = false;
             }
         }
@@ -705,6 +706,13 @@ namespace TadaPlay.Controls
                 {
                     _ = webSocketService.SendMessageAsync(new { ip_address = currentIp });
                 }
+
+                // Same reasoning for the shared match: the server drops this machine's match
+                // status when the connection closes, so after a reconnect its view and ours
+                // have diverged. Reset first, or the "same as last time" check would suppress
+                // the re-push and leave everyone seeing nothing for the rest of the match.
+                MatchStatusPublisher.Reset();
+                MatchStatusPublisher.Publish(webSocketService, force: true);
             }, "HOME_WS_CONNECTED");
         }
 
@@ -892,6 +900,7 @@ namespace TadaPlay.Controls
                 // and the countdown viewers see here is the 90s one.
                 MatchShareState.CaptureInterval = TimeSpan.FromMilliseconds(FirstCaptureDelayMs);
                 MatchShareState.MatchStarted(latest);
+                MatchStatusPublisher.Publish(webSocketService);
                 printLog($"[Xem] Đã bắt đầu game - chờ {MatchShareState.WaitSeconds} giây để " +
                          "người khác có thể xem.", Color.RoyalBlue);
                 return;
@@ -938,6 +947,7 @@ namespace TadaPlay.Controls
                     // fails. The lock has just dropped, so the game is finished with the file.
                     MatchShareState.MatchEnded();
                     PublishFinishedMatch(finishedRecordPath);
+                    MatchStatusPublisher.Publish(webSocketService);
 
                     _ = UploadRecordAsync(isAutomatic: true, recordPathOverride: finishedRecordPath);
                 }

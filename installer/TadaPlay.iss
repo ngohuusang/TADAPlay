@@ -4,7 +4,7 @@
 ; Then compile this script with ISCC.exe (Inno Setup 6).
 
 #define MyAppName "TADA Play"
-#define MyAppVersion "3.14.1"
+#define MyAppVersion "3.15.0"
 #define MyAppExeName "TadaPlay.exe"
 #define MyPublishDir "..\publish\TadaPlay"
 

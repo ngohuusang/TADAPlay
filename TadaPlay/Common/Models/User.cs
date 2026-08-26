@@ -48,6 +48,38 @@ namespace TadaPlay.Common.Models
         [JsonProperty("ranking")]
         public string Ranking { get; set; }
 
+        // --- Live match sharing, pushed by that player's own client (see the match_status
+        // command in GameLobbyServer) and broadcast with the user list.
+        //
+        // This arrives over the lobby socket rather than by asking each player directly over
+        // the VPN, which matters twice: it is one connection instead of one request per player
+        // every few seconds, and it keeps working through the VPN dropouts that otherwise make
+        // players who are perfectly fine look unreachable.
+        //
+        // A client older than this simply omits the fields, which deserialise to false/0 -
+        // indistinguishable from "not in a match", which is the right answer for a peer whose
+        // build cannot tell us.
+
+        [JsonProperty("in_game")]
+        public bool InGame { get; set; }
+
+        [JsonProperty("has_match")]
+        public bool HasMatch { get; set; }
+
+        /// <summary>Match clock in milliseconds of game time; 0 when nothing is shareable.</summary>
+        [JsonProperty("game_ms")]
+        public long GameMs { get; set; }
+
+        /// <summary>Seconds until the host's next capture makes more of the match available.</summary>
+        [JsonProperty("wait_seconds")]
+        public int WaitSeconds { get; set; }
+
+        /// <summary>How far into their match this player is.</summary>
+        public TimeSpan GameTime => TimeSpan.FromMilliseconds(GameMs);
+
+        /// <summary>Whether this player's match can be watched right now.</summary>
+        public bool IsWatchable => InGame && HasMatch;
+
         public bool IsHost => Status == "host";
         public bool IsInRoom => !string.IsNullOrEmpty(CurrentRoomId);
     }
