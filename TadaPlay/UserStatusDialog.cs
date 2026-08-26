@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Drawing;
 using System.Windows.Forms;
 using TadaPlay.Common.Models;
@@ -42,16 +42,24 @@ namespace TadaPlay
         private readonly User _user;
         private readonly bool _isSelf;
 
+        /// <summary>
+        /// Finds the CURRENT record for this player by name. Every user_list broadcast
+        /// replaces the whole list with new instances rather than mutating the existing ones,
+        /// so the User captured when this dialog opened is a snapshot that never moves.
+        /// </summary>
+        private readonly Func<string, User> _lookup;
+
         private readonly Label _state = new();
         private readonly Label _detail = new();
         private readonly Button _watchButton = new();
         private readonly System.Windows.Forms.Timer _refresh = new() { Interval = RefreshMs };
         private bool _probing;
 
-        public UserStatusDialog(User user, bool isSelf)
+        public UserStatusDialog(User user, bool isSelf, Func<string, User> lookup = null)
         {
             _user = user;
             _isSelf = isSelf;
+            _lookup = lookup;
 
             Text = "Trạng thái người chơi";
             FormBorderStyle = FormBorderStyle.FixedDialog;
@@ -134,7 +142,12 @@ namespace TadaPlay
             _probing = true;
             try
             {
-                LiveShareClient.HostStatus status = await LiveShareClient.TryGetStatusAsync(_user.IpAddress);
+                // Prefer what the lobby server has broadcast - it costs nothing and keeps
+                // working while the VPN does not. Only ask the peer directly when they are
+                // running a build too old to report it.
+                User latest = (_user.Username != null ? _lookup?.Invoke(_user.Username) : null) ?? _user;
+                LiveShareClient.HostStatus status = FromBroadcast(latest)
+                                                    ?? await LiveShareClient.TryGetStatusAsync(_user.IpAddress);
                 if (IsDisposed) return;
                 Render(status);
             }
@@ -190,6 +203,23 @@ namespace TadaPlay
             }
 
             Show("KHÔNG CHƠI", IdleColor, "Người này đang online nhưng không ở trong trận nào.", false);
+        }
+
+        /// <summary>
+        /// The broadcast status as a HostStatus, or null when this player reports nothing -
+        /// either they are idle or their build predates the broadcast, and asking them
+        /// directly tells the two apart.
+        /// </summary>
+        private static LiveShareClient.HostStatus FromBroadcast(User user)
+        {
+            if (user == null || (!user.InGame && !user.HasMatch)) return null;
+            return new LiveShareClient.HostStatus
+            {
+                InGame = user.InGame,
+                HasMatch = user.HasMatch,
+                GameMs = user.GameMs,
+                WaitSeconds = user.WaitSeconds
+            };
         }
 
         /// <summary>Game time as mm:ss, or h:mm:ss once a match runs past an hour.</summary>

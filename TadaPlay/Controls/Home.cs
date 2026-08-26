@@ -974,8 +974,12 @@ namespace TadaPlay.Controls
             if (!TryGetGameFolderForWatching(out string gameFolder)) return;
 
             string hostIp, hostLabel;
+            // The lookup, not just the list: every user_list broadcast REPLACES these objects
+            // rather than updating them, so a dialog holding the ones it was given at open
+            // time would show a status frozen at that moment.
             using (var picker = new SpectatePickerDialog(appContext.AllOnlineUsers,
-                                                         appContext.GetCurrentUser()?.Username))
+                                                         appContext.GetCurrentUser()?.Username,
+                                                         LookupOnlineUser))
             {
                 if (picker.ShowDialog(mainForm) != DialogResult.OK || picker.SelectedHostIp == null)
                 {
@@ -1005,11 +1009,22 @@ namespace TadaPlay.Controls
 
             bool isSelf = string.Equals(user.Username, appContext.GetCurrentUser()?.Username,
                                         StringComparison.OrdinalIgnoreCase);
-            using var dialog = new UserStatusDialog(user, isSelf);
+            using var dialog = new UserStatusDialog(user, isSelf, LookupOnlineUser);
             if (dialog.ShowDialog(mainForm) != DialogResult.OK) return;
 
             if (!TryGetGameFolderForWatching(out string gameFolder)) return;
             await WatchAsync(user.IpAddress, user.Username ?? user.IpAddress, gameFolder);
+        }
+
+        /// <summary>
+        /// The current record for a player, by name. Handed to the spectate dialogs so they
+        /// read live broadcast data instead of the objects they were constructed with.
+        /// </summary>
+        private User LookupOnlineUser(string username)
+        {
+            if (string.IsNullOrWhiteSpace(username)) return null;
+            return appContext.AllOnlineUsers?
+                .FirstOrDefault(u => string.Equals(u.Username, username, StringComparison.OrdinalIgnoreCase));
         }
 
         private void ClearUserListSelection()

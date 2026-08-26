@@ -58,6 +58,16 @@ namespace TadaPlay
         private bool _refreshing;
 
         /// <summary>
+        /// Finds the CURRENT record for a player by name.
+        ///
+        /// Required because the broadcast does not mutate the User objects handed to this
+        /// dialog - every user_list replaces the whole list with new instances. Holding the
+        /// ones captured when the dialog opened means reading a snapshot frozen at that
+        /// moment, which looks exactly like a status that never changes.
+        /// </summary>
+        private readonly Func<string, User> _lookup;
+
+        /// <summary>
         /// One player in the list. <see cref="Watchable"/> is false for everyone who is not
         /// in a game right now, and those rows cannot be picked - they are still listed so
         /// the reason nobody can be watched is visible rather than an empty dialog.
@@ -70,8 +80,11 @@ namespace TadaPlay
             public bool Watchable;
         }
 
-        public SpectatePickerDialog(IReadOnlyList<User> onlineUsers, string currentUsername)
+        public SpectatePickerDialog(IReadOnlyList<User> onlineUsers, string currentUsername,
+                                    Func<string, User> lookup = null)
         {
+            _lookup = lookup;
+
             Text = "Xem trận đấu";
             FormBorderStyle = FormBorderStyle.FixedDialog;
             StartPosition = FormStartPosition.CenterParent;
@@ -190,6 +203,10 @@ namespace TadaPlay
         /// the status came over the lobby socket, not the tunnel. Returns null when the player
         /// is running a build that does not report it, which falls back to asking them.
         /// </summary>
+        /// <summary>The freshest known record for this player, falling back to what we were given.</summary>
+        private User Latest(User user) =>
+            (user?.Username != null ? _lookup?.Invoke(user.Username) : null) ?? user;
+
         private static LiveShareClient.HostStatus FromBroadcast(User user)
         {
             if (user == null || (!user.InGame && !user.HasMatch)) return null;
@@ -212,7 +229,7 @@ namespace TadaPlay
             // all, instead of one request per player.
             var probes = _candidates
                 .Select(u => (User: u,
-                              Broadcast: FromBroadcast(u),
+                              Broadcast: FromBroadcast(Latest(u)),
                               Task: FromBroadcast(u) == null
                                   ? LiveShareClient.TryGetStatusAsync(u.IpAddress)
                                   : null))
