@@ -313,14 +313,24 @@ namespace TadaPlay.Controls
             // and produce a file byte-identical to the one already being served.
             if (_liveCaptureCount > 0 && length <= _liveCaptureSourceLength) return false;
 
-            int intervalMs = _liveCaptureCount == 0
+            return (DateTime.UtcNow - _lastCaptureUtc).TotalMilliseconds >= NextCaptureIntervalMs();
+        }
+
+        /// <summary>
+        /// The gap before the next capture: the long first-capture wait until this match has
+        /// been captured once, then whatever the current audience deserves.
+        ///
+        /// Shared with the countdown reported to viewers, so the number they are shown is the
+        /// one actually being used to schedule. It is still a floor rather than a promise - a
+        /// capture also needs the record to have grown, and a shadow copy takes a couple of
+        /// seconds on top.
+        /// </summary>
+        private int NextCaptureIntervalMs() =>
+            _liveCaptureCount == 0
                 ? FirstCaptureDelayMs
                 : (LiveShareServer.CurrentWatchers().Count > 0
                     ? WatchedCaptureIntervalMs
                     : IdleCaptureIntervalMs);
-
-            return (DateTime.UtcNow - _lastCaptureUtc).TotalMilliseconds >= intervalMs;
-        }
 
         /// <summary>Announces viewers coming and going, so the player knows they are watched.</summary>
         private void LiveShare_WatcherChanged(LiveShareServer.Watcher watcher, bool started)
@@ -426,6 +436,10 @@ namespace TadaPlay.Controls
                 // Timed from the END of the capture, so a slow shadow copy does not shorten
                 // the gap before the next one and pile them up.
                 _lastCaptureUtc = DateTime.UtcNow;
+                // Report the interval that will ACTUALLY be used next. Left at the 90s
+                // first-capture value, the countdown told viewers to expect a minute and a
+                // half between updates while captures were really 10s apart.
+                MatchShareState.CaptureInterval = TimeSpan.FromMilliseconds(NextCaptureIntervalMs());
                 MatchShareState.Captured();
                 _liveCaptureBusy = false;
             }
@@ -873,6 +887,10 @@ namespace TadaPlay.Controls
                 _liveCaptureBytes = 0;
                 _liveCaptureSourceLength = 0;
                 _lastCaptureUtc = DateTime.UtcNow;
+                // Back to the first-capture wait before announcing the match: the previous
+                // match left this at its own last cadence, which for a watched game is 10s -
+                // and the countdown viewers see here is the 90s one.
+                MatchShareState.CaptureInterval = TimeSpan.FromMilliseconds(FirstCaptureDelayMs);
                 MatchShareState.MatchStarted(latest);
                 printLog($"[Xem] Đã bắt đầu game - chờ {MatchShareState.WaitSeconds} giây để " +
                          "người khác có thể xem.", Color.RoyalBlue);
