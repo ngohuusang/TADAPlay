@@ -101,6 +101,27 @@ namespace TadaPlay.Connections
             public bool InGame { get; set; }
         }
 
+        /// <summary>
+        /// The status a player last broadcast over the lobby socket, as a <see cref="HostStatus"/>,
+        /// or null when they report nothing - either they are idle or their build predates the
+        /// broadcast, and asking them directly tells those apart.
+        ///
+        /// Lives here so the picker, the status dialog and the spectator overlay all read the
+        /// broadcast the same way. They are meant to agree with each other, and three private
+        /// copies of this mapping is precisely how they would stop.
+        /// </summary>
+        public static HostStatus FromBroadcast(TadaPlay.Common.Models.User user)
+        {
+            if (user == null || (!user.InGame && !user.HasMatch)) return null;
+            return new HostStatus
+            {
+                InGame = user.InGame,
+                HasMatch = user.HasMatch,
+                GameMs = user.GameMs,
+                WaitSeconds = user.WaitSeconds
+            };
+        }
+
         /// <summary>A tail pulled from the host: the bytes added since a given offset.</summary>
         public sealed class TailResult
         {

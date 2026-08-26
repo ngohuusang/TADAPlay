@@ -1,6 +1,7 @@
-using System;
+﻿using System;
 using System.Drawing;
 using System.Windows.Forms;
+using TadaPlay.Common.Models;
 using TadaPlay.Connections;
 using TadaPlay.Logger;
 
@@ -33,6 +34,18 @@ namespace TadaPlay
 
         private readonly string _hostIp;
         private readonly string _hostLabel;
+
+        /// <summary>
+        /// Finds the host's current record by name, so the overlay reads the same lobby
+        /// broadcast the picker and the status dialog do.
+        ///
+        /// It used to ask the host directly over the VPN every three seconds. That made it the
+        /// one part of the UI that could disagree with the rest - and the one that went blank
+        /// during a tunnel dropout, which is when a viewer most wants to know whether the host
+        /// is still playing. Asking the host is now only the fallback for a build too old to
+        /// broadcast.
+        /// </summary>
+        private readonly Func<string, User> _lookup;
         private readonly Label _clock = new();
         private readonly Label _who = new();
         private readonly System.Windows.Forms.Timer _poll = new() { Interval = PollMs };
@@ -96,10 +109,11 @@ namespace TadaPlay
                          SWP_NOACTIVATE | SWP_SHOWWINDOW);
         }
 
-        public SpectatorOverlay(string hostIp, string hostLabel)
+        public SpectatorOverlay(string hostIp, string hostLabel, Func<string, User> lookup = null)
         {
             _hostIp = hostIp;
             _hostLabel = hostLabel ?? hostIp;
+            _lookup = lookup;
 
             FormBorderStyle = FormBorderStyle.None;
             ShowInTaskbar = false;
@@ -181,7 +195,9 @@ namespace TadaPlay
             _probing = true;
             try
             {
-                LiveShareClient.HostStatus status = await LiveShareClient.TryGetStatusAsync(_hostIp);
+                User latest = _lookup?.Invoke(_hostLabel);
+                LiveShareClient.HostStatus status = LiveShareClient.FromBroadcast(latest)
+                                                    ?? await LiveShareClient.TryGetStatusAsync(_hostIp);
                 if (IsDisposed) return;
 
                 if (status == null)

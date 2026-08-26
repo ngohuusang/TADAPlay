@@ -146,7 +146,7 @@ namespace TadaPlay
                 // working while the VPN does not. Only ask the peer directly when they are
                 // running a build too old to report it.
                 User latest = (_user.Username != null ? _lookup?.Invoke(_user.Username) : null) ?? _user;
-                LiveShareClient.HostStatus status = FromBroadcast(latest)
+                LiveShareClient.HostStatus status = LiveShareClient.FromBroadcast(latest)
                                                     ?? await LiveShareClient.TryGetStatusAsync(_user.IpAddress);
                 if (IsDisposed) return;
                 Render(status);
@@ -203,23 +203,6 @@ namespace TadaPlay
             }
 
             Show("KHÔNG CHƠI", IdleColor, "Người này đang online nhưng không ở trong trận nào.", false);
-        }
-
-        /// <summary>
-        /// The broadcast status as a HostStatus, or null when this player reports nothing -
-        /// either they are idle or their build predates the broadcast, and asking them
-        /// directly tells the two apart.
-        /// </summary>
-        private static LiveShareClient.HostStatus FromBroadcast(User user)
-        {
-            if (user == null || (!user.InGame && !user.HasMatch)) return null;
-            return new LiveShareClient.HostStatus
-            {
-                InGame = user.InGame,
-                HasMatch = user.HasMatch,
-                GameMs = user.GameMs,
-                WaitSeconds = user.WaitSeconds
-            };
         }
 
         /// <summary>Game time as mm:ss, or h:mm:ss once a match runs past an hour.</summary>

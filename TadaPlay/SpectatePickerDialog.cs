@@ -195,42 +195,23 @@ namespace TadaPlay
             }
         }
 
-        /// <summary>
-        /// Turns what the lobby server told us about a player into the same shape a direct
-        /// probe returns, so both sources render identically.
-        ///
-        /// Preferred over probing because it costs nothing and survives the VPN dropping -
-        /// the status came over the lobby socket, not the tunnel. Returns null when the player
-        /// is running a build that does not report it, which falls back to asking them.
-        /// </summary>
         /// <summary>The freshest known record for this player, falling back to what we were given.</summary>
         private User Latest(User user) =>
             (user?.Username != null ? _lookup?.Invoke(user.Username) : null) ?? user;
-
-        private static LiveShareClient.HostStatus FromBroadcast(User user)
-        {
-            if (user == null || (!user.InGame && !user.HasMatch)) return null;
-            return new LiveShareClient.HostStatus
-            {
-                InGame = user.InGame,
-                HasMatch = user.HasMatch,
-                GameMs = user.GameMs,
-                WaitSeconds = user.WaitSeconds
-            };
-        }
 
         private async System.Threading.Tasks.Task RefreshRoundAsync()
         {
             // Ask everyone at once; a peer with TadaPlay closed just times out. Rows keep their
             // previous text until their own probe answers, so a refresh never flashes the whole
             // list back to "đang kiểm tra...".
+            //
             // Only ask over the VPN the players the lobby server could not answer for. On a
             // lobby where everyone is up to date this makes a refresh round cost nothing at
             // all, instead of one request per player.
             var probes = _candidates
                 .Select(u => (User: u,
-                              Broadcast: FromBroadcast(Latest(u)),
-                              Task: FromBroadcast(u) == null
+                              Broadcast: LiveShareClient.FromBroadcast(Latest(u)),
+                              Task: LiveShareClient.FromBroadcast(Latest(u)) == null
                                   ? LiveShareClient.TryGetStatusAsync(u.IpAddress)
                                   : null))
                 .ToList();

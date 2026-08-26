@@ -1151,7 +1151,7 @@ namespace TadaPlay.Controls
             CloseOverlay();
             try
             {
-                _overlay = new SpectatorOverlay(hostIp, hostLabel);
+                _overlay = new SpectatorOverlay(hostIp, hostLabel, LookupOnlineUser);
                 // Owner-less on purpose: an overlay owned by the main window is hidden with it
                 // when the player minimises TadaPlay to get at the game. And shown without
                 // activation, so it never pulls the player out of the game it sits over.
