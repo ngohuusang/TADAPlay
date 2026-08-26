@@ -1,8 +1,14 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="Current" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
+    <Compile Update="Controls\GameDownloadForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
     <Compile Update="Controls\Home.cs">
       <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Update="Controls\HotkeyEditorForm.cs">
+      <SubType>Form</SubType>
     </Compile>
     <Compile Update="Controls\Login.cs">
       <SubType>UserControl</SubType>
@@ -20,6 +26,9 @@
       <SubType>UserControl</SubType>
     </Compile>
     <Compile Update="ReportWinnerDialog.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Update="SpectatePickerDialog.cs">
       <SubType>Form</SubType>
     </Compile>
   </ItemGroup>

@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Linq;
 using System.Net;
 using Microsoft.Extensions.DependencyInjection;

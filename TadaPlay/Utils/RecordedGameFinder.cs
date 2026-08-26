@@ -26,6 +26,14 @@ namespace TadaPlay.Utils
         public const string ReplayPrefix = "tada_record_";
 
         /// <summary>
+        /// File-name prefix for another player's in-progress match downloaded for delayed
+        /// spectating (see LiveShareClient). Like <see cref="ReplayPrefix"/> these are not
+        /// this player's own games, so the auto-upload watcher must ignore them - otherwise
+        /// watching someone else's match would upload it under your name.
+        /// </summary>
+        public const string LivePrefix = "tada_live_";
+
+        /// <summary>
         /// Returns the most recently written recorded game under <paramref name="gameFolder"/>,
         /// or null if none found. Records previously downloaded for replay (see
         /// <see cref="ReplayPrefix"/>) are excluded. <paramref name="modifiedAfterUtc"/>, when
@@ -46,6 +54,7 @@ namespace TadaPlay.Utils
                     .SelectMany(pattern => SafeEnumerate(gameFolder, pattern))
                     .Select(path => new FileInfo(path))
                     .Where(fi => !fi.Name.StartsWith(ReplayPrefix, StringComparison.OrdinalIgnoreCase))
+                    .Where(fi => !fi.Name.StartsWith(LivePrefix, StringComparison.OrdinalIgnoreCase))
                     .Where(fi => !modifiedAfterUtc.HasValue || fi.LastWriteTimeUtc >= modifiedAfterUtc.Value)
                     .OrderByDescending(fi => fi.LastWriteTimeUtc)
                     .FirstOrDefault();

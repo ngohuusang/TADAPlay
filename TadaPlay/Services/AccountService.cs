@@ -105,6 +105,16 @@ public class AccountService : IAccountService
             return serverProfile;
         }
 
+        // The VPN server serves each account's profile by name, so when the login response
+        // carries none this is still an authoritative copy - and a fresher one than the cache,
+        // which may be from a session before the profile was last reissued.
+        string downloaded = TadaPlay.Utils.VpnProfileDownloader.TryDownload(username);
+        if (downloaded != null)
+        {
+            TadaPlay.Utils.VpnProfileCache.Save(username, downloaded);
+            return new VpnProfile { ConfigContent = downloaded };
+        }
+
         if (TadaPlay.Utils.VpnProfileCache.TryLoad(username, out string cachedConfig))
         {
             return new VpnProfile { ConfigContent = cachedConfig };

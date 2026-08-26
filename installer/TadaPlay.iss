@@ -4,7 +4,7 @@
 ; Then compile this script with ISCC.exe (Inno Setup 6).
 
 #define MyAppName "TADA Play"
-#define MyAppVersion "3.1.1"
+#define MyAppVersion "3.13.0"
 #define MyAppExeName "TadaPlay.exe"
 #define MyPublishDir "..\publish\TadaPlay"
 
@@ -36,7 +36,11 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "desktopicon"; Description: "Tạo biểu tượng trên Desktop"; GroupDescription: "Biểu tượng bổ sung:"
 
 [Files]
-Source: "{#MyPublishDir}\*"; DestDir: "{app}"; Flags: recursesubdirs ignoreversion
+; Excludes Log: running the app straight out of the publish folder (which is how a build gets
+; smoke-tested) leaves a tadaplay.log there. Without this it would be packaged and shipped to
+; every user, and worse, ISCC fails outright with a sharing violation whenever that test
+; instance is still running.
+Source: "{#MyPublishDir}\*"; DestDir: "{app}"; Excludes: "Log,*.log"; Flags: recursesubdirs ignoreversion
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
@@ -51,7 +55,12 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: de
 ; prompt is ever shown for them). A Scheduled Task with "Run with highest privileges" is the
 ; supported way to launch an elevated app at logon without a prompt.
 Filename: "{sys}\schtasks.exe"; Parameters: "/Create /TN ""TadaPlay"" /TR ""\""{app}\{#MyAppExeName}\"" --minimized"" /SC ONLOGON /RL HIGHEST /F"; Flags: runhidden; StatusMsg: "Đang thiết lập khởi động cùng Windows..."
+; Match sharing (see LiveShareServer): peers fetch finished matches over the VPN on this
+; port. The app adds this rule itself on first run too - doing it here as well means the
+; very first launch is never the one that silently fails.
+Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall add rule name=""TadaPlay match sharing"" dir=in action=allow protocol=TCP localport=53755 profile=any"; Flags: runhidden; StatusMsg: "Đang mở cổng chia sẻ trận đấu..."
 Filename: "{app}\{#MyAppExeName}"; Description: "Khởi chạy {#MyAppName}"; Flags: nowait postinstall skipifsilent
 
 [UninstallRun]
 Filename: "{sys}\schtasks.exe"; Parameters: "/Delete /TN ""TadaPlay"" /F"; Flags: runhidden; RunOnceId: "DeleteTadaPlayScheduledTask"
+Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""TadaPlay match sharing"""; Flags: runhidden; RunOnceId: "DeleteTadaPlayFirewallRule"
