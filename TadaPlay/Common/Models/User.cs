@@ -70,12 +70,28 @@ namespace TadaPlay.Common.Models
         [JsonProperty("game_ms")]
         public long GameMs { get; set; }
 
+        /// <summary>
+        /// How stale <see cref="GameMs"/> already was when that player published it, in ms.
+        ///
+        /// A host reads its own match clock out of the record, and only does so when it takes
+        /// a capture - so what arrives here is a still frame, not a running clock. Absent from
+        /// an older build (or a lobby server that does not relay it), where it deserialises to
+        /// 0 and the live clock simply starts counting from the moment the value is first seen.
+        /// </summary>
+        [JsonProperty("game_ms_age")]
+        public long GameMsAgeMs { get; set; }
+
         /// <summary>Seconds until the host's next capture makes more of the match available.</summary>
         [JsonProperty("wait_seconds")]
         public int WaitSeconds { get; set; }
 
-        /// <summary>How far into their match this player is.</summary>
-        public TimeSpan GameTime => TimeSpan.FromMilliseconds(GameMs);
+        /// <summary>
+        /// How far into their match this player is now - the captured clock with the time
+        /// since brought back on. See <see cref="TadaPlay.Utils.LiveMatchClock"/> for why
+        /// <see cref="GameMs"/> on its own is not what anybody wants to look at.
+        /// </summary>
+        public TimeSpan LiveGameTime =>
+            TimeSpan.FromMilliseconds(TadaPlay.Utils.LiveMatchClock.LiveMs(Username, GameMs, GameMsAgeMs, InGame));
 
         /// <summary>Whether this player's match can be watched right now.</summary>
         public bool IsWatchable => InGame && HasMatch;

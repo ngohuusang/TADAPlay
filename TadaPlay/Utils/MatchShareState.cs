@@ -22,6 +22,7 @@ namespace TadaPlay.Utils
         private static DateTime? _nextCaptureUtc;
         private static string _recordPath;
         private static long _durationMs;
+        private static DateTime? _durationAtUtc;
 
         /// <summary>
         /// How often an in-progress match is captured. Home overwrites this from
@@ -82,7 +83,33 @@ namespace TadaPlay.Utils
         public static long DurationMs
         {
             get { lock (Gate) return _durationMs; }
-            set { lock (Gate) _durationMs = value; }
+            set { lock (Gate) { _durationMs = value; _durationAtUtc = DateTime.UtcNow; } }
+        }
+
+        /// <summary>
+        /// How old <see cref="DurationMs"/> is, in milliseconds - the wall-clock time since the
+        /// capture it came from.
+        ///
+        /// A match clock only moves when a capture is taken: every 10 seconds while somebody is
+        /// watching, every 90 when nobody is. Handed over on its own, the number therefore reads
+        /// as the match being up to a minute and a half earlier than it is, and a viewer whose
+        /// replay is running normally watches their own game clock overtake it - which cannot
+        /// happen, since they are behind the host by construction.
+        ///
+        /// Sent alongside the clock so the far end can add the elapsed time back on. Timing the
+        /// gap here rather than sending a timestamp keeps two machines' clocks out of it.
+        /// </summary>
+        public static long DurationAgeMs
+        {
+            get
+            {
+                lock (Gate)
+                {
+                    if (_durationAtUtc == null) return 0;
+                    double ms = (DateTime.UtcNow - _durationAtUtc.Value).TotalMilliseconds;
+                    return ms <= 0 ? 0 : (long)ms;
+                }
+            }
         }
 
         /// <summary>Called when the watcher first sees a match being recorded.</summary>
@@ -95,6 +122,7 @@ namespace TadaPlay.Utils
                 _nextCaptureUtc = DateTime.UtcNow + CaptureInterval;
                 _recordPath = recordPath;
                 _durationMs = 0;
+                _durationAtUtc = null;
             }
         }
 

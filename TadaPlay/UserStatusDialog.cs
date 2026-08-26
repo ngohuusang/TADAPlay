@@ -180,9 +180,11 @@ namespace TadaPlay
             if (status.InGame)
             {
                 // The match clock comes from the record's own sync increments, so it is the
-                // real in-game time, not how long ago the match started.
+                // real in-game time, not how long ago the match started. LiveGameTime rather
+                // than GameTime: the host only reads that clock when it takes a capture, so the
+                // raw value is a still frame up to 90 seconds old.
                 Show("● ĐANG CHƠI", LiveColor,
-                     $"Trận đang ở phút {Clock(status.GameTime)} - xem được ngay " +
+                     $"Trận đang ở phút {Clock(status.LiveGameTime)} - xem được ngay " +
                      $"({status.Bytes / 1024} KB). Người xem chậm hơn người chơi khoảng 10-20 giây.",
                      !_isSelf);
                 return;
