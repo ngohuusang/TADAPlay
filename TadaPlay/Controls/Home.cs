@@ -79,8 +79,6 @@ namespace TadaPlay.Controls
             wireGuardVpnService = _wireGuardVpnService;
             accountService = _accountService;
 
-            uploadRecordButton.Click += uploadRecordButton_Click;
-            spectateButton.Click += spectateButton_Click;
             userList.ItemSelected += userList_ItemSelected;
 
             // The live stream keeps appending to a file on a background loop; without this it
@@ -990,34 +988,10 @@ namespace TadaPlay.Controls
         // live snapshot TadaPlay already captures, and the viewer plays it as a normal
         // replay. The viewer is therefore always behind by at least the snapshot interval,
         // which is the property that makes it safe to allow during a ranked match.
-        private async void spectateButton_Click(object sender, EventArgs e)
-        {
-            if (!TryGetGameFolderForWatching(out string gameFolder)) return;
-
-            string hostIp, hostLabel;
-            // The lookup, not just the list: every user_list broadcast REPLACES these objects
-            // rather than updating them, so a dialog holding the ones it was given at open
-            // time would show a status frozen at that moment.
-            using (var picker = new SpectatePickerDialog(appContext.AllOnlineUsers,
-                                                         appContext.GetCurrentUser()?.Username,
-                                                         LookupOnlineUser))
-            {
-                if (picker.ShowDialog(mainForm) != DialogResult.OK || picker.SelectedHostIp == null)
-                {
-                    return;
-                }
-                hostIp = picker.SelectedHostIp;
-                hostLabel = picker.SelectedHostLabel ?? hostIp;
-            }
-
-            await WatchAsync(hostIp, hostLabel, gameFolder);
-        }
-
         /// <summary>
-        /// Opens one player's live status. This is the other way into watching: the spectate
-        /// button asks "who can I watch?", while clicking a name asks "what is THIS person
-        /// doing?" - which is the question the online list itself cannot answer, since being
-        /// online says nothing about being in a game.
+        /// Opens one player's live status - now the only way into watching. Clicking a name
+        /// asks "what is THIS person doing?", which is the question the online list itself
+        /// cannot answer: being online says nothing about being in a game.
         /// </summary>
         private async void userList_ItemSelected(object sender, AntdUI.MsgItemEventArgs e)
         {
@@ -1069,7 +1043,10 @@ namespace TadaPlay.Controls
         private async System.Threading.Tasks.Task WatchAsync(string hostIp, string hostLabel,
                                                              string gameFolder)
         {
-            spectateButton.Enabled = false;
+            // The spectate button used to double as the guard against starting a second
+            // watch while one was still setting up. With it gone this has to guard itself.
+            if (_watchInProgress) return;
+            _watchInProgress = true;
             try
             {
                 // Only one match can be followed at a time - the file name is per host, and a
@@ -1121,11 +1098,12 @@ namespace TadaPlay.Controls
             }
             finally
             {
-                spectateButton.Enabled = true;
+                _watchInProgress = false;
             }
         }
 
         // Follows a match that is still being played: see LiveStreamSession.
+        private bool _watchInProgress;
         private LiveStreamSession _liveStream;
         private SpectatorOverlay _overlay;
 
@@ -1198,11 +1176,6 @@ namespace TadaPlay.Controls
             _liveStream = null;
             session?.Dispose();
             CloseOverlay();
-        }
-
-        private void uploadRecordButton_Click(object sender, EventArgs e)
-        {
-            _ = UploadRecordAsync(isAutomatic: false);
         }
 
         /// <summary>

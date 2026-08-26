@@ -188,8 +188,8 @@ namespace TadaPlay.Connections
                     if (!string.IsNullOrEmpty(_matchName) && !string.IsNullOrEmpty(tail.MatchName)
                         && !string.Equals(_matchName, tail.MatchName, StringComparison.OrdinalIgnoreCase))
                     {
-                        Finish($"[Xem] {_hostLabel} đã bắt đầu trận mới - bấm 'Xem trận đấu' để xem trận đó.",
-                               false);
+                        Finish($"[Xem] {_hostLabel} đã bắt đầu trận mới - bấm vào tên họ trong " +
+                               "danh sách để xem trận đó.", false);
                         return;
                     }
                     if (tail.TotalBytes > 0 && _fetched > tail.TotalBytes)

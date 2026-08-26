@@ -31,8 +31,6 @@
             homeGridPanel = new AntdUI.GridPanel();
             playPanel = new Panel();
             logRichTextBox = new RichTextBox();
-            uploadRecordButton = new AntdUI.Button();
-            spectateButton = new AntdUI.Button();
             startGameButton = new AntdUI.Button();
             ipAddressLabel = new Label();
             reconnectVpnButton = new AntdUI.Button();
@@ -68,8 +66,6 @@
             // 
             playPanel.BackColor = Color.Snow;
             playPanel.Controls.Add(logRichTextBox);
-            playPanel.Controls.Add(uploadRecordButton);
-            playPanel.Controls.Add(spectateButton);
             playPanel.Controls.Add(startGameButton);
             playPanel.Controls.Add(ipAddressLabel);
             playPanel.Controls.Add(reconnectVpnButton);
@@ -92,32 +88,6 @@
             logRichTextBox.Size = new Size(535, 85);
             logRichTextBox.TabIndex = 6;
             logRichTextBox.Text = "";
-            // 
-            // uploadRecordButton
-            // 
-            uploadRecordButton.AutoSizeMode = AntdUI.TAutoSize.Auto;
-            uploadRecordButton.Dock = DockStyle.Top;
-            uploadRecordButton.Font = new Font("Segoe UI", 11F, FontStyle.Regular, GraphicsUnit.Point, 0);
-            uploadRecordButton.IconSvg = "CloudUploadOutlined";
-            uploadRecordButton.Location = new Point(3, 284);
-            uploadRecordButton.Name = "uploadRecordButton";
-            uploadRecordButton.Padding = new Padding(5);
-            uploadRecordButton.Size = new Size(203, 44);
-            uploadRecordButton.TabIndex = 5;
-            uploadRecordButton.Text = "Tải lên record thủ công";
-            // 
-            // spectateButton
-            // 
-            spectateButton.AutoSizeMode = AntdUI.TAutoSize.Auto;
-            spectateButton.Dock = DockStyle.Top;
-            spectateButton.Font = new Font("Segoe UI", 11F, FontStyle.Regular, GraphicsUnit.Point, 0);
-            spectateButton.IconSvg = "EyeOutlined";
-            spectateButton.Location = new Point(3, 240);
-            spectateButton.Name = "spectateButton";
-            spectateButton.Padding = new Padding(5);
-            spectateButton.Size = new Size(140, 44);
-            spectateButton.TabIndex = 6;
-            spectateButton.Text = "Xem trận đấu";
             // 
             // startGameButton
             // 
@@ -321,8 +291,6 @@
         private Label ipAddressLabel;
         private AntdUI.Button reconnectVpnButton;
         private AntdUI.Button startGameButton;
-        private AntdUI.Button uploadRecordButton;
-        private AntdUI.Button spectateButton;
         private RichTextBox logRichTextBox;
         private TableLayoutPanel tableLayoutPanel1;
         private AntdUI.Chat.MsgList userList;
