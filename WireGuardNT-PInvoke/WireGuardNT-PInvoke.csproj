@@ -21,6 +21,7 @@
 
   <ItemGroup>
     <PackageReference Include="IPNetwork2" Version="3.1.764" />
+    <PackageReference Include="log4net" Version="3.3.0" />
     <PackageReference Include="Vanara.PInvoke.IpHlpApi" Version="4.1.6" />
   </ItemGroup>
 

@@ -867,13 +867,13 @@ namespace TadaPlay.Controls
 
         private void LaunchGame()
         {
-            // Make the lobby's "Allow Spectators" box start ticked. The game always listens
-            // on the spectator port during a match, but a host who never ticks that box
-            // cannot actually be watched - so set it before the game reads its settings.
-            if (GameSpectator.EnsureSpectatorsAllowedByDefault())
+            // Pre-fill the game's "Spectator Stream" settings before it reads them, so a host
+            // is watchable without opening that dialog and configuring it every game: Allow
+            // Spectators ticked, plus default max connections / join delay / late-join limit.
+            if (GameSpectator.EnsureSpectatorStreamDefaults())
             {
-                printLog("[Xem] Đã bật sẵn 'Allow Spectators' để người khác có thể xem trận của bạn.",
-                         Color.RoyalBlue);
+                printLog("[Xem] Đã đặt sẵn thông số cho phép xem trận (Allow Spectators, số kết nối, " +
+                         "độ trễ tham gia) để người khác xem được trận của bạn.", Color.RoyalBlue);
             }
 
             string exePath = GameExecutablePreparer.PrepareAndGetExePath(appContext.GetGameFolder(), appContext.GetGameLaunchMode());
@@ -1053,6 +1053,23 @@ namespace TadaPlay.Controls
                 // second stream would keep appending to a file nobody is watching any more.
                 StopLiveStream();
 
+                // While the host is actually in a match, prefer the game's OWN live spectator
+                // (age2_x1\spectate.exe over TCP 53754) rather than the delayed replay stream.
+                // A live spectator receives the match as it happens - with UserPatch's built-in
+                // anti-ghost join delay - so the viewer can never run past the host, and there
+                // is no end-of-file to hit. Fast-forwarding it therefore cannot end the match
+                // early, which is exactly what the replay path below does when the viewer speeds
+                // up and catches the last written byte. The replay path stays as the fallback:
+                // for a FINISHED match (nothing live to connect to) and if the live viewer will
+                // not start on this install.
+                User latest = LookupOnlineUser(hostLabel);
+                LiveShareClient.HostStatus hostStatus = LiveShareClient.FromBroadcast(latest)
+                                                        ?? await LiveShareClient.TryGetStatusAsync(hostIp);
+                if (hostStatus?.InGame == true && TryStartNativeSpectator(hostIp, hostLabel, gameFolder))
+                {
+                    return;
+                }
+
                 printLog($"[Xem] Đang tải trận đấu của {hostLabel}...", Color.RoyalBlue);
                 LiveShareClient.FetchResult fetch =
                     await LiveShareClient.TryFetchAsync(hostIp, gameFolder, hostLabel);
@@ -1099,6 +1116,82 @@ namespace TadaPlay.Controls
             finally
             {
                 _watchInProgress = false;
+            }
+        }
+
+        /// <summary>
+        /// Opens the game's own live spectator (age2_x1\spectate.exe) pointed at the host, and
+        /// returns whether it started.
+        ///
+        /// This is the real fix for "the replay finishes while the host is still playing": a
+        /// live spectator streams the match as it happens instead of replaying a file that ends
+        /// at its last captured byte, so there is no end-of-file to run into and speeding the
+        /// view up cannot terminate it. Two install quirks that made this fail before are
+        /// handled here: the viewer cannot resolve the game ("Could not locate game expansion.")
+        /// unless the install is registered (<see cref="GameSpectator.EnsureGameRegistered"/>),
+        /// and it always launches stock age2_x1.5.exe unless that name is pointed at the WK
+        /// build the player actually runs (done inside <see cref="GameSpectator.Spectate"/>).
+        ///
+        /// Returns false - having said why in the log - so the caller can fall back to the
+        /// delayed replay stream on a build where the live viewer will not start.
+        /// </summary>
+        private bool TryStartNativeSpectator(string hostIp, string hostLabel, string gameFolder)
+        {
+            try
+            {
+                if (GameSpectator.FindSpectatorExe(gameFolder) == null)
+                {
+                    printLog("[Xem] Không tìm thấy age2_x1\\spectate.exe trong thư mục game - " +
+                             "chuyển sang xem lại theo replay.", Color.Orange);
+                    return false;
+                }
+
+                // Point the install's registry entries at THIS folder so the viewer can resolve
+                // the game; without it spectate.exe fails with "Could not locate game expansion."
+                try { GameSpectator.EnsureGameRegistered(gameFolder); }
+                catch (Exception ex) { DebugLogger.Warn($"Home: EnsureGameRegistered failed: {ex.Message}"); }
+
+                // Pre-fill the "Spectator Stream" dialog's defaults so it opens ready to use
+                // rather than empty - the viewer shouldn't have to set these each time either.
+                try { GameSpectator.EnsureSpectatorStreamDefaults(); }
+                catch (Exception ex) { DebugLogger.Warn($"Home: spectator stream defaults failed: {ex.Message}"); }
+
+                // The build the player actually runs (age2-WK.exe / -center), so the spectator
+                // opens the same game rather than stock age2_x1.5.exe. Null is tolerated - the
+                // swap is simply skipped and whatever exe is in place is used.
+                string playExePath = null;
+                try
+                {
+                    playExePath = GameExecutablePreparer.PrepareAndGetExePath(
+                        gameFolder, appContext.GetGameLaunchMode());
+                }
+                catch (Exception ex)
+                {
+                    DebugLogger.Warn($"Home: cannot resolve play exe for spectating: {ex.Message}");
+                }
+
+                var (status, message) = GameSpectator.Spectate(gameFolder, hostIp, playExePath);
+                if (status == GameSpectator.LaunchStatus.Success)
+                {
+                    printLog($"[Xem] {message}", Color.DarkGreen);
+                    printLog("[Xem] Đang xem trực tiếp qua spectator của game - không bị kết thúc " +
+                             "sớm khi tua nhanh.", Color.RoyalBlue);
+                    // The host's clock floats above the game so the viewer sees how far behind
+                    // live they are (the spectator's own join delay).
+                    ShowOverlay(hostIp, hostLabel);
+                    return true;
+                }
+
+                printLog($"[Xem] Không mở được spectator trực tiếp ({message}) - chuyển sang xem " +
+                         "lại theo replay.", Color.Orange);
+                return false;
+            }
+            catch (Exception ex)
+            {
+                DebugLogger.Warn($"Home: native spectator failed to start: {ex.Message}");
+                printLog($"[Xem] Lỗi khi mở spectator trực tiếp ({ex.Message}) - chuyển sang xem " +
+                         "lại theo replay.", Color.Orange);
+                return false;
             }
         }
 

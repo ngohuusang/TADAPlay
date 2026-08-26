@@ -59,31 +59,69 @@ namespace TadaPlay.Utils
             return File.Exists(path) ? path : null;
         }
 
+        // --- Server-side spectator stream defaults --------------------------------------
+        // spectate.exe's "Server stream settings" persist under the game key, so filling them
+        // in by hand every game is only necessary because nothing writes them first. These are
+        // the values a working install shows in that dialog. Units, verified against a live
+        // install: "Spec Join Delay" is milliseconds (5000 = the 5s the dialog shows), "Max
+        // Connections" is a plain count, and "Spec Late Join" is the raw unit the game stores
+        // for the "Late join limit" box (19200 is what it holds for the 10 shown there) - kept
+        // as captured rather than converted, so it round-trips to exactly what the dialog had.
+        private const int DefaultMaxConnections = 32;
+        private const int DefaultJoinDelayMs = 5000;    // "Join delay time (seconds)" = 5
+        private const int DefaultLateJoinLimit = 19200; // "Late join limit (minutes)" as shown
+
         /// <summary>
-        /// Makes the lobby's "Allow Spectators" box start ticked, so matches are watchable
-        /// without the host remembering to enable it every game.
+        /// Writes sensible defaults for the game's own spectator stream so the "Spectator
+        /// Stream" dialog never has to be configured by hand - as a host (Allow Spectators, max
+        /// connections, join delay, late-join limit) or between sessions.
         ///
-        /// The game listens on <see cref="SpectatorPort"/> whenever a match is running, but
-        /// that alone is not enough - a connection to a host who has not allowed spectators
-        /// does not get through. Returns true if the setting was changed.
+        /// Idempotent: each value is written only when it differs, so it neither fights a manual
+        /// change unnecessarily nor rewrites on every call. Returns true if anything changed.
         /// </summary>
-        public static bool EnsureSpectatorsAllowedByDefault()
+        public static bool EnsureSpectatorStreamDefaults()
         {
             try
             {
                 using RegistryKey key = Registry.CurrentUser.CreateSubKey(GameRegistryKey);
                 if (key == null) return false;
-                if (Convert.ToInt32(key.GetValue("Spec Default", 0)) == 1) return false;
 
-                key.SetValue("Spec Default", 1, RegistryValueKind.DWord);
-                DebugLogger.Info("GameSpectator: enabled 'Spec Default' so Allow Spectators starts ticked.");
-                return true;
+                bool changed = false;
+                changed |= SetDwordIfDifferent(key, "Spec Default", 1); // Allow Spectators ticked
+                changed |= SetDwordIfDifferent(key, "Max Connections", DefaultMaxConnections);
+                changed |= SetDwordIfDifferent(key, "Spec Join Delay", DefaultJoinDelayMs);
+                changed |= SetDwordIfDifferent(key, "Spec Late Join", DefaultLateJoinLimit);
+
+                if (changed)
+                {
+                    DebugLogger.Info("GameSpectator: applied default spectator stream settings " +
+                                     $"(Spec Default=1, Max Connections={DefaultMaxConnections}, " +
+                                     $"Spec Join Delay={DefaultJoinDelayMs}ms, " +
+                                     $"Spec Late Join={DefaultLateJoinLimit}).");
+                }
+                return changed;
             }
             catch (Exception ex)
             {
-                DebugLogger.Warn($"GameSpectator: cannot set 'Spec Default': {ex.Message}");
+                DebugLogger.Warn($"GameSpectator: cannot apply spectator stream defaults: {ex.Message}");
                 return false;
             }
+        }
+
+        /// <summary>Writes a DWORD only when it is missing or different; reports whether it changed.</summary>
+        private static bool SetDwordIfDifferent(RegistryKey key, string name, int value)
+        {
+            try
+            {
+                object current = key.GetValue(name);
+                if (current is int existing && existing == value) return false;
+            }
+            catch (Exception ex)
+            {
+                DebugLogger.Warn($"GameSpectator: cannot read '{name}': {ex.Message}");
+            }
+            key.SetValue(name, value, RegistryValueKind.DWord);
+            return true;
         }
 
         public enum LaunchStatus { Success, NotConfigured, ViewerMissing, LaunchFailed }
