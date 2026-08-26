@@ -31,4 +31,18 @@ public interface IAccountService
     Task RenameMatchAsync(long matchId, string roomName);
 
     Task DownloadRecordAsync(long recordId, string destinationPath);
+
+    // --- Hotkey backups. The editor otherwise only writes player*.hki inside the game folder,
+    // which a reinstall wipes; these keep a layout against the account instead.
+
+    /// <summary>The player's backups, newest first. Names and dates only - not the layouts.</summary>
+    Task<List<HotkeyBackup>> GetHotkeyBackupsAsync();
+
+    /// <summary>Stores a layout under a name. <paramref name="fileBytes"/> is a .hki as written to disk.</summary>
+    Task<HotkeyBackup> BackupHotkeysAsync(string name, byte[] fileBytes);
+
+    /// <summary>Fetches one backup's layout, as the bytes of a .hki.</summary>
+    Task<byte[]> RestoreHotkeysAsync(long backupId);
+
+    Task DeleteHotkeyBackupAsync(long backupId);
 }

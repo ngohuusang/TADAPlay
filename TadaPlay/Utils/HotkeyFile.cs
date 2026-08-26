@@ -65,7 +65,16 @@ namespace TadaPlay.Utils
 
         public static HotkeyFile Load(string path)
         {
-            return Parse(GameProfileNameWriter.Inflate(File.ReadAllBytes(path)));
+            return FromBytes(File.ReadAllBytes(path));
+        }
+
+        /// <summary>
+        /// Reads a layout from the bytes of a .hki, wherever they came from - a file, an embedded
+        /// resource, or a backup pulled down from the server.
+        /// </summary>
+        public static HotkeyFile FromBytes(byte[] fileBytes)
+        {
+            return Parse(GameProfileNameWriter.Inflate(fileBytes));
         }
 
         /// <summary>Loads the layout shipped with the app. Throws if the resource is missing.</summary>
@@ -75,7 +84,7 @@ namespace TadaPlay.Utils
                 ?? throw new InvalidOperationException($"Embedded resource '{DefaultResourceName}' not found.");
             using var buffer = new MemoryStream();
             resourceStream.CopyTo(buffer);
-            return Parse(GameProfileNameWriter.Inflate(buffer.ToArray()));
+            return FromBytes(buffer.ToArray());
         }
 
         private static HotkeyFile Parse(byte[] raw)
@@ -165,6 +174,25 @@ namespace TadaPlay.Utils
 
         public void Save(string path)
         {
+            byte[] compressed = ToBytes();
+
+            // Write to a temp file next to the target, then swap in - avoids leaving a half-written
+            // .hki behind if something fails mid-write (the game would refuse to load a truncated one).
+            string tmp = path + ".tmp";
+            File.WriteAllBytes(tmp, compressed);
+            if (File.Exists(path)) File.Delete(path);
+            File.Move(tmp, path);
+            DebugLogger.Info($"HotkeyFile: saved '{path}' ({compressed.Length} bytes).");
+        }
+
+        /// <summary>
+        /// The layout exactly as it would be written to disk.
+        ///
+        /// Shared with <see cref="Save"/> so a backup and the file the game reads cannot come out
+        /// differently - a backup that did not restore byte-for-byte would be worse than none.
+        /// </summary>
+        public byte[] ToBytes()
+        {
             using var ms = new MemoryStream();
             using (var writer = new BinaryWriter(ms))
             {
@@ -185,15 +213,7 @@ namespace TadaPlay.Utils
                 }
             }
 
-            byte[] compressed = GameProfileNameWriter.Deflate(ms.ToArray());
-
-            // Write to a temp file next to the target, then swap in - avoids leaving a half-written
-            // .hki behind if something fails mid-write (the game would refuse to load a truncated one).
-            string tmp = path + ".tmp";
-            File.WriteAllBytes(tmp, compressed);
-            if (File.Exists(path)) File.Delete(path);
-            File.Move(tmp, path);
-            DebugLogger.Info($"HotkeyFile: saved '{path}' ({compressed.Length} bytes).");
+            return GameProfileNameWriter.Deflate(ms.ToArray());
         }
     }
 }

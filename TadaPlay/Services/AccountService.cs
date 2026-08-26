@@ -424,6 +424,85 @@ public class AccountService : IAccountService
         await source.CopyToAsync(fileStream);
     }
 
+    // --- Hotkey backups -----------------------------------------------------------------
+    //
+    // The layout travels base64 inside JSON rather than as a multipart upload. A .hki is a few
+    // hundred bytes; the ceremony of a file upload would cost more than the payload, and every
+    // other endpoint here already speaks JSON.
+
+    public async Task<List<HotkeyBackup>> GetHotkeyBackupsAsync()
+    {
+        Authorize();
+        var response = await _httpClient.GetAsync(BASE_URL + "?action=hotkey_backups");
+        string body = await response.Content.ReadAsStringAsync();
+        if (!response.IsSuccessStatusCode) throw Failure(body, "Không lấy được danh sách sao lưu", response);
+
+        var result = JsonConvert.DeserializeObject<HotkeyBackupListResponse>(body);
+        return result?.Backups ?? new List<HotkeyBackup>();
+    }
+
+    public async Task<HotkeyBackup> BackupHotkeysAsync(string name, byte[] fileBytes)
+    {
+        Authorize();
+        var payload = new StringContent(
+            JsonConvert.SerializeObject(new { name, data_base64 = Convert.ToBase64String(fileBytes) }),
+            System.Text.Encoding.UTF8, "application/json");
+
+        var response = await _httpClient.PostAsync(BASE_URL + "?action=backup_hotkeys", payload);
+        string body = await response.Content.ReadAsStringAsync();
+        if (!response.IsSuccessStatusCode) throw Failure(body, "Sao lưu phím tắt thất bại", response);
+
+        return JsonConvert.DeserializeObject<HotkeyBackup>(body);
+    }
+
+    public async Task<byte[]> RestoreHotkeysAsync(long backupId)
+    {
+        Authorize();
+        var response = await _httpClient.GetAsync(BASE_URL + "?action=restore_hotkeys&id=" + backupId);
+        string body = await response.Content.ReadAsStringAsync();
+        if (!response.IsSuccessStatusCode) throw Failure(body, "Không tải được bản sao lưu", response);
+
+        string base64 = JObject.Parse(body)["data_base64"]?.ToString();
+        if (string.IsNullOrEmpty(base64))
+        {
+            throw new Exception("Bản sao lưu không có dữ liệu phím tắt.");
+        }
+        return Convert.FromBase64String(base64);
+    }
+
+    public async Task DeleteHotkeyBackupAsync(long backupId)
+    {
+        Authorize();
+        var payload = new StringContent(
+            JsonConvert.SerializeObject(new { id = backupId }),
+            System.Text.Encoding.UTF8, "application/json");
+
+        var response = await _httpClient.PostAsync(BASE_URL + "?action=delete_hotkey_backup", payload);
+        if (!response.IsSuccessStatusCode)
+        {
+            throw Failure(await response.Content.ReadAsStringAsync(), "Không xóa được bản sao lưu", response);
+        }
+    }
+
+    private void Authorize()
+    {
+        _httpClient.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _appContext.GetJwtTokenSetting());
+    }
+
+    /// <summary>
+    /// The server explains refusals in Vietnamese; surface that rather than a status code, and
+    /// fall back to the code only when there is no message to show.
+    /// </summary>
+    private static Exception Failure(string body, string fallback, HttpResponseMessage response)
+    {
+        string message = null;
+        try { message = JObject.Parse(body)["message"]?.ToString(); } catch (Exception) { }
+        return new Exception(string.IsNullOrWhiteSpace(message)
+            ? $"{fallback} ({(int)response.StatusCode})."
+            : message);
+    }
+
     public async Task<bool> DoLogoutAsync()
     {
         await ReleaseVpnProfileAsync();

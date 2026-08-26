@@ -4,7 +4,9 @@ using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.Windows.Forms;
+using TadaPlay.Common.Models;
 using TadaPlay.Logger;
+using TadaPlay.Services.Interface;
 using TadaPlay.Utils;
 
 namespace TadaPlay.Controls
@@ -19,6 +21,16 @@ namespace TadaPlay.Controls
         private readonly string _gameFolder;
         private readonly string _hotkeyDir;             // the Voobly "Game Data" folder the game reads player*.hki from
         private readonly List<string> _slotFiles;       // player*.hki in _hotkeyDir
+
+        /// <summary>
+        /// Used only for the account-backed backups. Null when the editor is opened without a
+        /// signed-in account, in which case the two backup buttons are disabled rather than
+        /// hidden - a missing button reads as a build that does not have the feature.
+        /// </summary>
+        private readonly IAccountService _accountService;
+
+        private AntdUI.Button _backupButton;
+        private AntdUI.Button _pullButton;
         private Dictionary<int, string> _strings;
 
         private AntdUI.Select _slotCombo;
@@ -59,9 +71,10 @@ namespace TadaPlay.Controls
             { 3, "Xây dựng" },
         };
 
-        public HotkeyEditorForm(string gameFolder)
+        public HotkeyEditorForm(string gameFolder, IAccountService accountService = null)
         {
             _gameFolder = gameFolder;
+            _accountService = accountService;
             _hotkeyDir = ResolveHotkeyDirectory(gameFolder);
             _slotFiles = FindSlotFiles(_hotkeyDir);
 
@@ -129,11 +142,26 @@ namespace TadaPlay.Controls
             deleteButton.Ghost = true;
             deleteButton.Click += DeleteSelectedSlot;
 
+            // The account-backed backups. On the hint row because the row above is full, and
+            // together because they are two halves of one idea: put this layout somewhere a
+            // reinstall cannot reach, and get it back.
+            _backupButton = UiTheme.Toolbar("Sao lưu lên tài khoản", new Point(492, 52), 184, 34);
+            _backupButton.Click += BackupToAccount;
+
+            _pullButton = UiTheme.Toolbar("Lấy từ tài khoản", new Point(686, 52), 146, 34);
+            _pullButton.Click += PullFromAccount;
+
+            if (_accountService == null)
+            {
+                _backupButton.Enabled = false;
+                _pullButton.Enabled = false;
+            }
+
             var hint = new AntdUI.Label
             {
                 Text = "Nhấn vào ô phím để đặt lại. Đang thu phím: nhấn phím mới, hoặc Esc để hủy, Delete để bỏ gán.",
                 Location = new Point(14, 54),
-                Size = new Size(818, 38),
+                Size = new Size(470, 38),
                 ForeColor = UiTheme.Muted,
                 Font = new Font("Segoe UI", 9F),
                 TextAlign = ContentAlignment.MiddleLeft,
@@ -145,6 +173,8 @@ namespace TadaPlay.Controls
             top.Controls.Add(importButton);
             top.Controls.Add(resetButton);
             top.Controls.Add(deleteButton);
+            top.Controls.Add(_backupButton);
+            top.Controls.Add(_pullButton);
             top.Controls.Add(hint);
 
             // --- master/detail. One long scroll of every group meant hunting for a heading
@@ -764,6 +794,99 @@ namespace TadaPlay.Controls
                 DebugLogger.Error($"HotkeyEditor: import '{dlg.FileName}' failed: {ex.Message}");
                 AntdUI.Message.error(this, $"Không đọc được tệp phím tắt đã chọn: {ex.Message}");
             }
+        }
+
+        /// <summary>
+        /// Puts the layout currently on screen onto the player's account under a name.
+        ///
+        /// What is backed up is the WORKING COPY, not the file on disk - what the player is
+        /// looking at is what they mean by "my hotkeys", and requiring them to save first
+        /// would mean overwriting the layout they might be trying to keep a copy of before
+        /// they could keep it.
+        /// </summary>
+        private async void BackupToAccount(object sender, EventArgs e)
+        {
+            CancelCapture();
+            if (_accountService == null || _file == null)
+            {
+                SetStatus("Chưa có phím tắt để sao lưu.");
+                return;
+            }
+
+            string suggested = $"{CurrentSlotName()} {DateTime.Now:dd/MM HH:mm}";
+            string name = UiUtils.PromptForText(this, "Sao lưu phím tắt",
+                                                "Đặt tên cho bản sao lưu:", suggested, 100);
+            if (name == null) return;                       // cancelled
+
+            name = name.Trim();
+            if (name.Length == 0)
+            {
+                AntdUI.Message.warn(this, "Tên bản sao lưu không được để trống.");
+                return;
+            }
+
+            _backupButton.Loading = true;
+            try
+            {
+                // ToBytes, not the file on disk: the same bytes Save would write, so what
+                // comes back later is byte-for-byte what was on screen now.
+                await _accountService.BackupHotkeysAsync(name, _file.ToBytes());
+                string message = $"Đã sao lưu \"{name}\" lên tài khoản.";
+                SetStatus(message);
+                AntdUI.Message.success(this, message);
+            }
+            catch (Exception ex)
+            {
+                DebugLogger.Error($"HotkeyEditor: backup failed: {ex.Message}");
+                SetStatus("Sao lưu thất bại.");
+                AntdUI.Message.error(this, ex.Message);
+            }
+            finally
+            {
+                if (!_backupButton.IsDisposed) _backupButton.Loading = false;
+            }
+        }
+
+        /// <summary>
+        /// Pulls a backup down and loads it into the editor.
+        ///
+        /// Nothing is written to the game folder here - the layout arrives the same way an
+        /// imported file does, and the player presses Lưu when they are happy with it. A pull
+        /// they did not mean costs them a Close.
+        /// </summary>
+        private void PullFromAccount(object sender, EventArgs e)
+        {
+            CancelCapture();
+            if (_accountService == null) return;
+
+            using var picker = new HotkeyBackupDialog(_accountService);
+            if (picker.ShowDialog(this) != DialogResult.OK || picker.RestoredBytes == null) return;
+
+            try
+            {
+                var restored = HotkeyFile.FromBytes(picker.RestoredBytes);
+                restored.AdoptModCommands(HasName);
+                _file = restored;
+                _dirty = true;
+                RenderList();
+                string message = $"Đã lấy về \"{picker.RestoredName}\". Bấm Lưu để áp dụng.";
+                SetStatus(message);
+                AntdUI.Message.success(this, message);
+            }
+            catch (Exception ex)
+            {
+                DebugLogger.Error($"HotkeyEditor: restoring a backup failed: {ex.Message}");
+                AntdUI.Message.error(this, $"Bản sao lưu không đọc được: {ex.Message}");
+            }
+        }
+
+        /// <summary>The selected profile's file name, used to suggest a backup name.</summary>
+        private string CurrentSlotName()
+        {
+            int idx = _slotCombo.SelectedIndex;
+            return idx >= 0 && idx < _slotFiles.Count
+                ? Path.GetFileNameWithoutExtension(_slotFiles[idx])
+                : "phím tắt";
         }
 
         /// <summary>

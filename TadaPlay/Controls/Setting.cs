@@ -166,7 +166,9 @@ namespace TadaPlay.Controls
                     { CancelText = null, OkText = "Đóng" });
                     return;
                 }
-                using var editor = new HotkeyEditorForm(folder);
+                // The account service goes through so the editor can offer the backups; without
+                // it the two backup buttons are disabled.
+                using var editor = new HotkeyEditorForm(folder, _accountService);
                 editor.ShowDialog(form);
             };
 
