@@ -106,9 +106,9 @@ namespace TadaPlay.Connections
         /// or null when they report nothing - either they are idle or their build predates the
         /// broadcast, and asking them directly tells those apart.
         ///
-        /// Lives here so the picker, the status dialog and the spectator overlay all read the
-        /// broadcast the same way. They are meant to agree with each other, and three private
-        /// copies of this mapping is precisely how they would stop.
+        /// Lives here so the status dialog and the spectator overlay read the broadcast the
+        /// same way. They are meant to agree with each other, and a private copy per surface
+        /// is precisely how surfaces stop agreeing.
         /// </summary>
         public static HostStatus FromBroadcast(TadaPlay.Common.Models.User user)
         {
