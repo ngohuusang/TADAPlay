@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using Newtonsoft.Json;
 
 namespace TadaPlay.Common.Models
@@ -93,6 +93,18 @@ namespace TadaPlay.Common.Models
 
         [JsonProperty("can_replay")]
         public bool CanReplay { get; set; }
+
+        /// <summary>Account that uploaded this match.</summary>
+        [JsonProperty("uploaded_by")]
+        public string UploadedBy { get; set; }
+
+        /// <summary>
+        /// Whether the signed-in account may rename this match - it uploaded it, or it is an
+        /// admin. Decided by the server; this only says whether to OFFER the rename, and the
+        /// server checks again before applying one.
+        /// </summary>
+        [JsonProperty("can_rename")]
+        public bool CanRename { get; set; }
     }
 
     public class MatchPlayer

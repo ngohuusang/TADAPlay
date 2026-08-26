@@ -87,6 +87,69 @@ namespace TadaPlay.Utils
         /// on the right when the window is wider than the sum of the defined column widths.
         /// Call once after adding columns, and wire to the ListView's Resize event.
         /// </summary>
+        /// <summary>
+        /// Asks for a single line of text. Returns null if the user cancelled, so an empty
+        /// string stays distinguishable from "did not answer".
+        /// </summary>
+        /// <param name="maxLength">Enforced in the box so a too-long value cannot be submitted.</param>
+        public static string PromptForText(Form owner, string title, string prompt,
+                                           string initial = "", int maxLength = 255)
+        {
+            using var dialog = new Form
+            {
+                Text = title,
+                FormBorderStyle = FormBorderStyle.FixedDialog,
+                StartPosition = owner == null ? FormStartPosition.CenterScreen
+                                              : FormStartPosition.CenterParent,
+                MinimizeBox = false,
+                MaximizeBox = false,
+                ClientSize = new Size(420, 150),
+                Font = new Font("Segoe UI", 9.75F),
+                BackColor = Color.FromArgb(245, 245, 245)
+            };
+
+            var label = new System.Windows.Forms.Label
+            {
+                Text = prompt,
+                Location = new Point(16, 16),
+                Size = new Size(388, 22)
+            };
+
+            var box = new TextBox
+            {
+                Text = initial ?? "",
+                Location = new Point(16, 44),
+                Size = new Size(388, 28),
+                MaxLength = maxLength,
+                Font = new Font("Segoe UI", 10.5F)
+            };
+            box.SelectAll();
+
+            var ok = new System.Windows.Forms.Button
+            {
+                Text = "Lưu",
+                DialogResult = DialogResult.OK,
+                Location = new Point(212, 92),
+                Size = new Size(90, 34)
+            };
+            var cancel = new System.Windows.Forms.Button
+            {
+                Text = "Huỷ",
+                DialogResult = DialogResult.Cancel,
+                Location = new Point(312, 92),
+                Size = new Size(90, 34)
+            };
+
+            dialog.Controls.Add(label);
+            dialog.Controls.Add(box);
+            dialog.Controls.Add(ok);
+            dialog.Controls.Add(cancel);
+            dialog.AcceptButton = ok;
+            dialog.CancelButton = cancel;
+
+            return dialog.ShowDialog(owner) == DialogResult.OK ? box.Text : null;
+        }
+
         public static void StretchLastListViewColumn(ListView listView, int minWidth)
         {
             if (listView.Columns.Count == 0) return;

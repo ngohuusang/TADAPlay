@@ -381,6 +381,32 @@ public class AccountService : IAccountService
         return result?.Matches ?? new List<MatchSummary>();
     }
 
+    /// <summary>
+    /// Renames a match. Allowed for the account that uploaded it and for admins; the server
+    /// decides, so a refusal comes back as an error rather than being prevented here.
+    /// </summary>
+    public async Task RenameMatchAsync(long matchId, string roomName)
+    {
+        _httpClient.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _appContext.GetJwtTokenSetting());
+
+        var payload = new StringContent(
+            JsonConvert.SerializeObject(new { id = matchId, room_name = roomName }),
+            System.Text.Encoding.UTF8, "application/json");
+
+        var response = await _httpClient.PostAsync(BASE_URL + "?action=rename_match", payload);
+        string body = await response.Content.ReadAsStringAsync();
+        if (!response.IsSuccessStatusCode)
+        {
+            // The server explains refusals in Vietnamese; surface that rather than a status code.
+            string message = null;
+            try { message = JObject.Parse(body)["message"]?.ToString(); } catch (Exception) { }
+            throw new Exception(string.IsNullOrWhiteSpace(message)
+                ? $"Không đổi được tên trận đấu ({(int)response.StatusCode})."
+                : message);
+        }
+    }
+
     public async Task DownloadRecordAsync(long recordId, string destinationPath)
     {
         _httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _appContext.GetJwtTokenSetting());

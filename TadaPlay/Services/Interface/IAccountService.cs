@@ -28,6 +28,7 @@ public interface IAccountService
     Task<List<RankingEntry>> GetLeaderboardAsync();
 
     Task<List<MatchSummary>> GetMatchesAsync();
+    Task RenameMatchAsync(long matchId, string roomName);
 
     Task DownloadRecordAsync(long recordId, string destinationPath);
 }

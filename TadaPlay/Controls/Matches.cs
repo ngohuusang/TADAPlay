@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Drawing;
 using System.IO;
 using System.Linq;
@@ -26,6 +26,7 @@ namespace TadaPlay.Controls
         private readonly Label _statusLabel;
         private readonly Button _refreshButton;
         private readonly Button _replayButton;
+        private readonly Button _renameButton;
 
         public Matches(IAccountService accountService, IAppContext appContext)
         {
@@ -67,11 +68,13 @@ namespace TadaPlay.Controls
             var rowSizer = new ImageList { ImageSize = new Size(1, 32) };
             rowSizer.Images.Add(new Bitmap(1, 32));
             _listView.SmallImageList = rowSizer;
-            _listView.Columns.Add("Thời gian", 130, HorizontalAlignment.Left);
-            _listView.Columns.Add("Đội 1", 210, HorizontalAlignment.Left);
-            _listView.Columns.Add("Đội 2", 210, HorizontalAlignment.Left);
-            _listView.Columns.Add("Kết quả", 110, HorizontalAlignment.Left);
-            _listView.Columns.Add("MVP", 130, HorizontalAlignment.Left);
+            _listView.Columns.Add("Thời gian", 120, HorizontalAlignment.Left);
+            _listView.Columns.Add("Tên trận", 150, HorizontalAlignment.Left);
+            _listView.Columns.Add("Đội 1", 180, HorizontalAlignment.Left);
+            _listView.Columns.Add("Đội 2", 180, HorizontalAlignment.Left);
+            _listView.Columns.Add("Kết quả", 100, HorizontalAlignment.Left);
+            _listView.Columns.Add("MVP", 120, HorizontalAlignment.Left);
+            _listView.Columns.Add("Người tải lên", 130, HorizontalAlignment.Left);
             _listView.SelectedIndexChanged += (s, e) => UpdateReplayButton();
             _listView.DoubleClick += (s, e) => ShowScoreboard();
             // Stretch the MVP column to fill any leftover width so row backgrounds (zebra
@@ -83,8 +86,11 @@ namespace TadaPlay.Controls
             _replayButton.Click += async (s, e) => await ReplaySelectedAsync();
             var detailsButton = new Button { Text = "Chi tiết / Điểm", Dock = DockStyle.Right, Width = 130 };
             detailsButton.Click += (s, e) => ShowScoreboard();
+            _renameButton = new Button { Text = "Đổi tên", Dock = DockStyle.Right, Width = 100, Enabled = false };
+            _renameButton.Click += async (s, e) => await RenameSelectedAsync();
             footer.Controls.Add(_replayButton);
             footer.Controls.Add(detailsButton);
+            footer.Controls.Add(_renameButton);
 
             _statusLabel = new Label
             {
@@ -104,8 +110,64 @@ namespace TadaPlay.Controls
 
         private void UpdateReplayButton()
         {
-            _replayButton.Enabled = _listView.SelectedItems.Count > 0
-                && _listView.SelectedItems[0].Tag is MatchSummary m && m.CanReplay;
+            MatchSummary selected = _listView.SelectedItems.Count > 0
+                ? _listView.SelectedItems[0].Tag as MatchSummary
+                : null;
+
+            _replayButton.Enabled = selected != null && selected.CanReplay;
+            // Offered only where the server said it would be allowed - the uploader's own
+            // matches, or anything at all for an admin. It still checks again when asked.
+            _renameButton.Enabled = selected != null && selected.CanRename;
+        }
+
+        /// <summary>
+        /// Renames the selected match. Only reachable when the server marked it renameable,
+        /// but a refusal is still reported rather than assumed impossible: rights can change
+        /// between loading the list and pressing the button.
+        /// </summary>
+        private async System.Threading.Tasks.Task RenameSelectedAsync()
+        {
+            if (_listView.SelectedItems.Count == 0 ||
+                _listView.SelectedItems[0].Tag is not MatchSummary match)
+            {
+                return;
+            }
+
+            string current = string.IsNullOrWhiteSpace(match.RoomName) ? "" : match.RoomName;
+            string name = UiUtils.PromptForText(FindForm(), "Đổi tên trận đấu",
+                                                "Tên mới cho trận đấu:", current, 255);
+            if (name == null) return;                       // cancelled
+
+            name = name.Trim();
+            if (name.Length == 0)
+            {
+                UiUtils.ShowAntdModal(FindForm(), "Tên không hợp lệ",
+                    "Tên trận đấu không được để trống.", AntdUI.TType.Warn);
+                return;
+            }
+            if (string.Equals(name, current, StringComparison.Ordinal)) return;
+
+            _renameButton.Enabled = false;
+            try
+            {
+                await _accountService.RenameMatchAsync(match.Id, name);
+                match.RoomName = name;
+                // Update the row in place rather than reloading: a full refresh would lose the
+                // selection and scroll position for a one-cell change.
+                _listView.SelectedItems[0].SubItems[1].Text = name;
+                _listView.SelectedItems[0].SubItems[1].ForeColor = _listView.ForeColor;
+                _statusLabel.ForeColor = Color.Gray;
+                _statusLabel.Text = $"Đã đổi tên trận đấu thành \"{name}\".";
+            }
+            catch (Exception ex)
+            {
+                DebugLogger.Error($"Matches: rename failed: {ex.Message}");
+                UiUtils.ShowAntdModal(FindForm(), "Không đổi được tên", ex.Message, AntdUI.TType.Error);
+            }
+            finally
+            {
+                UpdateReplayButton();
+            }
         }
 
         // Names for a team: prefer matched account usernames; fall back to the parsed replay's
@@ -164,6 +226,9 @@ namespace TadaPlay.Controls
                         // Zebra striping so long lists stay readable without gridlines.
                         BackColor = i % 2 == 0 ? Color.White : UiColors.ZebraStripe
                     };
+                    var nameSubItem = item.SubItems.Add(
+                        string.IsNullOrWhiteSpace(m.RoomName) ? "—" : m.RoomName);
+                    if (string.IsNullOrWhiteSpace(m.RoomName)) nameSubItem.ForeColor = Color.Gray;
                     item.SubItems.Add(TeamText(m, 1));
                     item.SubItems.Add(TeamText(m, 2));
 
@@ -176,6 +241,10 @@ namespace TadaPlay.Controls
                     string headlineMvp = !string.IsNullOrEmpty(m.WinnerMvp) ? m.WinnerMvp : m.Mvp;
                     var mvpSubItem = item.SubItems.Add(string.IsNullOrEmpty(headlineMvp) ? "—" : "⭐ " + headlineMvp);
                     if (!string.IsNullOrEmpty(headlineMvp)) mvpSubItem.ForeColor = UiColors.Mvp;
+
+                    var uploaderSubItem = item.SubItems.Add(
+                        string.IsNullOrWhiteSpace(m.UploadedBy) ? "—" : m.UploadedBy);
+                    if (string.IsNullOrWhiteSpace(m.UploadedBy)) uploaderSubItem.ForeColor = Color.Gray;
 
                     item.Tag = m;
                     _listView.Items.Add(item);
