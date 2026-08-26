@@ -40,13 +40,8 @@ namespace TadaPlay.Utils
                 ? LiveRecordSnapshotStore.FindFor(currentMatch) != null
                 : LiveRecordSnapshotStore.Current() != null;
             long gameMs = MatchShareState.DurationMs;
-            long gameMsAge = MatchShareState.DurationAgeMs;
             int waitSeconds = MatchShareState.WaitSeconds;
 
-            // The age is deliberately NOT in the signature. It changes every millisecond, so
-            // including it would send a user-list update to every client on every capture -
-            // and it is only worth sending at all alongside a clock that has actually moved,
-            // or a forced re-publish after a reconnect.
             string signature = $"{inGame}|{hasMatch}|{gameMs}";
             lock (Gate)
             {
@@ -62,15 +57,10 @@ namespace TadaPlay.Utils
                     in_game = inGame,
                     has_match = hasMatch,
                     game_ms = gameMs,
-                    // How stale that clock already is, so viewers can add the gap back on
-                    // rather than showing a match as earlier than it is. Normally near zero -
-                    // this goes out straight after a capture - but a forced re-publish after a
-                    // socket reconnect can carry a capture a minute and a half old.
-                    game_ms_age = gameMsAge,
                     wait_seconds = waitSeconds
                 });
                 DebugLogger.Info($"MatchStatusPublisher: sent inGame={inGame} hasMatch={hasMatch} " +
-                                 $"gameMs={gameMs} (age {gameMsAge} ms) wait={waitSeconds}s.");
+                                 $"gameMs={gameMs} wait={waitSeconds}s.");
             }
             catch (Exception ex)
             {

@@ -457,9 +457,6 @@ namespace TadaPlay.Connections
                           $"\"inGame\":{(MatchShareState.InGame ? "true" : "false")}," +
                           $"\"waitSeconds\":{MatchShareState.WaitSeconds}," +
                           $"\"gameMs\":{MatchShareState.DurationMs}," +
-                          // gameMs is only as fresh as the last capture, up to 90 seconds ago;
-                          // this says how far back, so the caller can add the gap on.
-                          $"\"gameMsAge\":{MatchShareState.DurationAgeMs}," +
                           $"\"match\":\"{Escape(name)}\"," +
                           $"\"bytes\":{size}," +
                           $"\"finishedUtc\":\"{finishedUtc}\"" +

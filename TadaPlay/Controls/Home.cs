@@ -742,9 +742,7 @@ namespace TadaPlay.Controls
         {
             if (user.IsWatchable)
             {
-                // The LIVE clock, not the captured one: a capture is up to 90 seconds old, so
-                // the raw value shows every match in the lobby as running a minute or so behind.
-                TimeSpan t = user.LiveGameTime;
+                TimeSpan t = user.GameTime;
                 string clock = t.TotalHours >= 1
                     ? $"{(int)t.TotalHours}:{t.Minutes:00}:{t.Seconds:00}"
                     : $"{t.Minutes:00}:{t.Seconds:00}";

@@ -4,7 +4,6 @@ using System.Windows.Forms;
 using TadaPlay.Common.Models;
 using TadaPlay.Connections;
 using TadaPlay.Logger;
-using TadaPlay.Utils;
 
 namespace TadaPlay
 {
@@ -27,17 +26,7 @@ namespace TadaPlay
     /// </summary>
     public sealed class SpectatorOverlay : Form
     {
-        /// <summary>How often the host's latest status is looked up.</summary>
         private const int PollMs = 3000;
-
-        /// <summary>
-        /// How often the clock is redrawn. Faster than the poll on purpose: what is drawn is
-        /// the host's LIVE match time, extrapolated from their last capture (see
-        /// <see cref="LiveMatchClock"/>), so it can tick every second off a status that only
-        /// changes every ten. A clock that jumped ten seconds at a time was the thing that
-        /// made a replay look as though it had overtaken the match it was following.
-        /// </summary>
-        private const int RenderMs = 1000;
 
         private static readonly Color Ink = Color.FromArgb(245, 245, 245);
         private static readonly Color LiveColor = Color.FromArgb(120, 220, 90);
@@ -60,9 +49,6 @@ namespace TadaPlay
         private readonly Label _clock = new();
         private readonly Label _who = new();
         private readonly System.Windows.Forms.Timer _poll = new() { Interval = PollMs };
-        private readonly System.Windows.Forms.Timer _render = new() { Interval = RenderMs };
-        private LiveShareClient.HostStatus _status;
-        private DateTime _statusAtUtc;
         private bool _probing;
         private Point _dragFrom;
         private bool _dragging;
@@ -168,8 +154,6 @@ namespace TadaPlay
 
             _poll.Tick += (s, e) => Probe();
             _poll.Start();
-            _render.Tick += (s, e) => Render();
-            _render.Start();
             Probe();
         }
 
@@ -216,9 +200,31 @@ namespace TadaPlay
                                                     ?? await LiveShareClient.TryGetStatusAsync(_hostIp);
                 if (IsDisposed) return;
 
-                _status = status;
-                _statusAtUtc = DateTime.UtcNow;
-                Render();
+                if (status == null)
+                {
+                    _clock.ForeColor = DimColor;
+                    _who.Text = $"▶ {_hostLabel} · mất kết nối";
+                    return;
+                }
+
+                _who.Text = status.InGame ? $"▶ {_hostLabel} · đang chơi"
+                                          : $"▶ {_hostLabel} · đã kết thúc";
+
+                if (status.GameMs > 0)
+                {
+                    TimeSpan t = status.GameTime;
+                    _clock.Text = t.TotalHours >= 1
+                        ? $"{(int)t.TotalHours}:{t.Minutes:00}:{t.Seconds:00}"
+                        : $"{t.Minutes:00}:{t.Seconds:00}";
+                    _clock.ForeColor = status.InGame ? LiveColor : DimColor;
+                }
+                else if (status.InGame)
+                {
+                    // Match running but nothing captured yet - show the countdown rather than a
+                    // dash, so it reads as "not yet" instead of "broken".
+                    _clock.Text = $"chờ {Math.Max(1, status.WaitSeconds)}s";
+                    _clock.ForeColor = DimColor;
+                }
             }
             catch (Exception ex)
             {
@@ -230,55 +236,12 @@ namespace TadaPlay
             }
         }
 
-        /// <summary>
-        /// Draws the last status fetched. Runs every second rather than once per poll, because
-        /// both numbers on it move continuously between polls: the match clock is extrapolated
-        /// forward from the host's last capture, and the countdown runs down.
-        /// </summary>
-        private void Render()
-        {
-            if (IsDisposed) return;
-
-            LiveShareClient.HostStatus status = _status;
-            if (status == null)
-            {
-                _clock.ForeColor = DimColor;
-                _who.Text = $"▶ {_hostLabel} · mất kết nối";
-                return;
-            }
-
-            _who.Text = status.InGame ? $"▶ {_hostLabel} · đang chơi"
-                                      : $"▶ {_hostLabel} · đã kết thúc";
-
-            if (status.GameMs > 0)
-            {
-                // LiveGameTime, not GameTime: the captured value is a still frame up to 90
-                // seconds old, and a replay running at normal speed appears to overtake it.
-                TimeSpan t = status.LiveGameTime;
-                _clock.Text = t.TotalHours >= 1
-                    ? $"{(int)t.TotalHours}:{t.Minutes:00}:{t.Seconds:00}"
-                    : $"{t.Minutes:00}:{t.Seconds:00}";
-                _clock.ForeColor = status.InGame ? LiveColor : DimColor;
-            }
-            else if (status.InGame)
-            {
-                // Match running but nothing captured yet - show the countdown rather than a
-                // dash, so it reads as "not yet" instead of "broken". Counted down from when
-                // the status was fetched, so it moves between polls instead of sticking.
-                int left = status.WaitSeconds - (int)(DateTime.UtcNow - _statusAtUtc).TotalSeconds;
-                _clock.Text = $"chờ {Math.Max(1, left)}s";
-                _clock.ForeColor = DimColor;
-            }
-        }
-
         protected override void Dispose(bool disposing)
         {
             if (disposing)
             {
                 _poll.Stop();
                 _poll.Dispose();
-                _render.Stop();
-                _render.Dispose();
             }
             base.Dispose(disposing);
         }

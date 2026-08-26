@@ -30,20 +30,8 @@ namespace TadaPlay.Connections
             public long Bytes { get; set; }
             /// <summary>Game time in the shared match, in ms - the match clock, not wall time.</summary>
             public long GameMs { get; set; }
-            /// <summary>How stale <see cref="GameMs"/> was when the host handed it over, in ms.</summary>
-            public long GameMsAgeMs { get; set; }
-            /// <summary>Which host this is, so the live clock can anchor per host.</summary>
-            public string Source { get; set; }
-            /// <summary>
-            /// Where the host's match actually IS now, rather than where their last capture
-            /// left it - see <see cref="LiveMatchClock"/>. This is the number to show a viewer:
-            /// <see cref="GameMs"/> alone is a still frame up to 90 seconds old, which a replay
-            /// running at normal speed appears to overtake.
-            /// </summary>
-            public long LiveGameMs => LiveMatchClock.LiveMs(Source, GameMs, GameMsAgeMs, InGame);
-
-            /// <summary>The host's match clock as it stands now.</summary>
-            public TimeSpan LiveGameTime => TimeSpan.FromMilliseconds(LiveGameMs);
+            /// <summary>How far into the match the shared record reaches.</summary>
+            public TimeSpan GameTime => TimeSpan.FromMilliseconds(GameMs);
             public DateTime? FinishedUtc { get; set; }
             /// <summary>How long ago the match finished.</summary>
             public TimeSpan? Age => FinishedUtc.HasValue ? DateTime.UtcNow - FinishedUtc.Value : null;
@@ -72,8 +60,6 @@ namespace TadaPlay.Connections
                     Match = Read(json, "match")?.Trim('"'),
                     Bytes = long.TryParse(Read(json, "bytes"), out long b) ? b : 0,
                     GameMs = long.TryParse(Read(json, "gameMs"), out long g) ? g : 0,
-                    GameMsAgeMs = long.TryParse(Read(json, "gameMsAge"), out long ga) ? ga : 0,
-                    Source = hostIp,
                     FinishedUtc = DateTime.TryParse(Read(json, "finishedUtc")?.Trim('"'),
                                                     null, System.Globalization.DateTimeStyles.RoundtripKind,
                                                     out DateTime t) ? t : null
@@ -132,11 +118,6 @@ namespace TadaPlay.Connections
                 InGame = user.InGame,
                 HasMatch = user.HasMatch,
                 GameMs = user.GameMs,
-                GameMsAgeMs = user.GameMsAgeMs,
-                // Keyed by name, because that is what stays put: a player's VPN address can
-                // change mid-match, and a new key would restart the live clock from their
-                // last capture.
-                Source = user.Username,
                 WaitSeconds = user.WaitSeconds
             };
         }
