@@ -34,7 +34,6 @@
             uploadRecordButton = new AntdUI.Button();
             spectateButton = new AntdUI.Button();
             startGameButton = new AntdUI.Button();
-            pingLabel = new Label();
             ipAddressLabel = new Label();
             reconnectVpnButton = new AntdUI.Button();
             vpnStatusLabel = new Label();
@@ -72,7 +71,6 @@
             playPanel.Controls.Add(uploadRecordButton);
             playPanel.Controls.Add(spectateButton);
             playPanel.Controls.Add(startGameButton);
-            playPanel.Controls.Add(pingLabel);
             playPanel.Controls.Add(ipAddressLabel);
             playPanel.Controls.Add(reconnectVpnButton);
             playPanel.Controls.Add(vpnStatusLabel);
@@ -137,16 +135,6 @@
             startGameButton.Text = "BẮT ĐẦU";
             startGameButton.Type = AntdUI.TTypeMini.Error;
             startGameButton.Click += startGameButton_Click;
-            // 
-            // pingLabel
-            // 
-            pingLabel.Dock = DockStyle.Top;
-            pingLabel.Font = new Font("Segoe UI", 12F, FontStyle.Regular, GraphicsUnit.Point, 0);
-            pingLabel.Location = new Point(3, 144);
-            pingLabel.Name = "pingLabel";
-            pingLabel.Size = new Size(535, 24);
-            pingLabel.TabIndex = 3;
-            pingLabel.Text = "Ping: -";
             // 
             // ipAddressLabel
             // 
@@ -331,7 +319,6 @@
         private AntdUI.Label playHeaderLabel;
         private Label vpnStatusLabel;
         private Label ipAddressLabel;
-        private Label pingLabel;
         private AntdUI.Button reconnectVpnButton;
         private AntdUI.Button startGameButton;
         private AntdUI.Button uploadRecordButton;

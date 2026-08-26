@@ -118,7 +118,6 @@ namespace TadaPlay.Controls
             webSocketService.OnConnected += WebSocketService_OnConnected!;
             webSocketService.OnDisconnected += WebSocketService_OnDisconnected!;
             webSocketService.OnErrorOccurred += WebSocketService_OnErrorOccurred!;
-            webSocketService.OnPingUpdate += WebSocketService_OnPingUpdate!;
 
             appContext.OnCurrentUserUpdated += AppContext_OnCurrentUserUpdated;
             appContext.OnOnlineUsersUpdated += AppContext_OnOnlineUsersUpdated;
@@ -728,19 +727,6 @@ namespace TadaPlay.Controls
                 AntdUI.Notification.error(mainForm, AntdUI.Localization.Get("ConnectionErrorTitle", "Lỗi kết nối"), AntdUI.Localization.Get("ConnectionErrorContent", errorMessage), AntdUI.TAlignFrom.Bottom, Font);
                 DebugLogger.Error($"Home Control WS Error: {errorMessage}");
             }, "HOME_WS_ERROR");
-        }
-
-        private void WebSocketService_OnPingUpdate(object sender, PingUpdateEventArgs e)
-        {
-            UiUtils.InvokeOnUiThread(this, () =>
-            {
-                pingLabel.Text = $"Ping: {e.PingMs}ms";
-                pingLabel.ForeColor = e.IsHighPing ? Color.Firebrick : Color.DarkGreen;
-                if (e.IsHighPing)
-                {
-                    printLog($"[Cảnh báo] Ping cao ({e.PingMs}ms) - kiểm tra kết nối VPN/mạng.", Color.Orange);
-                }
-            }, "HOME_PING");
         }
 
         private static readonly Color PlayingColor = Color.FromArgb(82, 196, 26);   // antd green-6

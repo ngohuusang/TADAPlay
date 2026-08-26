@@ -37,7 +37,6 @@ namespace TadaPlay.Websockets
 
         private const int PingInterval = 5000; // 5 seconds
         private const int HighPingThreshold = 300; // ms
-        private int _highPingCount = 0; // Consecutive high ping count
 
         // Events for consumers (MainForm) to subscribe to
         public event EventHandler<WebSocketMessageEventArgs> OnMessageReceived;
@@ -391,25 +390,12 @@ namespace TadaPlay.Websockets
                     long now = GetUnixTimeMilliseconds();
                     long pingMs = now - tsSent;
 
-                    DebugLogger.Info($"📡 WebSocketService: Ping received: {pingMs} ms"); // Changed to DebugLogger.Info
+                    // Kept as a diagnostic only. The round trip used to be shown in Home and
+                    // to raise "your connection is unstable" once it stayed high - but a
+                    // number nobody could act on, and a warning that fired on ordinary VPN
+                    // jitter, cost attention without ever telling anyone something useful.
+                    DebugLogger.Info($"📡 WebSocketService: Ping received: {pingMs} ms");
                     OnPingUpdate?.Invoke(this, new PingUpdateEventArgs(pingMs, pingMs > HighPingThreshold));
-
-                    if (pingMs > HighPingThreshold)
-                    {
-                        _highPingCount++;
-                        DebugLogger.Warn($"⚠️ WebSocketService: High ping detected ({_highPingCount}/{MaxReconnectAttempts})"); // Changed to DebugLogger.Warn
-
-                        if (_highPingCount >= MaxReconnectAttempts)
-                        {
-                            _highPingCount = 0;
-                            OnErrorOccurred?.Invoke(this,
-                                "Kết nối mạng của bạn đang không ổn định. Vui lòng kiểm tra lại kết nối hoặc VPN.");
-                        }
-                    }
-                    else
-                    {
-                        _highPingCount = 0; // Reset count if ping is good
-                    }
                 }
                 appContext.ProcessWebSocketMessage(json);
                 // Raise event for all other messages (user_list, etc.)
