@@ -191,9 +191,13 @@ namespace TadaPlay.Controls
             try
             {
                 _file = HotkeyFile.Load(_slotFiles[idx]);
+                int adopted = _file.AdoptModCommands(HasName);
                 _dirty = false;
                 RenderList();
-                SetStatus($"Đã tải {Path.GetFileName(_slotFiles[idx])}.");
+                SetStatus(adopted > 0
+                    ? $"Đã tải {Path.GetFileName(_slotFiles[idx])}. Hiện thêm {adopted} lệnh của bản " +
+                      "mod chưa có trong tệp - đặt phím rồi bấm Lưu để áp dụng."
+                    : $"Đã tải {Path.GetFileName(_slotFiles[idx])}.");
             }
             catch (Exception ex)
             {
@@ -309,6 +313,13 @@ namespace TadaPlay.Controls
             _listPanel.AutoScrollMinSize = new Size(0, y + 10);
             _listPanel.ResumeLayout();
         }
+
+        /// <summary>
+        /// Whether this installation names the given command at all - the test for whether a
+        /// nameless slot in the file is a real command here or just structural padding. See
+        /// <see cref="HotkeyFile.AdoptModCommands"/>.
+        /// </summary>
+        private bool HasName(int stringId) => _strings != null && _strings.ContainsKey(stringId);
 
         private string ResolveName(int stringId)
         {
@@ -429,6 +440,7 @@ namespace TadaPlay.Controls
             try
             {
                 var imported = HotkeyFile.Load(dlg.FileName);
+                imported.AdoptModCommands(HasName);
                 _file = imported;
                 _dirty = true;
                 RenderList();

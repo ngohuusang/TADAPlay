@@ -77,6 +77,63 @@ namespace TadaPlay.Utils
             return file;
         }
 
+        /// <summary>
+        /// Slots the HD-era data mods fill in for commands The Conquerors never had.
+        ///
+        /// The build group has always been 30 slots wide, but AoC only ever named 25 of them;
+        /// the rest sit in the file as placeholders (StringId -1, everything else zeroed). A mod
+        /// that adds a building does not grow the group - it names one of those spare slots. So a
+        /// player whose .hki predates the mod has a Palisade Gate slot sitting right there,
+        /// nameless, and no way to reach it: the editor only shows slots that name a command,
+        /// which is what keeps the structural padding out of the list.
+        ///
+        /// Read off the mod's own files rather than guessed - a player*.hki written by the game
+        /// with WololoKingdoms active has 19212 at slot 28 and 19075 at slot 29 of group 3.
+        /// </summary>
+        private static readonly (int Group, int Slot, int StringId)[] ModCommandSlots =
+        {
+            (3, 28, 19212),   // Palisade Gate
+            (3, 29, 19075),   // Feitoria
+        };
+
+        /// <summary>
+        /// Names the placeholder slots this game's data actually uses, so they can be bound.
+        /// Returns how many were adopted.
+        ///
+        /// <paramref name="hasName"/> decides whether a command exists in THIS installation -
+        /// pass it a lookup over the game's own language data. That is the whole guard against
+        /// inventing commands: on plain AoC nothing names 19212, so the slot stays a placeholder
+        /// and stays hidden, which is correct because that game has no Palisade Gate to build.
+        ///
+        /// Never touches a slot that already names something. Writing over a real command would
+        /// silently rebind whatever was there, and the layout differing from what is assumed
+        /// here is exactly the case where that would happen.
+        /// </summary>
+        public int AdoptModCommands(Func<int, bool> hasName)
+        {
+            if (hasName == null) return 0;
+
+            int adopted = 0;
+            foreach ((int group, int slot, int stringId) in ModCommandSlots)
+            {
+                if (group < 0 || group >= Groups.Count) continue;
+                var bindings = Groups[group].Bindings;
+                if (slot < 0 || slot >= bindings.Count) continue;
+
+                HotkeyBinding binding = bindings[slot];
+                if (binding.IsCommand) continue;          // a real command already lives here
+                if (!hasName(stringId)) continue;         // this installation does not have it
+
+                // Only the name is taken on. The key stays as the placeholder left it - zero,
+                // meaning unbound - so the row turns up asking to be assigned rather than
+                // claiming a binding the player never chose.
+                binding.StringId = stringId;
+                adopted++;
+                DebugLogger.Info($"HotkeyFile: named placeholder slot {group}/{slot} as string {stringId}.");
+            }
+            return adopted;
+        }
+
         public void Save(string path)
         {
             using var ms = new MemoryStream();
