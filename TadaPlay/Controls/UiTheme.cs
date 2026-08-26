@@ -246,6 +246,14 @@ namespace TadaPlay.Controls
         public const string IconTrophy =
             "<svg viewBox='0 0 1024 1024'><path d='M868 160h-92v-40c0-4.4-3.6-8-8-8H256c-4.4 0-8 3.6-8 8v40h-92c-24.3 0-44 19.7-44 44v148c0 81.7 60 149.6 138.2 162C265.6 541 359 632 480 644v128h-88c-30.9 0-56 25.1-56 56v92c0 4.4 3.6 8 8 8h336c4.4 0 8-3.6 8-8v-92c0-30.9-25.1-56-56-56h-88V644c121-12 214.4-103 225.8-230C848 401.6 908 333.7 908 252V204c0-24.3-19.7-44-40-44zM184 352V232h64v207.6a91.99 91.99 0 0 1-64-87.6zm520 128c0 49.1-19.1 95.4-53.9 130.1C615.3 645 569 664 520 664h-16c-49.1 0-95.4-19.1-130.1-53.9C339 575.3 320 529 320 480V184h384v296zm136-128c0 41-27 75.8-64 87.6V232h64v120z'/></svg>";
 
+        /// <summary>
+        /// An undo arrow: a shaft with a solid head. Deliberately not the circular "reload" ring -
+        /// at this size that renders as an open arc indistinguishable from a letter C, which sat
+        /// in the hotkey list one column from a key button showing the letter C.
+        /// </summary>
+        public const string IconReset =
+            "<svg viewBox='0 0 1024 1024'><path d='M511.4 124C290.5 124.3 112 302.9 112 523.8c0 110.1 44.4 209.9 116.3 282.3l-58.1 58.1a8 8 0 0 0 5.6 13.6H392c4.4 0 8-3.6 8-8V653.8c0-7.1-8.6-10.7-13.6-5.7l-59.4 59.4a303.5 303.5 0 0 1-88.1-215.2c0-79.9 30.8-155.1 86.7-211.6 55.9-56.5 130.7-88 210.6-88.4 79.9-0.4 155.6 30.4 212.6 86.4 57 56 88.6 131.2 88.6 211.1 0 79.9-31.1 155.1-87.7 211.6-33.3 33.2-72.9 57.5-116 71.5a8 8 0 0 0-5.1 10.2l19.4 56.6a8 8 0 0 0 10.1 5c55.1-17.9 105.6-49 147.9-91.3 71.9-71.9 111.5-167.6 111.5-269.4 0-101.8-39.6-197.5-111.5-269.4C733.2 163.8 637.5 124.3 535.7 124h-24.3z'/></svg>";
+
         /// <summary>A small toolbar button - outlined, fixed position, for a top row of actions.</summary>
         public static AntdUI.Button Toolbar(string text, Point location, int width, int height = 36)
         {

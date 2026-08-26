@@ -57,19 +57,50 @@ namespace TadaPlay.Controls
         private HotkeyBinding _capturingBinding;
         private string _capturingRestoreText;
 
-        // Friendly headers for the standard AoC groups; anything past the well-known ones falls
-        // back to a generic "Nhóm N". The command names themselves come from the language DLLs.
         /// <summary>Alternate-row band in the detail pane. Faint on purpose - it is a guide
         /// between a command and its key, not a thing to look at.</summary>
         private static readonly Color RowBandColor = Color.FromArgb(0xF4, 0xF7, 0xFA);
 
+        /// <summary>
+        /// The group names, in the game's own words and its own order.
+        ///
+        /// Taken from the game's Hotkeys screen, which lists exactly these fifteen in exactly this
+        /// order - and the file has exactly fifteen groups. The mapping is confirmed by the
+        /// contents rather than assumed from the order alone: group 0 holds 13 commands and Unit
+        /// Commands lists 13, group 2 holds 4 and Scroll Commands is the four scroll directions.
+        ///
+        /// English, matching the game, because that is the whole point of them - a player
+        /// comparing this screen against the game's own should read the same words. The command
+        /// names inside each group already come out of the game's language files in English for
+        /// the same reason. Anything past the fifteen falls back to "Nhóm N".
+        /// </summary>
         private static readonly Dictionary<int, string> GroupTitles = new Dictionary<int, string>
         {
-            { 0, "Lệnh đơn vị" },
-            { 1, "Lệnh chung & điều hướng" },
-            { 2, "Cuộn màn hình" },
-            { 3, "Xây dựng" },
+            { 0, "Unit Commands" },
+            { 1, "Game Commands" },
+            { 2, "Scroll Commands" },
+            { 3, "Villager Build" },
+            { 4, "Town Center" },
+            { 5, "Dock" },
+            { 6, "Barracks" },
+            { 7, "Archery Range" },
+            { 8, "Stable" },
+            { 9, "Siege Workshop" },
+            { 10, "Monastery" },
+            { 11, "Market" },
+            { 12, "Military Units" },
+            { 13, "Castle" },
+            { 14, "Mill" },
         };
+
+        /// <summary>
+        /// The shipped layout, kept for per-key resets so it is not inflated on every click.
+        /// Loaded on first use.
+        /// </summary>
+        private HotkeyFile _defaults;
+
+        /// <summary>Tooltips for the per-row reset buttons, which are too small to label.</summary>
+        private readonly ToolTip _tips = new() { InitialDelay = 400 };
 
         public HotkeyEditorForm(string gameFolder, IAccountService accountService = null)
         {
@@ -561,6 +592,7 @@ namespace TadaPlay.Controls
             // Leave room for the scrollbar so the rows do not sit under it.
             int width = Math.Max(360, _listPanel.ClientSize.Width - 36);
             const int keyWidth = 190;
+            const int ResetWidth = 40;
             const int rowH = 30;
             int y = 6;
 
@@ -584,7 +616,7 @@ namespace TadaPlay.Controls
                 {
                     Text = ResolveName(b.StringId),
                     Location = new Point(10, 4),
-                    Size = new Size(width - keyWidth - 30, rowH - 8),
+                    Size = new Size(width - keyWidth - ResetWidth - 34, rowH - 8),
                     TextAlign = ContentAlignment.MiddleLeft,
                     Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
                     AutoEllipsis = true,          // a long name shortens rather than overlapping
@@ -595,7 +627,7 @@ namespace TadaPlay.Controls
                 // a keycap when the key is in the middle of it.
                 var keyBtn = new AntdUI.Button
                 {
-                    Location = new Point(width - keyWidth - 8, 2),
+                    Location = new Point(width - keyWidth - ResetWidth - 12, 2),
                     Size = new Size(keyWidth, rowH - 6),
                     Type = AntdUI.TTypeMini.Default,
                     Shape = AntdUI.TShape.Round,
@@ -608,8 +640,34 @@ namespace TadaPlay.Controls
                 SetKeyButtonText(keyBtn, b);
                 keyBtn.Click += KeyButton_Click;
 
+                // Per-key reset, the same thing the game's own Hotkeys screen offers next to
+                // its key list. "Đặt lại mặc định" throws away the whole layout, which is no
+                // use to somebody who has mis-set one key out of two hundred.
+                var resetBtn = new AntdUI.Button
+                {
+                    Location = new Point(width - ResetWidth - 8, 2),
+                    Size = new Size(ResetWidth, rowH - 6),
+                    Type = AntdUI.TTypeMini.Default,
+                    Shape = AntdUI.TShape.Round,
+                    BorderWidth = 1,
+                    IconSvg = UiTheme.IconReset,
+                    IconRatio = 0.52F,
+                    DefaultBack = Color.White,
+                    // The same border the key button carries. At CardBorder weight it was
+                    // invisible against the row band, so the icon read as a stray glyph in the
+                    // margin rather than as something to press.
+                    DefaultBorderColor = UiTheme.KeyBorder,
+                    Anchor = AnchorStyles.Top | AnchorStyles.Right,
+                    Cursor = Cursors.Hand,
+                    Tag = b,
+                };
+                resetBtn.Click += ResetOneKey;
+                // An icon this small cannot say what it does on its own.
+                _tips.SetToolTip(resetBtn, "Đặt lại phím mặc định cho lệnh này");
+
                 row.Controls.Add(name);
                 row.Controls.Add(keyBtn);
+                row.Controls.Add(resetBtn);
                 _listPanel.Controls.Add(row);
                 y += rowH;
             }
@@ -794,6 +852,79 @@ namespace TadaPlay.Controls
                 DebugLogger.Error($"HotkeyEditor: import '{dlg.FileName}' failed: {ex.Message}");
                 AntdUI.Message.error(this, $"Không đọc được tệp phím tắt đã chọn: {ex.Message}");
             }
+        }
+
+        /// <summary>
+        /// Puts ONE command back to the key the shipped layout gives it.
+        ///
+        /// Matched by command within the same group rather than by slot position, so a file
+        /// whose groups are laid out differently still resets the right command instead of
+        /// whatever happens to sit at that index in the default.
+        ///
+        /// A command the default does not bind resets to unbound, which is what "default" means
+        /// for it - not "leave whatever is there".
+        /// </summary>
+        private void ResetOneKey(object sender, EventArgs e)
+        {
+            CancelCapture();
+            if (sender is not AntdUI.Button button || button.Tag is not HotkeyBinding binding) return;
+            if (_file == null) return;
+
+            try
+            {
+                _defaults ??= HotkeyFile.LoadDefault();
+            }
+            catch (Exception ex)
+            {
+                DebugLogger.Error($"HotkeyEditor: cannot load the default layout: {ex.Message}");
+                AntdUI.Message.error(this, "Không đọc được phím tắt mặc định.");
+                return;
+            }
+
+            int group = IndexOfGroupContaining(binding);
+            HotkeyBinding source = group >= 0 && group < _defaults.Groups.Count
+                ? _defaults.Groups[group].Bindings.FirstOrDefault(d => d.StringId == binding.StringId)
+                : null;
+
+            int keyCode = source?.KeyCode ?? HotkeyKeyNames.Unbound;
+            bool ctrl = source?.Ctrl ?? false;
+            bool alt = source?.Alt ?? false;
+            bool shift = source?.Shift ?? false;
+
+            string commandName = ResolveName(binding.StringId);
+            if (binding.KeyCode == keyCode && binding.Ctrl == ctrl && binding.Alt == alt && binding.Shift == shift)
+            {
+                SetStatus($"\"{commandName}\" đã ở phím mặc định rồi.");
+                return;
+            }
+
+            // Same rule as assigning by hand: one key, one command, within a group.
+            HotkeyBinding displaced = TakeKeyFrom(keyCode, ctrl, alt, shift, binding);
+            string displacedName = displaced == null ? null : ResolveName(displaced.StringId);
+
+            binding.KeyCode = keyCode;
+            binding.Ctrl = ctrl;
+            binding.Alt = alt;
+            binding.Shift = shift;
+            _dirty = true;
+            RenderDetail();
+
+            string key = HotkeyKeyNames.Describe(keyCode, ctrl, alt, shift);
+            string message = displacedName == null
+                ? $"Đã đặt lại \"{commandName}\" về {key}."
+                : $"Đã đặt lại \"{commandName}\" về {key}. \"{displacedName}\" đã bị bỏ gán.";
+            SetStatus(message);
+            if (displacedName != null) AntdUI.Message.warn(this, message);
+        }
+
+        /// <summary>Which group a binding lives in, or -1.</summary>
+        private int IndexOfGroupContaining(HotkeyBinding binding)
+        {
+            for (int g = 0; g < _file.Groups.Count; g++)
+            {
+                if (_file.Groups[g].Bindings.Contains(binding)) return g;
+            }
+            return -1;
         }
 
         /// <summary>
