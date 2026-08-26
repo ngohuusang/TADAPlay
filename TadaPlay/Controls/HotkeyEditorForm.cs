@@ -88,12 +88,17 @@ namespace TadaPlay.Controls
             var deleteButton = new Button { Text = "Xóa hồ sơ", Location = new Point(600, 9), Width = 110, Height = 30 };
             deleteButton.Click += DeleteSelectedSlot;
 
+            // Sits on the hint row rather than beside the other two: the top row already runs
+            // out to x=710 and a third button there would fall off the form.
+            var resetButton = new Button { Text = "Đặt lại mặc định", Location = new Point(570, 52), Width = 140, Height = 30 };
+            resetButton.Click += ResetToDefault;
+
             var hint = new Label
             {
                 Text = "Nhấn vào ô phím để đặt lại. Đang thu phím: nhấn phím mới, hoặc Esc để hủy, Delete để bỏ gán.",
                 AutoSize = false,
                 Location = new Point(12, 50),
-                Size = new Size(710, 38),
+                Size = new Size(550, 38),
                 ForeColor = Color.DimGray,
             };
 
@@ -101,6 +106,7 @@ namespace TadaPlay.Controls
             top.Controls.Add(_slotCombo);
             top.Controls.Add(importButton);
             top.Controls.Add(deleteButton);
+            top.Controls.Add(resetButton);
             top.Controls.Add(hint);
 
             _listPanel = new Panel { Dock = DockStyle.Fill, AutoScroll = true, Padding = new Padding(12, 6, 12, 6) };
@@ -450,6 +456,41 @@ namespace TadaPlay.Controls
             {
                 DebugLogger.Error($"HotkeyEditor: import '{dlg.FileName}' failed: {ex.Message}");
                 MessageBox.Show(this, $"Không đọc được tệp phím tắt đã chọn:\n{ex.Message}", "Lỗi",
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        /// <summary>
+        /// Replaces everything on screen with the layout TadaPlay ships.
+        ///
+        /// Deliberately the same shape as importing a file, because that is what it is - the
+        /// file just comes from inside the app. Nothing is written until the player saves, so a
+        /// reset they did not mean costs them a Close rather than their whole layout.
+        /// </summary>
+        private void ResetToDefault(object sender, EventArgs e)
+        {
+            CancelCapture();
+
+            // Worth a prompt: it discards every binding in the list at once, which is not
+            // something to do on a mis-click next to "Xóa hồ sơ".
+            var confirm = MessageBox.Show(this,
+                "Đặt lại toàn bộ phím tắt về mặc định của TadaPlay?\n" +
+                "Các thay đổi đang hiển thị sẽ bị bỏ. Chưa ghi vào tệp cho tới khi bạn bấm Lưu.",
+                "Đặt lại phím tắt", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+            if (confirm != DialogResult.Yes) return;
+
+            try
+            {
+                _file = HotkeyFile.LoadDefault();
+                _file.AdoptModCommands(HasName);
+                _dirty = true;
+                RenderList();
+                SetStatus("Đã nạp phím tắt mặc định. Bấm Lưu (hoặc Lưu cho mọi hồ sơ) để áp dụng.");
+            }
+            catch (Exception ex)
+            {
+                DebugLogger.Error($"HotkeyEditor: loading the default layout failed: {ex.Message}");
+                MessageBox.Show(this, $"Không nạp được phím tắt mặc định:\n{ex.Message}", "Lỗi",
                     MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }

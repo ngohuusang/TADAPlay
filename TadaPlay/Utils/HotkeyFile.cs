@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Reflection;
 using TadaPlay.Logger;
 
 namespace TadaPlay.Utils
@@ -48,9 +49,37 @@ namespace TadaPlay.Utils
         public float Version = 1.0f;
         public readonly List<HotkeyGroup> Groups = new List<HotkeyGroup>();
 
+        /// <summary>
+        /// The layout TadaPlay ships, used by "reset to default" in the editor.
+        ///
+        /// A player4.hki taken from a v1.5 Game Data folder - the same folder the game itself
+        /// reads (see HotkeyEditorForm.ResolveHotkeyDirectory), so it is a layout the game has
+        /// written and accepted rather than one assembled here. It names the mod's extra
+        /// buildings, so a reset yields a Palisade Gate that is bound rather than merely
+        /// bindable.
+        ///
+        /// Embedded as a plain manifest resource, like the other binaries here - see the
+        /// comment in TadaPlay.csproj for why a .resx System.Byte[] entry is not usable.
+        /// </summary>
+        private const string DefaultResourceName = "TadaPlay.Resources.player.hki.template";
+
         public static HotkeyFile Load(string path)
         {
-            byte[] raw = GameProfileNameWriter.Inflate(File.ReadAllBytes(path));
+            return Parse(GameProfileNameWriter.Inflate(File.ReadAllBytes(path)));
+        }
+
+        /// <summary>Loads the layout shipped with the app. Throws if the resource is missing.</summary>
+        public static HotkeyFile LoadDefault()
+        {
+            using Stream resourceStream = Assembly.GetExecutingAssembly().GetManifestResourceStream(DefaultResourceName)
+                ?? throw new InvalidOperationException($"Embedded resource '{DefaultResourceName}' not found.");
+            using var buffer = new MemoryStream();
+            resourceStream.CopyTo(buffer);
+            return Parse(GameProfileNameWriter.Inflate(buffer.ToArray()));
+        }
+
+        private static HotkeyFile Parse(byte[] raw)
+        {
             using var ms = new MemoryStream(raw, writable: false);
             using var reader = new BinaryReader(ms);
 

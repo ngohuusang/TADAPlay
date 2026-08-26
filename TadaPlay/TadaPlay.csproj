@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <Version>3.24.0</Version>
+    <Version>3.25.0</Version>
     <TargetFramework>net8.0-windows</TargetFramework>
     <Nullable>enable</Nullable>
     <UseWindowsForms>true</UseWindowsForms>
@@ -79,6 +79,9 @@
     </EmbeddedResource>
     <EmbeddedResource Include="Resources\player.nfz.template">
       <LogicalName>TadaPlay.Resources.player.nfz.template</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Resources\player.hki.template">
+      <LogicalName>TadaPlay.Resources.player.hki.template</LogicalName>
     </EmbeddedResource>
   </ItemGroup>
 
