@@ -2,7 +2,9 @@
 using System.Drawing;
 using System.Windows.Forms;
 using TadaPlay.Common.Models;
+using AntdUI;
 using TadaPlay.Connections;
+using TadaPlay.Controls;
 
 namespace TadaPlay
 {
@@ -49,9 +51,9 @@ namespace TadaPlay
         /// </summary>
         private readonly Func<string, User> _lookup;
 
-        private readonly Label _state = new();
-        private readonly Label _detail = new();
-        private readonly Button _watchButton = new();
+        private readonly AntdUI.Tag _state = new();
+        private readonly AntdUI.Label _detail = new();
+        private readonly AntdUI.Button _watchButton = new();
         private readonly System.Windows.Forms.Timer _refresh = new() { Interval = RefreshMs };
         private bool _probing;
 
@@ -66,59 +68,86 @@ namespace TadaPlay
             StartPosition = FormStartPosition.CenterParent;
             MaximizeBox = false;
             MinimizeBox = false;
-            ClientSize = new Size(420, 250);
+            ClientSize = new Size(440, 268);
             Font = new Font("Segoe UI", 9.75F);
-            BackColor = PageBg;
+            BackColor = UiTheme.PageBg;
 
-            var name = new Label
+            // A card on the page background, like the settings screen - the dialog is one
+            // block of information about one player, and the card is what says so.
+            var card = new AntdUI.Panel
+            {
+                Location = new Point(14, 14),
+                Size = new Size(412, 172),
+                Radius = 10,
+                Shadow = 8,
+                ShadowOpacity = 0.10F,
+                Back = Color.White,
+                BorderWidth = 1,
+                BorderColor = UiTheme.CardBorder,
+            };
+
+            var name = new AntdUI.Label
             {
                 Text = user.Username ?? "",
-                Location = new Point(20, 18),
-                Size = new Size(380, 30),
-                Font = new Font("Segoe UI Semibold", 13F, FontStyle.Bold)
+                Location = new Point(18, 14),
+                Size = new Size(376, 32),
+                PrefixSvg = UiTheme.IconAccount,
+                PrefixColor = UiTheme.AccentDisplay,
+                IconGap = 10,
+                ForeColor = UiTheme.Ink,
+                Font = new Font("Segoe UI Semibold", 13F, FontStyle.Bold),
+                BackColor = Color.Transparent,
             };
 
-            var address = new Label
+            var address = new AntdUI.Label
             {
                 Text = string.IsNullOrWhiteSpace(user.IpAddress) ? "Chưa có địa chỉ VPN" : user.IpAddress,
-                Location = new Point(20, 48),
-                Size = new Size(380, 22),
-                ForeColor = IdleColor
+                Location = new Point(18, 46),
+                Size = new Size(376, 22),
+                ForeColor = UiTheme.Muted,
+                Font = new Font("Segoe UI", 9.5F),
+                BackColor = Color.Transparent,
             };
 
-            _state.Location = new Point(20, 88);
-            _state.Size = new Size(380, 30);
-            _state.Font = new Font("Segoe UI Semibold", 12F, FontStyle.Bold);
-            _state.ForeColor = IdleColor;
+            // A tag, not a coloured line of shouty text: the state is a label on the player,
+            // and antd already draws exactly that with the right fill for the colour.
+            _state.Location = new Point(18, 78);
+            _state.AutoSizeMode = TAutoSize.Auto;
+            _state.Size = new Size(200, 30);
+            _state.Radius = 6;
+            _state.Font = new Font("Segoe UI Semibold", 10.5F, FontStyle.Bold);
             _state.Text = "Đang kiểm tra...";
 
-            _detail.Location = new Point(20, 118);
-            _detail.Size = new Size(380, 60);
-            _detail.ForeColor = IdleColor;
+            _detail.Location = new Point(18, 112);
+            _detail.Size = new Size(376, 50);
+            _detail.ForeColor = UiTheme.Muted;
+            _detail.Font = new Font("Segoe UI", 9.5F);
+            _detail.TextMultiLine = true;
+            _detail.BackColor = Color.Transparent;
+
+            card.Controls.Add(name);
+            card.Controls.Add(address);
+            card.Controls.Add(_state);
+            card.Controls.Add(_detail);
 
             _watchButton.Text = "Xem trận";
-            _watchButton.Location = new Point(196, 190);
-            _watchButton.Size = new Size(100, 40);
+            _watchButton.Location = new Point(196, 202);
+            _watchButton.Size = new Size(110, 44);
+            _watchButton.Type = TTypeMini.Primary;
+            _watchButton.Shape = TShape.Round;
             _watchButton.BackColor = LiveColor;
-            _watchButton.ForeColor = Color.White;
-            _watchButton.FlatStyle = FlatStyle.Flat;
-            _watchButton.FlatAppearance.BorderSize = 0;
+            _watchButton.Font = new Font("Segoe UI Semibold", 10F, FontStyle.Bold);
+            _watchButton.Cursor = Cursors.Hand;
             _watchButton.Enabled = false;
             _watchButton.Click += (s, e) => { DialogResult = DialogResult.OK; Close(); };
 
-            var close = new Button
-            {
-                Text = "Đóng",
-                Location = new Point(304, 190),
-                Size = new Size(100, 40),
-                FlatStyle = FlatStyle.Flat,
-                DialogResult = DialogResult.Cancel
-            };
+            var close = UiTheme.Quiet("Đóng", height: 44);
+            close.Dock = DockStyle.None;
+            close.Location = new Point(316, 202);
+            close.Size = new Size(110, 44);
+            close.DialogResult = DialogResult.Cancel;
 
-            Controls.Add(name);
-            Controls.Add(address);
-            Controls.Add(_state);
-            Controls.Add(_detail);
+            Controls.Add(card);
             Controls.Add(_watchButton);
             Controls.Add(close);
             CancelButton = close;
@@ -213,7 +242,12 @@ namespace TadaPlay
         private void Show(string state, Color color, string detail, bool watchable)
         {
             _state.Text = state;
-            _state.ForeColor = color;
+            // The colour still decides the meaning, so it keeps driving the tag - mapped to
+            // an antd type so the fill and the border come out consistent with every other
+            // tag in the app rather than being mixed here.
+            _state.Type = color == LiveColor ? TTypeMini.Success
+                        : color == WaitColor ? TTypeMini.Warn
+                        : TTypeMini.Default;
             _detail.Text = _isSelf ? detail + "\r\n(Đây là bạn.)" : detail;
             _watchButton.Enabled = watchable;
         }

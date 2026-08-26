@@ -1,6 +1,8 @@
 using System;
 using System.Drawing;
 using System.Windows.Forms;
+using AntdUI;
+using TadaPlay.Controls;
 
 namespace TadaPlay
 {
@@ -28,15 +30,17 @@ namespace TadaPlay
             MinimizeBox = false;
             ClientSize = new Size(480, 400);
             Font = new Font("Segoe UI", 9.75F);
-            BackColor = PageBg;
+            BackColor = UiTheme.PageBg;
 
-            var prompt = new Label
+            var prompt = new AntdUI.Label
             {
                 Text = "Chọn đội chiến thắng để cập nhật ELO",
                 Dock = DockStyle.Top,
-                Height = 40,
+                Height = 44,
                 Padding = new Padding(16, 12, 16, 0),
-                Font = new Font("Segoe UI Semibold", 11.5F, FontStyle.Bold)
+                ForeColor = UiTheme.Ink,
+                Font = new Font("Segoe UI Semibold", 11.5F, FontStyle.Bold),
+                BackColor = Color.Transparent,
             };
 
             var team1Box = BuildTeamCard("Đội 1", team1, Team1Color);
@@ -63,17 +67,19 @@ namespace TadaPlay
             if (suggestedWinner == 1) AcceptButton = team1WinButton;
             else if (suggestedWinner == 2) AcceptButton = team2WinButton;
 
-            var hint = new Label
+            var hint = new AntdUI.Label
             {
                 Text = "Nhấn Esc để huỷ và báo kết quả sau.",
                 Location = new Point(16, 364),
                 Size = new Size(448, 20),
-                ForeColor = Color.Gray,
+                ForeColor = UiTheme.Muted,
                 Font = new Font("Segoe UI", 8.5F),
-                TextAlign = ContentAlignment.MiddleCenter
+                TextAlign = ContentAlignment.MiddleCenter,
+                BackColor = Color.Transparent,
             };
 
-            var cancelButton = new Button
+            // Invisible and never clicked - it exists only so Esc has something to map to.
+            var cancelButton = new System.Windows.Forms.Button
             {
                 Location = new Point(16, 364),
                 Size = new Size(448, 20),
@@ -92,70 +98,87 @@ namespace TadaPlay
             CancelButton = cancelButton;
         }
 
-        private static Button BuildWinButton(string text, Color color)
+        private static AntdUI.Button BuildWinButton(string text, Color color)
         {
-            var button = new Button
+            return new AntdUI.Button
             {
                 Text = text,
+                Type = TTypeMini.Primary,
+                Shape = TShape.Round,
                 BackColor = color,
-                ForeColor = Color.White,
-                FlatStyle = FlatStyle.Flat,
+                BackHover = ControlPaint.Light(color, 0.15f),
+                BackActive = ControlPaint.Dark(color, 0.05f),
                 Font = new Font("Segoe UI Semibold", 10.5F, FontStyle.Bold),
-                Cursor = Cursors.Hand
+                Cursor = Cursors.Hand,
+                WaveSize = 4,   // the click ripple, so a mis-hit is visibly a hit
             };
-            button.FlatAppearance.BorderSize = 0;
-            button.FlatAppearance.MouseOverBackColor = ControlPaint.Light(color, 0.15f);
-            button.FlatAppearance.MouseDownBackColor = ControlPaint.Dark(color, 0.05f);
-            return button;
         }
 
-        private static Panel BuildTeamCard(string title, string[] members, Color accent)
+        /// <summary>
+        /// One team: an antd card with a coloured name band and the players under it.
+        ///
+        /// The players were an owner-drawn ListBox purely to get striped, unselectable rows -
+        /// twenty lines of DrawItem to render eight names nobody can click. They are labels in
+        /// a stack now, which is what they always were.
+        /// </summary>
+        private static AntdUI.Panel BuildTeamCard(string title, string[] members, Color accent)
         {
-            var card = new Panel
+            var card = new AntdUI.Panel
             {
-                BackColor = Color.White,
-                Padding = new Padding(1)
+                Radius = 10,
+                Shadow = 6,
+                ShadowOpacity = 0.10F,
+                Back = Color.White,
+                BorderWidth = 1,
+                BorderColor = UiTheme.CardBorder,
+                Padding = new Padding(0),
             };
 
-            var header = new Label
+            var header = new AntdUI.Panel
             {
-                Text = title,
                 Dock = DockStyle.Top,
-                Height = 34,
-                BackColor = accent,
-                ForeColor = Color.White,
-                Font = new Font("Segoe UI Semibold", 10.5F, FontStyle.Bold),
-                TextAlign = ContentAlignment.MiddleCenter
+                Height = 38,
+                Back = accent,
+                Radius = 10,
+                RadiusAlign = TAlignRound.Top,
             };
-
-            var list = new ListBox
+            header.Controls.Add(new AntdUI.Label
             {
                 Dock = DockStyle.Fill,
-                BorderStyle = BorderStyle.None,
-                IntegralHeight = false,
-                Font = new Font("Segoe UI", 9.75F),
-                DrawMode = DrawMode.OwnerDrawFixed,
-                ItemHeight = 26,
-                SelectionMode = SelectionMode.None
+                Text = title,
+                ForeColor = Color.White,
+                Font = new Font("Segoe UI Semibold", 10.5F, FontStyle.Bold),
+                TextAlign = ContentAlignment.MiddleCenter,
+                BackColor = Color.Transparent,
+            });
+
+            var list = new System.Windows.Forms.Panel
+            {
+                Dock = DockStyle.Fill,
+                AutoScroll = true,
+                BackColor = Color.White,
+                Padding = new Padding(0, 6, 0, 6),
             };
             if (members != null)
             {
-                foreach (var m in members)
+                // Dock=Top stacks in reverse add order, so walk the team backwards to keep
+                // them in the order the replay listed them.
+                for (int i = members.Length - 1; i >= 0; i--)
                 {
-                    list.Items.Add(m);
+                    list.Controls.Add(new AntdUI.Label
+                    {
+                        Dock = DockStyle.Top,
+                        Height = 28,
+                        Text = members[i],
+                        Padding = new Padding(12, 0, 8, 0),
+                        ForeColor = UiTheme.Ink,
+                        Font = new Font("Segoe UI", 9.75F),
+                        TextAlign = ContentAlignment.MiddleLeft,
+                        AutoEllipsis = true,
+                        BackColor = i % 2 == 0 ? Color.White : UiTheme.RowBand,
+                    });
                 }
             }
-            list.DrawItem += (s, e) =>
-            {
-                if (e.Index < 0) return;
-                Color rowBg = e.Index % 2 == 0 ? Color.White : Color.FromArgb(250, 250, 250);
-                using (var brush = new SolidBrush(rowBg)) e.Graphics.FillRectangle(brush, e.Bounds);
-                TextRenderer.DrawText(
-                    e.Graphics, list.Items[e.Index].ToString(), list.Font,
-                    new Rectangle(e.Bounds.X + 10, e.Bounds.Y, e.Bounds.Width - 10, e.Bounds.Height),
-                    Color.FromArgb(38, 38, 38),
-                    TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.EndEllipsis);
-            };
 
             card.Controls.Add(list);
             card.Controls.Add(header);
