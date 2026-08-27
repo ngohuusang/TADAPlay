@@ -1534,6 +1534,18 @@ namespace TadaPlay.Controls
         // Follows a match that is still being played: see LiveStreamSession.
         private bool _watchInProgress;
         private LiveStreamSession _liveStream;
+
+        /// <summary>
+        /// Polls whether the game opened to watch a match is still running.
+        ///
+        /// Without it, closing that game did NOT stop the download: StopLiveStream was only ever
+        /// reached by shutting the app down or starting a different watch, so a viewer who quit
+        /// the replay kept pulling the host's record for the rest of the match - reported in the
+        /// log as "đã nhận thêm N KB" long after they had stopped watching. That is wasted
+        /// bandwidth on a tunnel every other player shares.
+        /// </summary>
+        private System.Windows.Forms.Timer _watchExitTimer;
+        private const int WatchExitPollMs = 3000;
         private SpectatorOverlay _overlay;
 
         private void StartLiveStream(string hostIp, string hostLabel, LiveShareClient.FetchResult fetch)
@@ -1553,6 +1565,7 @@ namespace TadaPlay.Controls
                 }
             });
             _liveStream.Start();
+            StartWatchExitWatchdog();
 
             // The host's clock is in TadaPlay's dialogs, but the game is about to cover them -
             // and that is precisely when a viewer needs it, to judge how far behind live they
@@ -1636,8 +1649,76 @@ namespace TadaPlay.Controls
             }
         }
 
+        /// <summary>
+        /// Stops the download once the game being watched in has gone.
+        ///
+        /// Quitting that game IS "I have stopped watching" - there is no other gesture for it,
+        /// and the app cannot otherwise tell. Polled rather than hooked to Exited because the
+        /// process is found by scanning (GameLauncher does not hand one back), and a 3s poll is
+        /// far cheaper than the download it stops.
+        /// </summary>
+        private void StartWatchExitWatchdog()
+        {
+            StopWatchExitWatchdog();
+
+            // Give the game generous time to appear before concluding it has gone. It is
+            // launched just before this and the launch already reported success, so it is
+            // coming - but GameExecutablePreparer copies a ~3MB exe first and antivirus
+            // scanning a freshly written binary can stretch that well past a few seconds.
+            // Erring long costs one extra minute of download in a case that should not happen;
+            // erring short kills the stream out from under someone who is still watching.
+            var startedAt = DateTime.UtcNow;
+            var grace = TimeSpan.FromSeconds(90);
+            bool seen = false;
+
+            _watchExitTimer = new System.Windows.Forms.Timer { Interval = WatchExitPollMs };
+            _watchExitTimer.Tick += (s, e) =>
+            {
+                if (_liveStream is not { IsRunning: true })
+                {
+                    StopWatchExitWatchdog();
+                    return;
+                }
+
+                System.Diagnostics.Process game = null;
+                try { game = LiveRecordReader.FindGameProcess(); }
+                catch (Exception ex) { DebugLogger.Warn($"Home: watch watchdog probe failed: {ex.Message}"); }
+
+                try
+                {
+                    if (game != null)
+                    {
+                        seen = true;
+                        return;
+                    }
+
+                    // Never seen it and still inside the grace period: it may still be starting.
+                    if (!seen && DateTime.UtcNow - startedAt < grace) return;
+
+                    DebugLogger.Info("Home: the game opened for watching has exited - stopping the stream.");
+                    printLog("[Xem] Đã đóng game - dừng tải trận đang xem.", Color.RoyalBlue);
+                    StopLiveStream();
+                }
+                finally
+                {
+                    game?.Dispose();
+                }
+            };
+            _watchExitTimer.Start();
+        }
+
+        private void StopWatchExitWatchdog()
+        {
+            var timer = _watchExitTimer;
+            _watchExitTimer = null;
+            if (timer == null) return;
+            timer.Stop();
+            timer.Dispose();
+        }
+
         private void StopLiveStream()
         {
+            StopWatchExitWatchdog();
             LiveStreamSession session = _liveStream;
             _liveStream = null;
             session?.Dispose();
