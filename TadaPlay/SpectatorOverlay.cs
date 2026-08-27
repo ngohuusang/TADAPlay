@@ -28,6 +28,18 @@ namespace TadaPlay
     {
         private const int PollMs = 3000;
 
+        // Two layouts. Compact is the normal readout; paused deliberately takes far more room,
+        // because the viewer has to notice it without looking for it - they are watching the
+        // game, not the overlay, and the whole point is to prompt an action.
+        private static readonly Size CompactSize = new(226, 58);
+        private static readonly Size PausedSize = new(330, 116);
+
+        private static readonly Font WhoFont = new("Segoe UI", 8.5F);
+        private static readonly Font WhoFontPaused = new("Segoe UI Semibold", 10F, FontStyle.Bold);
+        private static readonly Font ClockFont = new("Segoe UI Semibold", 17F, FontStyle.Bold);
+        private static readonly Font ClockFontPaused = new("Segoe UI Semibold", 23F, FontStyle.Bold);
+        private static readonly Font HintFont = new("Segoe UI", 9.5F);
+
         private static readonly Color Ink = Color.FromArgb(245, 245, 245);
         private static readonly Color LiveColor = Color.FromArgb(120, 220, 90);
         private static readonly Color DimColor = Color.FromArgb(165, 165, 165);
@@ -50,8 +62,12 @@ namespace TadaPlay
         private readonly Func<string, User> _lookup;
         private readonly Label _clock = new();
         private readonly Label _who = new();
+        /// <summary>What the viewer should DO about the pause. Only shown while paused.</summary>
+        private readonly Label _hint = new();
         private readonly System.Windows.Forms.Timer _poll = new() { Interval = PollMs };
         private bool _probing;
+        /// <summary>Which layout is currently applied, so the form is only resized on a change.</summary>
+        private bool _pausedLayout;
         private Point _dragFrom;
         private bool _dragging;
 
@@ -123,28 +139,37 @@ namespace TadaPlay
             StartPosition = FormStartPosition.Manual;
             BackColor = Color.FromArgb(18, 18, 18);
             Opacity = 0.82;
-            ClientSize = new Size(226, 58);
+            ClientSize = CompactSize;
 
             _who.Text = $"▶ {_hostLabel}";
             _who.ForeColor = DimColor;
-            _who.Font = new Font("Segoe UI", 8.5F);
+            _who.Font = WhoFont;
             _who.Location = new Point(12, 7);
             _who.Size = new Size(202, 16);
             _who.BackColor = Color.Transparent;
 
             _clock.Text = "--:--";
             _clock.ForeColor = Ink;
-            _clock.Font = new Font("Segoe UI Semibold", 17F, FontStyle.Bold);
+            _clock.Font = ClockFont;
             _clock.Location = new Point(12, 22);
             _clock.Size = new Size(202, 30);
             _clock.BackColor = Color.Transparent;
 
+            _hint.Text = "Hãy tạm dừng trận của bạn để không xem vượt.";
+            _hint.ForeColor = PausedColor;
+            _hint.Font = HintFont;
+            _hint.Location = new Point(14, 74);
+            _hint.Size = new Size(302, 34);
+            _hint.BackColor = Color.Transparent;
+            _hint.Visible = false;
+
             Controls.Add(_who);
             Controls.Add(_clock);
+            Controls.Add(_hint);
 
             // Drag from anywhere on the overlay, including the labels - a 226px window with
             // only its background draggable is fiddly to move.
-            foreach (Control control in new Control[] { this, _who, _clock })
+            foreach (Control control in new Control[] { this, _who, _clock, _hint })
             {
                 control.MouseDown += OnDragStart;
                 control.MouseMove += OnDragMove;
@@ -191,6 +216,65 @@ namespace TadaPlay
             Location = new Point(Location.X + at.X - _dragFrom.X, Location.Y + at.Y - _dragFrom.Y);
         }
 
+        /// <summary>
+        /// Switches between the compact readout and the larger paused panel.
+        ///
+        /// Guarded on a change rather than run every poll: this resizes a top-level window, and
+        /// doing that every three seconds would make the overlay visibly twitch and fight the
+        /// user while they drag it.
+        ///
+        /// The window grows right and down from its existing Location, so an overlay the player
+        /// has parked in a corner does not jump somewhere else at the moment it needs reading.
+        /// </summary>
+        private void ApplyPausedLayout(bool paused)
+        {
+            if (paused == _pausedLayout) return;
+            _pausedLayout = paused;
+
+            SuspendLayout();
+            if (paused)
+            {
+                ClientSize = PausedSize;
+                Opacity = 0.94;              // less see-through: this one is meant to interrupt
+                _who.Font = WhoFontPaused;
+                _who.ForeColor = PausedColor;
+                _who.Location = new Point(14, 10);
+                _who.Size = new Size(302, 20);
+                _clock.Font = ClockFontPaused;
+                _clock.Location = new Point(14, 32);
+                _clock.Size = new Size(302, 40);
+                _hint.Visible = true;
+            }
+            else
+            {
+                ClientSize = CompactSize;
+                Opacity = 0.82;
+                _hint.Visible = false;
+                _who.Font = WhoFont;
+                _who.ForeColor = DimColor;
+                _who.Location = new Point(12, 7);
+                _who.Size = new Size(202, 16);
+                _clock.Font = ClockFont;
+                _clock.Location = new Point(12, 22);
+                _clock.Size = new Size(202, 30);
+            }
+            ResumeLayout();
+            Invalidate();                    // repaint the border for the new state/size
+        }
+
+        /// <summary>
+        /// An amber border while paused. The size change alone is easy to miss in peripheral
+        /// vision over a busy game; an outline reads as "something changed" at a glance.
+        /// </summary>
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            base.OnPaint(e);
+            if (!_pausedLayout) return;
+
+            using var pen = new Pen(PausedColor, 2f);
+            e.Graphics.DrawRectangle(pen, 1, 1, ClientSize.Width - 2, ClientSize.Height - 2);
+        }
+
         private async void Probe()
         {
             if (_probing || IsDisposed) return;
@@ -204,6 +288,9 @@ namespace TadaPlay
 
                 if (status == null)
                 {
+                    // Unreachable is not paused - drop back to the compact readout so a stale
+                    // "pause your game" prompt cannot sit on screen after the host disappears.
+                    ApplyPausedLayout(false);
                     _clock.ForeColor = DimColor;
                     _who.Text = $"▶ {_hostLabel} · mất kết nối";
                     return;
@@ -213,9 +300,11 @@ namespace TadaPlay
                 // stopped clock too, and calling that "paused" would be wrong.
                 bool paused = status.InGame && status.Paused;
 
+                ApplyPausedLayout(paused);
+
                 if (paused)
                 {
-                    _who.Text = $"⏸ {_hostLabel} · tạm dừng";
+                    _who.Text = $"⏸ {_hostLabel} · ĐÃ TẠM DỪNG";
                 }
                 else
                 {
