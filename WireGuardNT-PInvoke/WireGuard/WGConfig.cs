@@ -13,7 +13,10 @@ namespace WireGuardNT_PInvoke.WireGuard
         public loctlWireGuardConfig LoctlWireGuardConfig;
         public IPAddress InterfaceAddress { get; set; }
         public IPNetwork2 InterfaceNetwork { get; set; }
-        public IPAddress[] DnsAddresses { get; set; }
+        // Empty, never null: a config with no DNS key (the normal case for our split tunnel,
+        // which resolves nothing by name) must leave the machine's DNS settings untouched
+        // rather than NullReference its way out of adapter setup.
+        public IPAddress[] DnsAddresses { get; set; } = new IPAddress[0];
 
         public ushort InterfaceMtu = 1420;
         public ushort InterfaceListenPort { get; set; }

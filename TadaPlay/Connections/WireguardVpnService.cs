@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -162,12 +163,17 @@ namespace TadaPlay.Connections
                         }
                     }
 
+                    var hasDefaultRoute = false;
+                    var tunnelRoutes = new List<IPNetwork2>();
                     for (var i = 0; i < _wgConfig.LoctlWireGuardConfig.WgPeerConfigs.Length; i++)
                     {
                         var peerConfig = _wgConfig.LoctlWireGuardConfig.WgPeerConfigs[i];
                         MIB_IPFORWARD_ROW2 row; InitializeIpForwardEntry(out row);
                         row.InterfaceLuid = _adapterLuid; row.Metric = 1;
                         var maskedIp = IPNetwork2.Parse("" + peerConfig.allowdIp.V4.Addr, peerConfig.allowdIp.Cidr);
+                        if (maskedIp.Cidr == 0) { hasDefaultRoute = true; }
+                        tunnelRoutes.Add(maskedIp);
+                        WarnIfSubnetCollidesWithLan(maskedIp);
                         row.DestinationPrefix.Prefix.Ipv4.sin_addr = new Ws2_32.IN_ADDR(maskedIp.Network.GetAddressBytes());
                         row.DestinationPrefix.Prefix.si_family = Ws2_32.ADDRESS_FAMILY.AF_INET;
                         row.DestinationPrefix.PrefixLength = maskedIp.Cidr;
@@ -205,31 +211,59 @@ namespace TadaPlay.Connections
                     lastError = GetIpInterfaceEntry(ref ipInterfaceRow);
                     if (!lastError.Failed)
                     {
-                        ipInterfaceRow.ForwardingEnabled = true; ipInterfaceRow.UseAutomaticMetric = false;
-                        ipInterfaceRow.Metric = 0; ipInterfaceRow.NlMtu = _wgConfig.InterfaceMtu;
+                        ipInterfaceRow.ForwardingEnabled = true;
+                        ipInterfaceRow.NlMtu = _wgConfig.InterfaceMtu;
                         ipInterfaceRow.SitePrefixLength = 0;
+                        // Pin the tunnel to metric 0 only when it actually carries a default route,
+                        // which is what the official WireGuard Windows client does. Forcing it
+                        // unconditionally ranked TADAVPNAdapter above the physical NIC for every
+                        // interface-ordered decision Windows makes - most damagingly DNS, where the
+                        // whole machine's lookups were sent to the tunnel's DNS servers even though
+                        // only the game subnet is routed through it. That added latency to every
+                        // name resolution while connected and made the internet feel slow.
+                        if (hasDefaultRoute)
+                        {
+                            ipInterfaceRow.UseAutomaticMetric = false;
+                            ipInterfaceRow.Metric = 0;
+                        }
                         lastError = SetIpInterfaceEntry(ipInterfaceRow);
                         if (lastError.Failed) { DebugLogger.Warn("WireguardVPNService: SetIpInterfaceEntry failed: " + lastError); }
                     }
 
-                    // Deliberately DO NOT configure DNS on the tunnel interface.
+                    // Only hand Windows a DNS server the tunnel can actually carry.
                     //
-                    // This is a split-tunnel game VPN: it routes only 192.168.99.0/24 and
-                    // players connect by IP, so name resolution is never needed through it. But
-                    // the profile ships a public resolver (DNS = 8.8.8.8) and the interface is
-                    // set to metric 0 (the primary), so configuring that DNS made Windows send
-                    // every lookup OUT this interface, sourced from 192.168.99.x - an address
-                    // that cannot reach 8.8.8.8, since only the game subnet is routed here. Each
-                    // query black-holed and timed out after ~12 SECONDS before Windows fell back
-                    // to the physical adapter's resolver, so every web page (YouTube, Facebook,
-                    // any site with many hostnames) crawled the moment the VPN came up, while the
-                    // game itself was unaffected. Measured: 12000 ms -> ~5 ms per lookup once the
-                    // tunnel DNS is removed. Leaving DNS to the physical adapter is correct here.
-                    if (_wgConfig.DnsAddresses != null && _wgConfig.DnsAddresses.Length > 0)
+                    // This is a split-tunnel game VPN: it routes only 192.168.99.0/24 and players
+                    // connect by IP, so nothing inside it is ever reached by name. But the profiles
+                    // shipped a public resolver (DNS = 8.8.8.8) and the adapter was pinned to
+                    // metric 0, so Windows ranked it above the physical NIC and sent the whole
+                    // machine's lookups here - sourced from 192.168.99.x, an address that cannot
+                    // reach 8.8.8.8 because only the game subnet is routed through the tunnel.
+                    // Every query black-holed and burned the resolver's full retry backoff before
+                    // falling back to the real NIC, so any page with many hostnames (YouTube,
+                    // Facebook) crawled the moment the VPN came up while the game itself was fine.
+                    // Measured on two machines: ~7s and ~12s per lookup, down to single-digit ms
+                    // once the tunnel DNS is gone.
+                    //
+                    // Filtering on routability rather than refusing DNS outright: for today's
+                    // split tunnel the two are identical, but this still does the right thing if a
+                    // resolver ever lives inside the VPN subnet, or if a full tunnel
+                    // (AllowedIPs = 0.0.0.0/0) is ever added - where the tunnel's DNS is both
+                    // reachable and the correct one to use.
+                    foreach (var dnsAddress in _wgConfig.DnsAddresses ?? new IPAddress[0])
                     {
-                        DebugLogger.Info($"WireguardVPNService: not applying {_wgConfig.DnsAddresses.Length} tunnel DNS " +
-                                         "server(s) - a split-tunnel game VPN needs no DNS, and applying an " +
-                                         "unroutable resolver black-holes all web DNS (~12s/lookup).");
+                        if (!IsRoutedThroughTunnel(dnsAddress, tunnelRoutes))
+                        {
+                            DebugLogger.Info($"WireguardVPNService: ignoring DNS server {dnsAddress} - not routed through the tunnel, leaving system DNS alone.");
+                            continue;
+                        }
+
+                        try
+                        {
+                            var process = Process.Start(new ProcessStartInfo("netsh.exe", $"interface ipv4 add dnsservers name=\"{ADATER_NAME}\" address={dnsAddress} validate=no") { CreateNoWindow = true, UseShellExecute = false });
+                            process?.WaitForExit(5000);
+                            if (process?.ExitCode != 0) { DebugLogger.Warn($"WireguardVPNService: netsh for DNS failed with exit code {process?.ExitCode} for {dnsAddress}"); }
+                        }
+                        catch (Exception ex) { DebugLogger.Error("WireguardVPNService: Failed to set DNS via netsh: " + ex.Message); }
                     }
 
                     _adapter.SetConfiguration(_wgConfig); // Apply WireGuard specific configuration
@@ -460,6 +494,81 @@ namespace TadaPlay.Connections
                 DebugLogger.Error($"WireguardVPNService: Error getting adapter IP from _wgConfig: {ex.Message}");
                 return null;
             }
+        }
+
+        // A player whose home LAN happens to sit in the same range as the tunnel (192.168.99.0/24)
+        // has that whole network pulled into the VPN the moment this route is installed - router,
+        // printer and NAS all stop answering, and it looks like the app broke their internet. The
+        // client can't route its way out of a genuine collision, but silently breaking someone's
+        // LAN is worse than telling them, so log it and surface it in the UI. Non-fatal: the tunnel
+        // still comes up, since for most players the warning won't apply.
+        private void WarnIfSubnetCollidesWithLan(IPNetwork2 tunnelSubnet)
+        {
+            try
+            {
+                // A full tunnel deliberately covers everything - nothing to report.
+                if (tunnelSubnet.Cidr == 0 || tunnelSubnet.Cidr > 32) { return; }
+
+                var networkBytes = tunnelSubnet.Network.GetAddressBytes();
+                if (networkBytes.Length != 4) { return; }
+                var network = ToUInt32(networkBytes);
+                var mask = uint.MaxValue << (32 - tunnelSubnet.Cidr);
+
+                foreach (var nic in System.Net.NetworkInformation.NetworkInterface.GetAllNetworkInterfaces())
+                {
+                    if (nic.OperationalStatus != System.Net.NetworkInformation.OperationalStatus.Up) { continue; }
+                    if (nic.NetworkInterfaceType == System.Net.NetworkInformation.NetworkInterfaceType.Loopback) { continue; }
+                    // Skip our own adapter, including a stale one from a previous session that may
+                    // still be holding a tunnel IP - that is not a LAN collision.
+                    if (nic.Name.IndexOf(ADATER_NAME, StringComparison.OrdinalIgnoreCase) >= 0
+                        || nic.Description.IndexOf("WireGuard", StringComparison.OrdinalIgnoreCase) >= 0) { continue; }
+
+                    foreach (var unicast in nic.GetIPProperties().UnicastAddresses)
+                    {
+                        if (unicast.Address.AddressFamily != System.Net.Sockets.AddressFamily.InterNetwork) { continue; }
+                        if ((ToUInt32(unicast.Address.GetAddressBytes()) & mask) != (network & mask)) { continue; }
+
+                        var message = $"Mạng LAN của bạn ({unicast.Address} trên \"{nic.Name}\") trùng dải với VPN ({tunnelSubnet}). "
+                                    + "Khi bật VPN, các thiết bị trong mạng nội bộ (router, máy in, NAS) có thể không truy cập được.";
+                        DebugLogger.Warn("WireguardVPNService: LAN subnet collides with tunnel subnet - " + message);
+                        OnErrorOccurred?.Invoke(this, message);
+                        return;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                DebugLogger.Error($"WireguardVPNService: subnet collision check failed: {ex.Message}");
+            }
+        }
+
+        // True when `address` falls inside one of the tunnel's AllowedIPs ranges, i.e. traffic to
+        // it would actually be carried by the tunnel rather than the physical NIC.
+        private static bool IsRoutedThroughTunnel(IPAddress address, List<IPNetwork2> tunnelRoutes)
+        {
+            var addressBytes = address.GetAddressBytes();
+            if (addressBytes.Length != 4) { return false; }
+            var value = ToUInt32(addressBytes);
+
+            foreach (var route in tunnelRoutes)
+            {
+                if (route.Cidr == 0) { return true; } // a full tunnel carries everything
+                if (route.Cidr > 32) { continue; }
+
+                var networkBytes = route.Network.GetAddressBytes();
+                if (networkBytes.Length != 4) { continue; }
+
+                var mask = uint.MaxValue << (32 - route.Cidr);
+                if ((value & mask) == (ToUInt32(networkBytes) & mask)) { return true; }
+            }
+            return false;
+        }
+
+        // Big-endian (network order) bytes -> uint, so two IPv4 addresses can be masked and compared.
+        private static uint ToUInt32(byte[] addressBytes)
+        {
+            return ((uint)addressBytes[0] << 24) | ((uint)addressBytes[1] << 16)
+                 | ((uint)addressBytes[2] << 8) | addressBytes[3];
         }
 
         // Deletes any existing IPv4 unicast address entry matching targetAddrBytes, whatever
