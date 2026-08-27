@@ -22,6 +22,26 @@ namespace TadaPlay.Utils
         private static DateTime? _nextCaptureUtc;
         private static string _recordPath;
         private static long _durationMs;
+        private static DateTime? _clockLastAdvancedUtc;
+        private static DateTime? _pausedSinceUtc;
+
+        /// <summary>
+        /// How long the match clock must stand still before it counts as a pause.
+        ///
+        /// Measured as a stall duration rather than as the gap between two consecutive samples,
+        /// because the clock is now reported from two places at very different rates: the
+        /// capture loop (10s while watched, 90s idle) and SpectatorStreamSource (every 3s while
+        /// streaming). A per-gap rule silently never fires on the 3s path, since no single gap
+        /// ever reaches the threshold. Accumulating the stall works at any sampling rate.
+        /// </summary>
+        private const int PauseAfterStallMs = 8000;
+
+        /// <summary>
+        /// Game time advancing by less than this across such a gap counts as not advancing.
+        /// Not zero: the clock is recovered from the record's sync increments, and the last
+        /// partial operation can shift the total slightly between captures even mid-play.
+        /// </summary>
+        private const int PauseGameToleranceMs = 1000;
 
         /// <summary>
         /// How often an in-progress match is captured. Home overwrites this from
@@ -82,7 +102,76 @@ namespace TadaPlay.Utils
         public static long DurationMs
         {
             get { lock (Gate) return _durationMs; }
-            set { lock (Gate) _durationMs = value; }
+        }
+
+        /// <summary>
+        /// True while the host's game appears to be paused.
+        ///
+        /// Derived rather than observed: the match clock above comes from the record's own sync
+        /// increments, so it only advances when the game simulates. If it stands still while
+        /// wall-clock time moves on, the game is not simulating - which is what a pause is. No
+        /// memory reading, no screen scraping, no extra I/O; it reuses a number every capture
+        /// already computes.
+        ///
+        /// The honest caveat: this is only as responsive as the capture interval. With a viewer
+        /// watching, captures are 10s apart, so a pause shows up within roughly 10-20s. With
+        /// nobody watching it is 90s - but then nobody is looking at the overlay either.
+        ///
+        /// A total network/game stall would also read as paused. That is arguably correct for
+        /// the overlay's purpose: either way the match is not progressing and the viewer's
+        /// replay is about to catch up to nothing.
+        /// </summary>
+        public static bool Paused
+        {
+            get { lock (Gate) return _pausedSinceUtc.HasValue; }
+        }
+
+        /// <summary>How long the game has been paused, or null when it is running.</summary>
+        public static TimeSpan? PausedFor
+        {
+            get
+            {
+                lock (Gate)
+                {
+                    return _pausedSinceUtc.HasValue ? DateTime.UtcNow - _pausedSinceUtc.Value : null;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Records the match clock read from the latest capture, and re-evaluates whether the
+        /// game is paused by comparing it against the previous sample.
+        ///
+        /// This replaced a plain DurationMs setter: the pause verdict has to be computed at the
+        /// moment a new sample arrives, because it depends on the gap since the previous one.
+        /// </summary>
+        public static void ReportDuration(long durationMs)
+        {
+            lock (Gate)
+            {
+                DateTime now = DateTime.UtcNow;
+
+                if (_clockLastAdvancedUtc == null)
+                {
+                    // First sample of the match: nothing to compare against yet.
+                    _clockLastAdvancedUtc = now;
+                }
+                else if (durationMs - _durationMs > PauseGameToleranceMs)
+                {
+                    // The game moved: definitively not paused, whatever we thought before.
+                    _clockLastAdvancedUtc = now;
+                    _pausedSinceUtc = null;
+                }
+                else if ((now - _clockLastAdvancedUtc.Value).TotalMilliseconds >= PauseAfterStallMs
+                         && _pausedSinceUtc == null)
+                {
+                    // Dated to when the clock was last seen moving, not to now, so "paused for"
+                    // does not under-report by however long the detection took.
+                    _pausedSinceUtc = _clockLastAdvancedUtc;
+                }
+
+                _durationMs = durationMs;
+            }
         }
 
         /// <summary>Called when the watcher first sees a match being recorded.</summary>
@@ -95,6 +184,8 @@ namespace TadaPlay.Utils
                 _nextCaptureUtc = DateTime.UtcNow + CaptureInterval;
                 _recordPath = recordPath;
                 _durationMs = 0;
+                _clockLastAdvancedUtc = null;
+                _pausedSinceUtc = null;
             }
         }
 
@@ -107,6 +198,23 @@ namespace TadaPlay.Utils
             }
         }
 
+        /// <summary>
+        /// Stops SHARING without ending the match.
+        ///
+        /// Turning sharing off is not the same event as a match finishing, and conflating them
+        /// was a bug: it cleared _inGame, so a player who opted out stopped appearing as playing
+        /// at all until their next match. They are still in a game - other people just cannot
+        /// watch it.
+        /// </summary>
+        public static void SharingStopped()
+        {
+            lock (Gate)
+            {
+                _nextCaptureUtc = null;
+                _pausedSinceUtc = null;
+            }
+        }
+
         /// <summary>Called when the match ends; the published copy stays watchable.</summary>
         public static void MatchEnded()
         {
@@ -115,6 +223,10 @@ namespace TadaPlay.Utils
                 _inGame = false;
                 _startedUtc = null;
                 _nextCaptureUtc = null;
+                // A finished match is not a paused one - without this the overlay would keep
+                // showing "tạm dừng" over a game that simply ended.
+                _clockLastAdvancedUtc = null;
+                _pausedSinceUtc = null;
                 // Cleared last: from here the finished match is served from the snapshot
                 // folder like any other, which is what PublishFinished is about to write.
                 _recordPath = null;

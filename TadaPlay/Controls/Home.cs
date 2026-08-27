@@ -14,6 +14,7 @@ using TadaPlay.Connections.Interface;
 using TadaPlay.Contexts.Interfaces;
 using TadaPlay.Logger;
 using TadaPlay.Services.Interface;
+using TadaPlay.Services;
 using TadaPlay.Utils;
 using TadaPlay.Websockets.Interface;
 using TadaPlay.Websockets.Models;
@@ -80,6 +81,16 @@ namespace TadaPlay.Controls
             accountService = _accountService;
 
             userList.ItemSelected += userList_ItemSelected;
+            StyleUserList();
+
+            // BẮT ĐẦU sat visibly inset from the log box below it. Measured against a window
+            // capture: 25px of gutter each side and 14px top/bottom, against a Padding of
+            // (16,8,16,8) - AntdUI paints the button inside its Padding, and this display scales
+            // it by 150%. Margin is NOT involved (zeroing it changed the rendering by 0px), so
+            // the horizontal padding is what has to go. The vertical 8 stays: it is what gives
+            // the button its height presence, and removing it only makes the label crowd the
+            // edge. Set here rather than in the designer file, which Visual Studio regenerates.
+            startGameButton.Padding = new Padding(0, 8, 0, 8);
 
             // The live stream keeps appending to a file on a background loop; without this it
             // would outlive the control it reports to and go on writing to a replay nobody
@@ -127,11 +138,20 @@ namespace TadaPlay.Controls
             wireGuardVpnService.OnIpAddressChanged += WireGuardVpnService_OnIpAddressChanged;
 
             UpdateUiBasedOnLobbyState();
+            _ = OfferUpdateIfAvailableAsync();
             StartRecordWatcher();
-            StartMatchSharing();
+            BuildSpectateToggle();
+            ApplyMatchSharingSetting();
             // A spectator session swaps the stock age2_x1.5.exe aside; if TadaPlay died before
             // putting it back, do it now rather than leaving the game folder modified.
             GameSpectator.RestoreLaunchTarget(appContext.GetGameFolder());
+            // Same idea: older builds opened an inbound rule for the game's spectator port.
+            // Nothing listens there now, so take our own leftover back off the player's firewall.
+            GameSpectator.RemoveSpectatorPortRule();
+            // Let other players measure their latency to this machine. Windows blocks inbound
+            // ping by default, and half the connected peers were silent when checked - so
+            // without this the new "Đo ping" button reports failure for about half the lobby.
+            VpnFirewall.EnsureVpnPingAllowed();
             // TadaPlay no longer WRITES the in-game profile at all. The old ProfileTemplateEnforcer
             // rewrote player.nfz every 10s, which wiped the game's profile<->hotkey link and reset
             // the player's hotkeys. Instead we WATCH player.nfz and, whenever the name changes, READ
@@ -289,13 +309,57 @@ namespace TadaPlay.Controls
             // serving the stream (Record Game/Allow Spectators off, or an older build).
             if (EnsureSpectatorStreamStarted())
             {
-                MatchStatusPublisher.Publish(webSocketService);
+                MatchStatusPublisher.Publish(webSocketService, appContext.GetAllowSpectateSetting());
                 return;
             }
 
             if (_liveCaptureBusy || !ShouldCaptureNow()) return;
+
+            // Sharing off: still refresh the match clock so other players see "đang chơi 25:30 ·
+            // không spec" rather than a stuck 00:00. Reading the record for its duration is a
+            // local file walk - none of the shadow copy, snapshot or serving that sharing does.
+            if (!appContext.GetAllowSpectateSetting())
+            {
+                // Paced with _lastCaptureUtc only - deliberately NOT MatchShareState.Captured(),
+                // which also re-arms the countdown viewers are shown. Doing that here published
+                // "chờ 90 giây" to everyone while sharing was off, i.e. a countdown to a capture
+                // that is never coming, which is the exact thing this change set out to remove.
+                _lastCaptureUtc = DateTime.UtcNow;
+                _ = System.Threading.Tasks.Task.Run(RefreshClockOnly);
+                return;
+            }
+
             _liveCaptureBusy = true;
             _ = System.Threading.Tasks.Task.Run(CaptureLiveMatch);
+        }
+
+        /// <summary>
+        /// Updates only the match clock, for a player who has opted out of being watched.
+        ///
+        /// They are still playing and the list should say so with a running time; what they
+        /// declined is being watched. This walks the record for its duration and nothing else -
+        /// no shadow copy, no snapshot, no listening port, no bytes on the VPN.
+        /// </summary>
+        private void RefreshClockOnly()
+        {
+            try
+            {
+                string recordPath = MatchShareState.CurrentRecordPath;
+                if (recordPath == null) return;
+
+                LiveRecordReader.RecordAnalysis analysis = LiveRecordReader.AnalyzeFile(recordPath);
+                if (analysis == null || analysis.BodyBytes <= 0) return;
+
+                MatchShareState.ReportDuration(analysis.DurationMs);
+                UiUtils.InvokeOnUiThread(this,
+                    () => MatchStatusPublisher.Publish(webSocketService, appContext.GetAllowSpectateSetting()),
+                    "HOME_CLOCK_ONLY");
+            }
+            catch (Exception ex)
+            {
+                // Never fatal - the clock simply stays where it was.
+                DebugLogger.Warn($"Home: clock-only refresh failed: {ex.Message}");
+            }
         }
 
         /// <summary>
@@ -462,7 +526,7 @@ namespace TadaPlay.Controls
                 _liveCaptureBytes = snapshot.Data.Length;
                 // Published so viewers can be told how far into the match they would be
                 // joining, rather than just that something is available.
-                MatchShareState.DurationMs = analysis.DurationMs;
+                MatchShareState.ReportDuration(analysis.DurationMs);
                 var clock = TimeSpan.FromMilliseconds(analysis.DurationMs);
                 printLog($"[Xem] Đã cập nhật trận cho người xem (phút {clock.Minutes:00}:{clock.Seconds:00}, " +
                          $"lần {_liveCaptureCount}: {snapshot.Data.Length / 1024} KB, +{growthKb} KB).",
@@ -487,7 +551,7 @@ namespace TadaPlay.Controls
                 // half between updates while captures were really 10s apart.
                 MatchShareState.CaptureInterval = TimeSpan.FromMilliseconds(NextCaptureIntervalMs());
                 MatchShareState.Captured();
-                MatchStatusPublisher.Publish(webSocketService);
+                MatchStatusPublisher.Publish(webSocketService, appContext.GetAllowSpectateSetting());
                 _liveCaptureBusy = false;
             }
         }
@@ -502,8 +566,142 @@ namespace TadaPlay.Controls
 
         // Runs for the lifetime of the app alongside the record watcher: publishes this
         // player's matches - periodically while one is running, and again once it finishes.
+        private AntdUI.Switch _spectateToggle;
+
+        // AntdUI's Switch animates, and CheckedChanged fires off the back of that animation -
+        // after construction has returned, so a "still building" flag does not catch it. On a
+        // fresh profile that raised the handler unprompted, briefly opening the share port and
+        // logging "đã bật chia sẻ" then "đã tắt" before anyone touched anything.
+        //
+        // So the handler acts only on input the user actually gave: set by a real click on the
+        // switch, and re-checked against the stored setting so a repeated or spurious event
+        // cannot do any work twice. The stored setting is the truth; the control reports.
+        private bool _userToggledSpectate;
+
+        /// <summary>
+        /// The "let others watch me" switch, directly under BẮT ĐẦU.
+        ///
+        /// It lives here rather than buried in Settings because it is a decision players make
+        /// per session - "am I willing to be watched in this game?" - and because the cost of
+        /// leaving it on is paid by everyone: sharing streams tens of megabytes per viewer
+        /// across the same VPN the whole lobby plays through. A control you can see is one you
+        /// can turn off.
+        ///
+        /// Added in code, not the designer: playPanel is a Dock layout whose order comes from
+        /// z-order, and Home.Designer.cs is regenerated whenever anyone opens the form.
+        /// </summary>
+        private void BuildSpectateToggle()
+        {
+            if (_spectateToggle != null) return;
+
+            // A compact row rather than a docked switch: Dock=Top stretches an AntdUI.Switch
+            // across the full width, which reads as a grey bar rather than a toggle.
+            var row = new System.Windows.Forms.Panel
+            {
+                Dock = DockStyle.Top,
+                Height = 42,
+                BackColor = Color.Transparent,
+            };
+
+            _spectateToggle = new AntdUI.Switch
+            {
+                Size = new Size(44, 24),
+                Location = new Point(8, 9),
+                Checked = appContext.GetAllowSpectateSetting(),
+            };
+
+            var caption = new AntdUI.Label
+            {
+                Text = "Cho phép người khác xem trận của tôi",
+                Font = new Font("Segoe UI", 11F),
+                ForeColor = Color.FromArgb(90, 98, 105),
+                Location = new Point(62, 10),
+                Size = new Size(420, 24),
+                BackColor = Color.Transparent,
+            };
+
+            // Only a real click counts as intent - see the note on _userToggledSpectate.
+            _spectateToggle.MouseDown += (sender, e) => _userToggledSpectate = true;
+
+            _spectateToggle.CheckedChanged += (sender, e) =>
+            {
+                if (!_userToggledSpectate) return;
+
+                bool wanted = _spectateToggle.Checked;
+                // Nothing to do if this only restates what is already stored: keeps a repeated
+                // animation event from re-running the start/stop work and logging it twice.
+                if (wanted == appContext.GetAllowSpectateSetting()) return;
+
+                appContext.SetAllowSpectateSetting(wanted);
+                ApplyMatchSharingSetting();
+                printLog(wanted
+                        ? "[Xem] Đã bật cho phép người khác xem trận của bạn."
+                        : "[Xem] Đã tắt chia sẻ trận - không ai xem được trận của bạn.",
+                    wanted ? Color.RoyalBlue : Color.Gray);
+            };
+
+            row.Controls.Add(caption);
+            row.Controls.Add(_spectateToggle);
+
+            playPanel.Controls.Add(row);
+            // Dock order is reverse z-order: the LAST child added docks topmost. Index 1 puts
+            // this just above the log box (index 0, Dock=Fill) and therefore directly beneath
+            // the start button, which is what "under BẮT ĐẦU" means on screen.
+            playPanel.Controls.SetChildIndex(row, 1);
+        }
+
+        /// <summary>
+        /// Starts or stops sharing to match the current setting. Safe to call repeatedly, so the
+        /// settings dialog can call it the moment the switch is flipped rather than making the
+        /// player restart to have their own choice take effect.
+        /// </summary>
+        public void ApplyMatchSharingSetting()
+        {
+            if (appContext.GetAllowSpectateSetting())
+            {
+                StartMatchSharing();
+            }
+            else
+            {
+                StopMatchSharing();
+            }
+        }
+
+        /// <summary>
+        /// Tears sharing down: no capture timer, no listening port, and nothing advertised to
+        /// the lobby. Also clears any match already published, or a player who turns this off
+        /// mid-match would stay watchable for the rest of it - which is the opposite of what
+        /// they just asked for.
+        /// </summary>
+        private void StopMatchSharing()
+        {
+            _liveShareTimer?.Stop();
+            LiveShareServer.WatcherChanged -= LiveShare_WatcherChanged;
+
+            _spectatorStream?.Dispose();
+            _spectatorStream = null;
+
+            _liveShareServer?.Dispose();
+            _liveShareServer = null;
+
+            // NOT MatchEnded(): the player is still in their game, others just cannot watch
+            // it. Ending the match here made them vanish from the list as "playing" entirely.
+            MatchShareState.SharingStopped();
+            MatchStatusPublisher.Reset();
+            MatchStatusPublisher.Publish(webSocketService, appContext.GetAllowSpectateSetting(), force: true);
+        }
+
         private void StartMatchSharing()
         {
+            // Off by default: capturing the record on a timer, listening on a port and streaming
+            // tens of megabytes per viewer across the shared VPN is not a cost to impose on
+            // someone who never asked for it.
+            if (!appContext.GetAllowSpectateSetting())
+            {
+                DebugLogger.Info("Home: match sharing is off (Cho phép xem trận is disabled).");
+                return;
+            }
+
             LiveRecordSnapshotStore.Prune();
 
             // The countdown a viewer is shown is the wait for the FIRST capture; after that a
@@ -581,6 +779,23 @@ namespace TadaPlay.Controls
                 else if (result.Success)
                 {
                     _lastSyncedInGameName = inGameName;
+                    // Tell the lobby too. The REST call above updates the database, which is
+                    // what a client reads when it CONNECTS - without this, everyone already
+                    // online keeps showing the old name until they reconnect.
+                    try
+                    {
+                        _ = webSocketService.SendMessageAsync(new
+                        {
+                            command = "in_game_name",
+                            in_game_name = inGameName
+                        });
+                    }
+                    catch (Exception ex)
+                    {
+                        // Never fatal: the name is saved server-side regardless, so the worst
+                        // case is other players seeing it a reconnect later.
+                        DebugLogger.Warn($"Home: could not broadcast in-game name: {ex.Message}");
+                    }
                     printLog($"[Hồ sơ] Đã đồng bộ tên trong game \"{inGameName}\" với máy chủ.", Color.DarkGreen);
                 }
                 // Other (transient) failures: leave _lastSyncedInGameName so the next poll retries.
@@ -758,7 +973,7 @@ namespace TadaPlay.Controls
                 // have diverged. Reset first, or the "same as last time" check would suppress
                 // the re-push and leave everyone seeing nothing for the rest of the match.
                 MatchStatusPublisher.Reset();
-                MatchStatusPublisher.Publish(webSocketService, force: true);
+                MatchStatusPublisher.Publish(webSocketService, appContext.GetAllowSpectateSetting(), force: true);
             }, "HOME_WS_CONNECTED");
         }
 
@@ -787,6 +1002,13 @@ namespace TadaPlay.Controls
         /// minutes into a game - it says "online" for both. Falls back to that field for
         /// players whose build does not report a match.
         /// </summary>
+        /// <summary>
+        /// The right-hand status label, in full.
+        ///
+        /// MsgList gives the name priority on that line and leaves the status whatever width
+        /// remains, so this only fits because StyleUserList widens the panel - at the original
+        /// 33% even "20:40" rendered as "20...".
+        /// </summary>
         private static (string Label, Color Colour) DescribeActivity(User user, string status)
         {
             if (user.IsWatchable)
@@ -795,16 +1017,71 @@ namespace TadaPlay.Controls
                 string clock = t.TotalHours >= 1
                     ? $"{(int)t.TotalHours}:{t.Minutes:00}:{t.Seconds:00}"
                     : $"{t.Minutes:00}:{t.Seconds:00}";
-                return ($"● đang chơi · {clock}", PlayingColor);
+                return (user.Paused ? $"tạm dừng · {clock}" : $"đang chơi · {clock}",
+                        user.Paused ? PausedListColor : PlayingColor);
             }
 
-            if (user.InGame)
+            // Opted out: they are playing and will never become watchable, so a countdown
+            // would be a promise the app cannot keep.
+            if (user.InGame && !user.AllowSpectate)
             {
-                // In a game, but nothing captured yet - watchable shortly, not now.
-                return ("đang chơi · chờ xem được", StartingColor);
+                TimeSpan playing = user.GameTime;
+                string clock = playing.TotalMilliseconds > 0
+                    ? (playing.TotalHours >= 1
+                        ? $"{(int)playing.TotalHours}:{playing.Minutes:00}:{playing.Seconds:00}"
+                        : $"{playing.Minutes:00}:{playing.Seconds:00}")
+                    : null;
+                return (clock == null ? "đang chơi, không spec" : $"đang chơi {clock}, không spec",
+                        NoSpecColor);
             }
 
-            return (status, status == "online" ? Color.Green : Color.Gray);
+            if (user.InGame) return ("chờ xem được", StartingColor);
+
+            switch ((status ?? string.Empty).ToLowerInvariant())
+            {
+                case "host": return ("chủ phòng", HostColor);
+                case "joined": return ("trong phòng", RoomColor);
+                case "spectating": return ("đang xem", RoomColor);
+                // "online" is dropped deliberately: this is the list of players who are online,
+                // so stamping it on nearly every row said nothing.
+                default: return (string.Empty, Color.Gray);
+            }
+        }
+
+        /// <summary>
+        /// The two lines of a row: who they are, and the supporting detail underneath.
+        ///
+        /// The in-game name leads the detail line because it is what identifies a player inside
+        /// Age of Empires - it is frequently nothing like their TadaPlay username, and matching
+        /// the two up is the whole reason someone scans this list. Quoted so it reads as a
+        /// handle rather than running into the address beside it.
+        ///
+        /// Most accounts also have a full name equal to the username, so the row used to print
+        /// the same string twice - once truncated on the top line, once in full below. When they
+        /// match, the repeat is dropped.
+        /// </summary>
+        private static (string Name, string Detail) DescribeIdentity(User user)
+        {
+            string username = (user.Username ?? string.Empty).Trim();
+            string fullName = (user.FullName ?? string.Empty).Trim();
+            string address = (user.IpAddress ?? string.Empty).Trim();
+            string inGame = (user.InGameName ?? string.Empty).Trim();
+
+            bool sameName = fullName.Length == 0
+                            || string.Equals(fullName, username, StringComparison.OrdinalIgnoreCase);
+            string name = sameName ? username : fullName;
+
+            var parts = new List<string>();
+            // Skip a game name that just repeats the row's own title - that is the duplication
+            // this layout exists to avoid, not an extra piece of information.
+            if (inGame.Length > 0 && !string.Equals(inGame, name, StringComparison.OrdinalIgnoreCase))
+            {
+                parts.Add($"\u201c{inGame}\u201d");
+            }
+            if (!sameName && username.Length > 0) parts.Add(username);
+            if (address.Length > 0) parts.Add(address);
+
+            return (name, string.Join(" · ", parts));
         }
 
         /// <summary>
@@ -822,6 +1099,42 @@ namespace TadaPlay.Controls
             return 2;
         }
 
+        // The second line (username / VPN address) is reference detail, not the thing being
+        // scanned for, so it is smaller and grey. Both are per-item fonts, which MsgList honours
+        // independently of its own Font - that one sets the NAME size and, with it, row height.
+        private static readonly Font RowDetailFont = new("Segoe UI", 8.25F);
+        private static readonly Font RowStatusFont = new("Segoe UI Semibold", 8.25F);
+        private static readonly Color RowDetailColor = Color.FromArgb(120, 128, 134);
+        private static readonly Color HostColor = Color.FromArgb(200, 120, 0);
+        private static readonly Color RoomColor = Color.FromArgb(90, 120, 170);
+        private static readonly Color PausedListColor = Color.FromArgb(214, 158, 46);
+        /// <summary>Playing, but opted out of being watched - informational, not a warning.</summary>
+        private static readonly Color NoSpecColor = Color.FromArgb(130, 138, 145);
+
+        /// <summary>
+        /// Tightens the rows. MsgList exposes no row-height, padding or spacing property - the
+        /// height is derived from the control's own Font (verified: per-item fonts change the
+        /// text but not the pitch; the control Font changes both). So this is the only lever,
+        /// and it trades a slightly smaller name against noticeably more players on screen.
+        /// Applied here rather than in the designer file, which Visual Studio rewrites.
+        /// </summary>
+        private void StyleUserList()
+        {
+            // 11pt is a measured floor, not a taste call. MsgList derives the status column's
+            // width from this font and then fixes it, so at 9pt "đang chơi · 20:40" truncates to
+            // "đang chơi · 20..." no matter how wide the window is - verified up to 440px with a
+            // one-character name. A long player name then eats into what is left, so 10pt was
+            // still cutting the longer names' clocks; 11pt clears both. This same font sets the
+            // row height too, so it is as compact as the rows get with the status readable.
+            userList.Font = new Font("Segoe UI Semibold", 11F);
+
+            // The status label shares its line with the player name and comes second, so at the
+            // original 33% split there was no room for it - every label, even "20:40", rendered
+            // truncated. Widening the column is what makes a full status possible; the right
+            // pane keeps enough width for the log and the start button.
+            homeGridPanel.Span = "42% 58%";
+        }
+
         private void UpdateOnlineUsersListView(IReadOnlyList<User> users)
         {
             userList.Items.Clear();
@@ -834,13 +1147,15 @@ namespace TadaPlay.Controls
             foreach (var user in ordered)
             {
                 AntdUI.Chat.MsgItem userItem = new AntdUI.Chat.MsgItem();
-                string username = user.FullName ?? user.Username;
-                string nickname = user.Username;
                 string status = user.Status ?? "";
+                (string name, string detail) = DescribeIdentity(user);
 
                 userItem.Icon = Properties.Resources.user_icon;
-                userItem.Text = string.IsNullOrWhiteSpace(user.IpAddress) ? nickname : $"{nickname} · {user.IpAddress}";
-                userItem.Name = username;
+                userItem.Text = detail;
+                userItem.TextFont = RowDetailFont;
+                userItem.TextColor = RowDetailColor;
+                userItem.TimeFont = RowStatusFont;
+                userItem.Name = name;
                 // What a player is DOING beats what the lobby calls them. The server's own
                 // status stays "online" for the whole of a match, so on its own this column
                 // never moved - the one thing anybody actually watches it for.
@@ -852,6 +1167,98 @@ namespace TadaPlay.Controls
                 userItem.Tag = user;
 
                 userList.Items.Add(userItem);
+            }
+        }
+
+        // Asked once per run. A player who says no should not be nagged every time the lobby
+        // list refreshes, and a second prompt cannot arrive while the first is still open.
+        private bool _updatePrompted;
+
+        /// <summary>
+        /// Offers a newer client when one exists, and installs it in place if the player agrees.
+        ///
+        /// Separate from the login gate on purpose. The gate is about builds too old to WORK -
+        /// it refuses them. This is about builds that work but are behind, which is most of
+        /// them most of the time, and the only way they ever caught up before was somebody
+        /// noticing a message and re-downloading by hand.
+        ///
+        /// Never forced: it asks, and it asks once. Restarting the app underneath someone who
+        /// is mid-match to save them a click would be a bad trade.
+        /// </summary>
+        private async System.Threading.Tasks.Task OfferUpdateIfAvailableAsync()
+        {
+            if (_updatePrompted) return;
+
+            try
+            {
+                UpdateService.UpdateInfo info = await UpdateService.CheckAsync();
+                if (!UpdateService.UpdateAvailable(info)) return;
+
+                // A match in progress outranks an optional update - the record watcher is
+                // capturing and other players may be watching. It will be offered next run.
+                if (MatchShareState.InGame)
+                {
+                    DebugLogger.Info($"Home: update {info.LatestVersion} available; deferred, a match is running.");
+                    return;
+                }
+
+                if (_updatePrompted) return;
+                _updatePrompted = true;
+
+                UiUtils.InvokeOnUiThread(this, () =>
+                {
+                    var config = new AntdUI.Modal.Config(mainForm, "Có bản cập nhật mới",
+                        $"Phiên bản {info.LatestVersion} đã sẵn sàng (bạn đang dùng {UpdateService.CurrentVersion}).\n\n" +
+                        "TADA Play sẽ tự tải và cài đặt, rồi mở lại. Quá trình này mất khoảng một phút.",
+                        AntdUI.TType.Info)
+                    {
+                        OkText = "Cập nhật ngay",
+                        CancelText = "Để sau"
+                    };
+
+                    if (AntdUI.Modal.open(config) == DialogResult.OK)
+                    {
+                        _ = RunUpdateAsync(info);
+                    }
+                }, "HOME_UPDATE_PROMPT");
+            }
+            catch (Exception ex)
+            {
+                // An update check must never be able to stop the app working.
+                DebugLogger.Warn($"Home: update check failed: {ex.Message}");
+            }
+        }
+
+        private async System.Threading.Tasks.Task RunUpdateAsync(UpdateService.UpdateInfo info)
+        {
+            printLog($"[Cập nhật] Đang tải bản {info.LatestVersion}...", Color.RoyalBlue);
+            try
+            {
+                string installer = await UpdateService.DownloadAsync(info, message =>
+                    UiUtils.InvokeOnUiThread(this, () => printLog($"[Cập nhật] {message}", Color.RoyalBlue),
+                                             "HOME_UPDATE_PROGRESS"));
+
+                if (installer == null)
+                {
+                    printLog("[Cập nhật] Không tải được bản mới - sẽ thử lại lần sau.", Color.Orange);
+                    return;
+                }
+
+                if (!UpdateService.StartInstaller(installer))
+                {
+                    printLog("[Cập nhật] Không mở được trình cài đặt - vui lòng tải thủ công.", Color.Orange);
+                    return;
+                }
+
+                printLog("[Cập nhật] Đang cài đặt, TADA Play sẽ tự mở lại...", Color.DarkGreen);
+                // The installer replaces files this process is running from, so it cannot finish
+                // while we hold them open. /RELAUNCH brings the app back afterwards.
+                Application.Exit();
+            }
+            catch (Exception ex)
+            {
+                DebugLogger.Error($"Home: update failed: {ex.Message}");
+                printLog($"[Cập nhật] Lỗi khi cập nhật: {ex.Message}", Color.Red);
             }
         }
 
@@ -937,19 +1344,10 @@ namespace TadaPlay.Controls
 
         private void LaunchGame()
         {
-            // Pre-fill the game's "Spectator Stream" settings before it reads them, so a host
-            // is watchable without opening that dialog and configuring it every game: Allow
-            // Spectators ticked, plus default max connections / join delay / late-join limit.
-            if (GameSpectator.EnsureSpectatorStreamDefaults())
-            {
-                printLog("[Xem] Đã đặt sẵn thông số cho phép xem trận (Allow Spectators, số kết nối, " +
-                         "độ trễ tham gia) để người khác xem được trận của bạn.", Color.RoyalBlue);
-            }
-
-            // Open the game's own spectator port inbound. Without this the game listens but
-            // Windows Firewall refuses the connection, so viewers' spectate.exe gets nothing and
-            // closes - which is the "Disconnected from host" seen when watching a live game.
-            GameSpectator.EnsureSpectatorPortOpen();
+            // Nothing here touches the game's spectator settings any more. Viewers watch through
+            // the replay stream, which needs neither "Allow Spectators" nor an inbound port - so
+            // rewriting the player's game config on every launch, and telling them it is how
+            // others watch them, was both pointless and untrue.
 
             string exePath = GameExecutablePreparer.PrepareAndGetExePath(appContext.GetGameFolder(), appContext.GetGameLaunchMode());
             var (status, message) = GameLauncher.Launch(exePath);
@@ -994,7 +1392,7 @@ namespace TadaPlay.Controls
                 // and the countdown viewers see here is the 90s one.
                 MatchShareState.CaptureInterval = TimeSpan.FromMilliseconds(FirstCaptureDelayMs);
                 MatchShareState.MatchStarted(latest);
-                MatchStatusPublisher.Publish(webSocketService);
+                MatchStatusPublisher.Publish(webSocketService, appContext.GetAllowSpectateSetting());
                 printLog($"[Xem] Đã bắt đầu game - chờ {MatchShareState.WaitSeconds} giây để " +
                          "người khác có thể xem.", Color.RoyalBlue);
                 return;
@@ -1045,7 +1443,7 @@ namespace TadaPlay.Controls
                     _spectatorStream?.Dispose();
                     _spectatorStream = null;
                     PublishFinishedMatch(finishedRecordPath);
-                    MatchStatusPublisher.Publish(webSocketService);
+                    MatchStatusPublisher.Publish(webSocketService, appContext.GetAllowSpectateSetting());
 
                     _ = UploadRecordAsync(isAutomatic: true, recordPathOverride: finishedRecordPath);
                 }
@@ -1132,22 +1530,19 @@ namespace TadaPlay.Controls
                 // second stream would keep appending to a file nobody is watching any more.
                 StopLiveStream();
 
-                // While the host is actually in a match, prefer the game's OWN live spectator
-                // (age2_x1\spectate.exe over TCP 53754) rather than the delayed replay stream.
-                // A live spectator receives the match as it happens - with UserPatch's built-in
-                // anti-ghost join delay - so the viewer can never run past the host, and there
-                // is no end-of-file to hit. Fast-forwarding it therefore cannot end the match
-                // early, which is exactly what the replay path below does when the viewer speeds
-                // up and catches the last written byte. The replay path stays as the fallback:
-                // for a FINISHED match (nothing live to connect to) and if the live viewer will
-                // not start on this install.
-                User latest = LookupOnlineUser(hostLabel);
-                LiveShareClient.HostStatus hostStatus = LiveShareClient.FromBroadcast(latest)
-                                                        ?? await LiveShareClient.TryGetStatusAsync(hostIp);
-                if (hostStatus?.InGame == true && TryStartNativeSpectator(hostIp, hostLabel, gameFolder))
-                {
-                    return;
-                }
+                // Everyone watches through the replay stream below.
+                //
+                // The game's own live spectator (age2_x1\spectate.exe over TCP 53754) was tried
+                // here first, because in principle it streams the match as it happens and so
+                // cannot be ended early by fast-forwarding. In practice it is not usable on this
+                // setup, and falling back to the replay after it failed meant every viewer paid
+                // a launch attempt and a confusing error line before getting the path that
+                // actually works. Going straight to the replay is fewer moving parts and one
+                // behaviour to reason about.
+                //
+                // The replay's known limitation stands: it ends at the last captured byte, so a
+                // viewer who speeds up can catch the live edge. That is what the pause overlay
+                // and the "tăng tốc độ trong game để đuổi kịp" hint below are for.
 
                 printLog($"[Xem] Đang tải trận đấu của {hostLabel}...", Color.RoyalBlue);
                 LiveShareClient.FetchResult fetch =
@@ -1198,85 +1593,21 @@ namespace TadaPlay.Controls
             }
         }
 
-        /// <summary>
-        /// Opens the game's own live spectator (age2_x1\spectate.exe) pointed at the host, and
-        /// returns whether it started.
-        ///
-        /// This is the real fix for "the replay finishes while the host is still playing": a
-        /// live spectator streams the match as it happens instead of replaying a file that ends
-        /// at its last captured byte, so there is no end-of-file to run into and speeding the
-        /// view up cannot terminate it. Two install quirks that made this fail before are
-        /// handled here: the viewer cannot resolve the game ("Could not locate game expansion.")
-        /// unless the install is registered (<see cref="GameSpectator.EnsureGameRegistered"/>),
-        /// and it always launches stock age2_x1.5.exe unless that name is pointed at the WK
-        /// build the player actually runs (done inside <see cref="GameSpectator.Spectate"/>).
-        ///
-        /// Returns false - having said why in the log - so the caller can fall back to the
-        /// delayed replay stream on a build where the live viewer will not start.
-        /// </summary>
-        private bool TryStartNativeSpectator(string hostIp, string hostLabel, string gameFolder)
-        {
-            try
-            {
-                if (GameSpectator.FindSpectatorExe(gameFolder) == null)
-                {
-                    printLog("[Xem] Không tìm thấy age2_x1\\spectate.exe trong thư mục game - " +
-                             "chuyển sang xem lại theo replay.", Color.Orange);
-                    return false;
-                }
-
-                // Point the install's registry entries at THIS folder so the viewer can resolve
-                // the game; without it spectate.exe fails with "Could not locate game expansion."
-                try { GameSpectator.EnsureGameRegistered(gameFolder); }
-                catch (Exception ex) { DebugLogger.Warn($"Home: EnsureGameRegistered failed: {ex.Message}"); }
-
-                // Pre-fill the "Spectator Stream" dialog's defaults so it opens ready to use
-                // rather than empty - the viewer shouldn't have to set these each time either.
-                try { GameSpectator.EnsureSpectatorStreamDefaults(); }
-                catch (Exception ex) { DebugLogger.Warn($"Home: spectator stream defaults failed: {ex.Message}"); }
-
-                // The build the player actually runs (age2-WK.exe / -center), so the spectator
-                // opens the same game rather than stock age2_x1.5.exe. Null is tolerated - the
-                // swap is simply skipped and whatever exe is in place is used.
-                string playExePath = null;
-                try
-                {
-                    playExePath = GameExecutablePreparer.PrepareAndGetExePath(
-                        gameFolder, appContext.GetGameLaunchMode());
-                }
-                catch (Exception ex)
-                {
-                    DebugLogger.Warn($"Home: cannot resolve play exe for spectating: {ex.Message}");
-                }
-
-                var (status, message) = GameSpectator.Spectate(gameFolder, hostIp, playExePath);
-                if (status == GameSpectator.LaunchStatus.Success)
-                {
-                    printLog($"[Xem] {message}", Color.DarkGreen);
-                    printLog("[Xem] Đang xem trực tiếp qua spectator của game - không bị kết thúc " +
-                             "sớm khi tua nhanh.", Color.RoyalBlue);
-                    // The host's clock floats above the game so the viewer sees how far behind
-                    // live they are (the spectator's own join delay).
-                    ShowOverlay(hostIp, hostLabel);
-                    return true;
-                }
-
-                printLog($"[Xem] Không mở được spectator trực tiếp ({message}) - chuyển sang xem " +
-                         "lại theo replay.", Color.Orange);
-                return false;
-            }
-            catch (Exception ex)
-            {
-                DebugLogger.Warn($"Home: native spectator failed to start: {ex.Message}");
-                printLog($"[Xem] Lỗi khi mở spectator trực tiếp ({ex.Message}) - chuyển sang xem " +
-                         "lại theo replay.", Color.Orange);
-                return false;
-            }
-        }
-
         // Follows a match that is still being played: see LiveStreamSession.
         private bool _watchInProgress;
         private LiveStreamSession _liveStream;
+
+        /// <summary>
+        /// Polls whether the game opened to watch a match is still running.
+        ///
+        /// Without it, closing that game did NOT stop the download: StopLiveStream was only ever
+        /// reached by shutting the app down or starting a different watch, so a viewer who quit
+        /// the replay kept pulling the host's record for the rest of the match - reported in the
+        /// log as "đã nhận thêm N KB" long after they had stopped watching. That is wasted
+        /// bandwidth on a tunnel every other player shares.
+        /// </summary>
+        private System.Windows.Forms.Timer _watchExitTimer;
+        private const int WatchExitPollMs = 3000;
         private SpectatorOverlay _overlay;
         private PlayheadGovernor _playheadGovernor;
 
@@ -1300,6 +1631,7 @@ namespace TadaPlay.Controls
                 }
             });
             _liveStream.Start();
+            StartWatchExitWatchdog();
 
             // The host's clock is in TadaPlay's dialogs, but the game is about to cover them -
             // and that is precisely when a viewer needs it, to judge how far behind live they
@@ -1389,8 +1721,76 @@ namespace TadaPlay.Controls
             }
         }
 
+        /// <summary>
+        /// Stops the download once the game being watched in has gone.
+        ///
+        /// Quitting that game IS "I have stopped watching" - there is no other gesture for it,
+        /// and the app cannot otherwise tell. Polled rather than hooked to Exited because the
+        /// process is found by scanning (GameLauncher does not hand one back), and a 3s poll is
+        /// far cheaper than the download it stops.
+        /// </summary>
+        private void StartWatchExitWatchdog()
+        {
+            StopWatchExitWatchdog();
+
+            // Give the game generous time to appear before concluding it has gone. It is
+            // launched just before this and the launch already reported success, so it is
+            // coming - but GameExecutablePreparer copies a ~3MB exe first and antivirus
+            // scanning a freshly written binary can stretch that well past a few seconds.
+            // Erring long costs one extra minute of download in a case that should not happen;
+            // erring short kills the stream out from under someone who is still watching.
+            var startedAt = DateTime.UtcNow;
+            var grace = TimeSpan.FromSeconds(90);
+            bool seen = false;
+
+            _watchExitTimer = new System.Windows.Forms.Timer { Interval = WatchExitPollMs };
+            _watchExitTimer.Tick += (s, e) =>
+            {
+                if (_liveStream is not { IsRunning: true })
+                {
+                    StopWatchExitWatchdog();
+                    return;
+                }
+
+                System.Diagnostics.Process game = null;
+                try { game = LiveRecordReader.FindGameProcess(); }
+                catch (Exception ex) { DebugLogger.Warn($"Home: watch watchdog probe failed: {ex.Message}"); }
+
+                try
+                {
+                    if (game != null)
+                    {
+                        seen = true;
+                        return;
+                    }
+
+                    // Never seen it and still inside the grace period: it may still be starting.
+                    if (!seen && DateTime.UtcNow - startedAt < grace) return;
+
+                    DebugLogger.Info("Home: the game opened for watching has exited - stopping the stream.");
+                    printLog("[Xem] Đã đóng game - dừng tải trận đang xem.", Color.RoyalBlue);
+                    StopLiveStream();
+                }
+                finally
+                {
+                    game?.Dispose();
+                }
+            };
+            _watchExitTimer.Start();
+        }
+
+        private void StopWatchExitWatchdog()
+        {
+            var timer = _watchExitTimer;
+            _watchExitTimer = null;
+            if (timer == null) return;
+            timer.Stop();
+            timer.Dispose();
+        }
+
         private void StopLiveStream()
         {
+            StopWatchExitWatchdog();
             LiveStreamSession session = _liveStream;
             _liveStream = null;
             session?.Dispose();

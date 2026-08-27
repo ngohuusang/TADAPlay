@@ -26,7 +26,7 @@ namespace TadaPlay.Connections
     /// Requests carry a "from" offset so a viewer can keep pulling just the new tail for
     /// the whole match instead of re-downloading it - see LiveStreamSession.
     ///
-    /// Everyone is on 192.168.99.x through the VPN, so no port forwarding is involved.
+    /// Everyone is on the VPN subnet (10.10.0.0/16), so no port forwarding is involved.
     /// </summary>
     public sealed class LiveShareServer : IDisposable
     {
@@ -455,6 +455,10 @@ namespace TadaPlay.Connections
             string json = "{" +
                           $"\"hasMatch\":{(available ? "true" : "false")}," +
                           $"\"inGame\":{(MatchShareState.InGame ? "true" : "false")}," +
+                          // Direct-probe fallback carries the pause flag too, so an overlay
+                          // talking to a host whose lobby broadcast has not landed yet still
+                          // shows it rather than silently reporting a frozen clock as normal.
+                          $"\"paused\":{(MatchShareState.Paused ? "true" : "false")}," +
                           $"\"waitSeconds\":{MatchShareState.WaitSeconds}," +
                           $"\"gameMs\":{MatchShareState.DurationMs}," +
                           $"\"match\":\"{Escape(name)}\"," +

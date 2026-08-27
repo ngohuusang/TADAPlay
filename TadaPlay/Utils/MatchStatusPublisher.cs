@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using TadaPlay.Logger;
 using TadaPlay.Websockets.Interface;
 
@@ -30,7 +30,7 @@ namespace TadaPlay.Utils
         /// does move each capture, so this mostly suppresses the repeats around match start
         /// and end rather than the captures themselves.
         /// </summary>
-        public static void Publish(IWebSocketService socket, bool force = false)
+        public static void Publish(IWebSocketService socket, bool allowSpectate, bool force = false)
         {
             if (socket == null) return;
 
@@ -40,9 +40,16 @@ namespace TadaPlay.Utils
                 ? LiveRecordSnapshotStore.FindFor(currentMatch) != null
                 : LiveRecordSnapshotStore.Current() != null;
             long gameMs = MatchShareState.DurationMs;
+            bool paused = MatchShareState.Paused;
             int waitSeconds = MatchShareState.WaitSeconds;
 
-            string signature = $"{inGame}|{hasMatch}|{gameMs}";
+            // Paused belongs in the signature: while a game is paused the clock stops moving,
+            // so gameMs alone stops changing too and the pause would never be broadcast - the
+            // one transition viewers most need is exactly the one that suppresses itself.
+            // allowSpectate belongs in the signature: flipping the setting changes nothing
+            // else about the payload, so without it the change would never be broadcast and
+            // other players would keep seeing the old answer.
+            string signature = $"{inGame}|{hasMatch}|{gameMs}|{paused}|{allowSpectate}";
             lock (Gate)
             {
                 if (!force && signature == _lastSent) return;
@@ -57,10 +64,14 @@ namespace TadaPlay.Utils
                     in_game = inGame,
                     has_match = hasMatch,
                     game_ms = gameMs,
+                    paused = paused,
+                    // Lets other clients say "playing, not spectatable" instead of showing a
+                    // countdown to a capture that is never coming.
+                    allow_spectate = allowSpectate,
                     wait_seconds = waitSeconds
                 });
                 DebugLogger.Info($"MatchStatusPublisher: sent inGame={inGame} hasMatch={hasMatch} " +
-                                 $"gameMs={gameMs} wait={waitSeconds}s.");
+                                 $"gameMs={gameMs} paused={paused} wait={waitSeconds}s.");
             }
             catch (Exception ex)
             {

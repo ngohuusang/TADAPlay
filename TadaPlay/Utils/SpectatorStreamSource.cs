@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Net.Sockets;
 using System.Text;
@@ -171,7 +171,9 @@ namespace TadaPlay.Utils
                 LiveRecordReader.RecordAnalysis analysis = LiveRecordReader.AnalyzeFile(_snapshotPath);
                 if (analysis != null && analysis.BodyBytes > 0)
                 {
-                    MatchShareState.DurationMs = analysis.DurationMs;
+                    // Through ReportDuration, not a bare assignment: this also feeds pause
+                    // detection, and at 3s it is the most responsive clock sample there is.
+                    MatchShareState.ReportDuration(analysis.DurationMs);
                 }
             }
             catch (Exception ex)

@@ -16,6 +16,13 @@ public interface IAppContext
 
     public bool GetRunOnStartupSetting();
 
+    /// <summary>
+    /// Whether other players may watch this player's matches. Off unless turned on.
+    /// </summary>
+    void SetAllowSpectateSetting(bool allow);
+
+    bool GetAllowSpectateSetting();
+
     public void SetGameFolder(string folderPath);
 
     public string GetGameFolder();

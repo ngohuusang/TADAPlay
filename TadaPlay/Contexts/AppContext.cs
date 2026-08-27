@@ -156,6 +156,29 @@ public class AppContext : IAppContext
     // Which embedded WK launcher (see GameExecutablePreparer) gets copied into the game's
     // age2_x1 folder and started on "Bắt đầu" - replaces the old free-form exe file picker now
     // that the launcher itself is always one of these two known, app-provided files.
+    /// <summary>
+    /// Whether this player's matches may be watched by others.
+    ///
+    /// Default OFF, and deliberately opt-in rather than opt-out. Sharing is not free for the
+    /// person doing it: it captures the running record on a timer, listens on a port, and
+    /// streams tens of megabytes of match data to each viewer across the VPN - traffic that all
+    /// hairpins through the single tunnel server everyone else is also playing through. Nobody
+    /// should be paying that, for themselves or for the lobby, without having chosen to.
+    /// </summary>
+    public void SetAllowSpectateSetting(bool allow)
+    {
+        SetRegistryValue("AllowSpectate", allow ? 1 : 0);
+    }
+
+    public bool GetAllowSpectateSetting()
+    {
+        object value = GetRegistryValue("AllowSpectate");
+        // Absent means never chosen, which must read as off - the whole point of the default.
+        if (value == null) return false;
+        return value.ToString() == "1"
+               || string.Equals(value.ToString(), "true", StringComparison.OrdinalIgnoreCase);
+    }
+
     public void SetGameLaunchMode(string mode)
     {
         SetRegistryValue("GameLaunchMode", mode);

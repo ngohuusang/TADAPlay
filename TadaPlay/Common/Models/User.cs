@@ -30,6 +30,14 @@ namespace TadaPlay.Common.Models
         [JsonProperty("nick_name")]
         public string NickName { get; set; }
 
+        /// <summary>
+        /// The name this player uses inside the game - what everyone actually sees in the AoE2
+        /// lobby, which is often nothing like their TadaPlay username. Broadcast with the user
+        /// list; null for a player whose client has never reported one.
+        /// </summary>
+        [JsonProperty("in_game_name")]
+        public string InGameName { get; set; }
+
         [JsonProperty("is_online")]
         public bool IsOnline { get; set; }
 
@@ -69,6 +77,20 @@ namespace TadaPlay.Common.Models
         /// <summary>Match clock in milliseconds of game time; 0 when nothing is shareable.</summary>
         [JsonProperty("game_ms")]
         public long GameMs { get; set; }
+
+        /// <summary>That player's game is paused - their match clock has stopped advancing.</summary>
+        [JsonProperty("paused")]
+        public bool Paused { get; set; }
+
+        /// <summary>
+        /// Whether this player permits others to watch their matches. False means their match
+        /// will never become watchable, which is different from "not watchable yet".
+        ///
+        /// Defaults to TRUE on the wire so a client that predates the field is not mislabelled
+        /// as having opted out - old builds always shared.
+        /// </summary>
+        [JsonProperty("allow_spectate")]
+        public bool AllowSpectate { get; set; } = true;
 
         /// <summary>Seconds until the host's next capture makes more of the match available.</summary>
         [JsonProperty("wait_seconds")]
