@@ -2,11 +2,14 @@
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
+using System.Diagnostics;
 using System.Drawing;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using TadaPlay.Exceptions;
+using TadaPlay.Logger;
 using TadaPlay.Contexts;
 using TadaPlay.Contexts.Interfaces;
 using TadaPlay.Services;
@@ -52,6 +55,10 @@ namespace TadaPlay.Controls
                     LoginSuccessful?.Invoke(this, EventArgs.Empty);
                 }
             }
+            catch (UpdateRequiredException ex)
+            {
+                ShowUpdateRequired(ex);
+            }
             catch (Exception ex)
             {
                 AntdUI.Modal.open(new AntdUI.Modal.Config(form, AntdUI.Localization.Get("LoginError", "Lỗi đăng nhập"), AntdUI.Localization.Get("LoginErrorContent", ex.InnerException?.Message ?? ex.Message), AntdUI.TType.Error)
@@ -65,6 +72,43 @@ namespace TadaPlay.Controls
                 signInButton.Loading = false;
                 signInButton.Enabled = true;
             }
+        }
+
+        /// <summary>
+        /// The server refused this build as too old. There is no auto-updater, so the most useful
+        /// thing we can do is open the download page and get out of the way - the player cannot
+        /// proceed regardless, and leaving the login form up would just invite retries that
+        /// cannot succeed.
+        /// </summary>
+        private void ShowUpdateRequired(UpdateRequiredException ex)
+        {
+            string message = string.IsNullOrWhiteSpace(ex.Message)
+                ? "Phiên bản TADA Play của bạn đã cũ. Vui lòng cập nhật để tiếp tục."
+                : ex.Message;
+
+            var config = new AntdUI.Modal.Config(form, "Cần cập nhật TADA Play", message, AntdUI.TType.Warn)
+            {
+                OkText = "Tải bản mới",
+                CancelText = "Thoát"
+            };
+
+            bool download = AntdUI.Modal.open(config) == DialogResult.OK;
+
+            if (download && !string.IsNullOrWhiteSpace(ex.DownloadUrl))
+            {
+                try
+                {
+                    // UseShellExecute so the URL opens in the default browser; without it .NET
+                    // tries to exec the string as a program and throws.
+                    Process.Start(new ProcessStartInfo(ex.DownloadUrl) { UseShellExecute = true });
+                }
+                catch (Exception openEx)
+                {
+                    DebugLogger.Warn("Login: could not open the download URL: " + openEx.Message);
+                }
+            }
+
+            Application.Exit();
         }
 
         private async void Login_Load(object sender, EventArgs e)
@@ -88,6 +132,13 @@ namespace TadaPlay.Controls
                     {
                         LoginSuccessful?.Invoke(this, EventArgs.Empty);
                     }
+                }
+                catch (UpdateRequiredException ex)
+                {
+                    // Deliberately the modal, not the toast used for other auto-login failures:
+                    // this one is blocking and actionable, and a notification that fades after a
+                    // few seconds is exactly the wrong affordance for it.
+                    ShowUpdateRequired(ex);
                 }
                 catch (Exception ex)
                 {

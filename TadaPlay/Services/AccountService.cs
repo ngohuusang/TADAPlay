@@ -7,6 +7,7 @@ using System.Reflection;
 using System.Text;
 using TadaPlay.Common.Models;
 using TadaPlay.Contexts.Interfaces;
+using System.Windows.Forms;
 using TadaPlay.Exceptions;
 using TadaPlay.Logger;
 using TadaPlay.Services.Interface;
@@ -119,11 +120,16 @@ public class AccountService : IAccountService
         }
 
         _httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _appContext.GetJwtTokenSetting());
+        // Auto-login is gated on version too, so it cannot be used to skip the check on every
+        // launch after the first. The version header is registered once in the constructor, so
+        // this body-less GET already carries it.
         var response = await _httpClient.GetAsync(BASE_URL + "?action=auth");
         response.EnsureSuccessStatusCode();
 
         var responseBody = await response.Content.ReadAsStringAsync();
         var apiResponse = JsonConvert.DeserializeObject<LoginResponse>(responseBody);
+
+        ThrowIfUpdateRequired(apiResponse);
 
         if (apiResponse.Success)
         {
@@ -183,8 +189,9 @@ public class AccountService : IAccountService
         {
             username = Username,
             password = Password,
-            // Also in the body: a server that reads the version from the JSON login payload
-            // (rather than a header) still sees it, so a current client is never told to update.
+            // Sent in the body as well as the X-Client-Version header, so the gate sees it
+            // whichever it reads. ClientVersion has already had any "+<git-sha>" suffix
+            // stripped, and the server strips it again defensively.
             client_version = ClientVersion
         };
 
@@ -195,6 +202,8 @@ public class AccountService : IAccountService
 
         var responseBody = await response.Content.ReadAsStringAsync();
         var apiResponse = JsonConvert.DeserializeObject<LoginResponse>(responseBody);
+
+        ThrowIfUpdateRequired(apiResponse);
 
         if (apiResponse.Success)
         {
@@ -212,6 +221,20 @@ public class AccountService : IAccountService
         {
             throw new Exception(apiResponse.Message);
         }
+    }
+
+    /// <summary>
+    /// Turns the server's version-gate response into a typed exception the UI can act on.
+    /// Checked before Success so it never falls through to the generic error path.
+    /// </summary>
+    private static void ThrowIfUpdateRequired(ApiResponse apiResponse)
+    {
+        if (apiResponse == null || !apiResponse.UpdateRequired)
+        {
+            return;
+        }
+
+        throw new UpdateRequiredException(apiResponse.Message, apiResponse.MinVersion, apiResponse.DownloadUrl);
     }
 
     public async Task<bool> ReleaseVpnProfileAsync()
