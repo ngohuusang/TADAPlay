@@ -91,6 +91,7 @@ namespace TadaPlay.Controls
             {
                 LiveShareServer.WatcherChanged -= LiveShare_WatcherChanged;
                 StopLiveStream();
+                _spectatorStream?.Dispose();
                 _liveShareServer?.Dispose();
             };
         }
@@ -270,6 +271,10 @@ namespace TadaPlay.Controls
         private long _liveCaptureSourceLength; // record size at the previous capture, to detect growth
         private DateTime _lastCaptureUtc = DateTime.MinValue;
 
+        // Real-time snapshot source: the game's own spectator stream on loopback 53754, which
+        // supersedes the shadow-copy capture whenever it is serving. See SpectatorStreamSource.
+        private SpectatorStreamSource _spectatorStream;
+
         private void LiveShareTimer_Tick(object sender, EventArgs e)
         {
             if (IsDisposed) return;
@@ -278,9 +283,53 @@ namespace TadaPlay.Controls
             // last viewer leaving - happens when requests STOP, so nothing else would notice.
             LiveShareServer.SweepWatchers();
 
+            // Prefer the game's own real-time stream (loopback 53754) as the snapshot source.
+            // While it is feeding the snapshot the shadow-copy capture below is redundant, so
+            // it is skipped; the shadow copy stays as the fallback for a game that is not
+            // serving the stream (Record Game/Allow Spectators off, or an older build).
+            if (EnsureSpectatorStreamStarted())
+            {
+                MatchStatusPublisher.Publish(webSocketService);
+                return;
+            }
+
             if (_liveCaptureBusy || !ShouldCaptureNow()) return;
             _liveCaptureBusy = true;
             _ = System.Threading.Tasks.Task.Run(CaptureLiveMatch);
+        }
+
+        /// <summary>
+        /// Starts, or keeps alive, the loopback spectator-stream source feeding the snapshot.
+        /// Returns true while it is running (so the caller skips the shadow-copy capture), and
+        /// false when there is no match yet or the game is not serving the stream.
+        /// </summary>
+        private bool EnsureSpectatorStreamStarted()
+        {
+            if (_spectatorStream?.IsRunning == true) return true;
+
+            string recordPath = _watchedRecordPath;
+            if (recordPath == null) return false;
+
+            // Only worth trying once the game actually holds the record open - i.e. a match is
+            // running and the stream port would be serving.
+            if (!LiveRecordReader.IsLockedByGame(recordPath)) return false;
+
+            _spectatorStream?.Dispose();
+            _spectatorStream = new SpectatorStreamSource(recordPath,
+                (msg, isProblem) => printLog(msg, isProblem ? Color.Orange : Color.RoyalBlue));
+
+            if (_spectatorStream.TryStart())
+            {
+                // Watchable in real time now, not after the shadow-copy first-capture wait.
+                MatchShareState.CaptureInterval = TimeSpan.FromSeconds(3);
+                MatchShareState.Captured();
+                printLog("[Xem] Nguồn xem: luồng trực tiếp từ game (real-time) - người khác có " +
+                         "thể xem trận của bạn ngay.", Color.DarkGreen);
+                return true;
+            }
+
+            _spectatorStream = null;
+            return false;
         }
 
         /// <summary>
@@ -876,6 +925,11 @@ namespace TadaPlay.Controls
                          "độ trễ tham gia) để người khác xem được trận của bạn.", Color.RoyalBlue);
             }
 
+            // Open the game's own spectator port inbound. Without this the game listens but
+            // Windows Firewall refuses the connection, so viewers' spectate.exe gets nothing and
+            // closes - which is the "Disconnected from host" seen when watching a live game.
+            GameSpectator.EnsureSpectatorPortOpen();
+
             string exePath = GameExecutablePreparer.PrepareAndGetExePath(appContext.GetGameFolder(), appContext.GetGameLaunchMode());
             var (status, message) = GameLauncher.Launch(exePath);
             Color color = status switch
@@ -965,6 +1019,10 @@ namespace TadaPlay.Controls
                     // Share it before uploading, so the match is watchable even if the upload
                     // fails. The lock has just dropped, so the game is finished with the file.
                     MatchShareState.MatchEnded();
+                    // Stop the real-time stream first: the game has closed the record (and its
+                    // 53754 port), and the authoritative finished file is published next.
+                    _spectatorStream?.Dispose();
+                    _spectatorStream = null;
                     PublishFinishedMatch(finishedRecordPath);
                     MatchStatusPublisher.Publish(webSocketService);
 

@@ -27,6 +27,9 @@ namespace TadaPlay.Utils
         /// <summary>TCP port the game itself listens on while a match is in progress.</summary>
         public const int SpectatorPort = 53754;
 
+        /// <summary>Name of the inbound rule that lets other players reach this host's game.</summary>
+        private const string SpectatorFirewallRuleName = "TadaPlay spectator";
+
         private const string SpectatorExeRelativePath = @"age2_x1\spectate.exe";
 
         /// <summary>
@@ -69,7 +72,16 @@ namespace TadaPlay.Utils
         // as captured rather than converted, so it round-trips to exactly what the dialog had.
         private const int DefaultMaxConnections = 32;
         private const int DefaultJoinDelayMs = 5000;    // "Join delay time (seconds)" = 5
-        private const int DefaultLateJoinLimit = 19200; // "Late join limit (minutes)" as shown
+
+        // "Late join limit" is how far into a match a spectator may still join. The game stores
+        // it in 1/32-second units (verified: 19200 = the 10 minutes the dialog showed), i.e.
+        // 32*60 = 1920 units per minute. Ten minutes is far too short for the "click a player
+        // who is already in a game and watch" flow - a 4v4 routinely runs well past it, and a
+        // spectator arriving after the limit is refused with "Disconnected from host". So the
+        // default is a long window that effectively means "join any time during the match".
+        private const int LateJoinUnitsPerMinute = 1920;
+        private const int DefaultLateJoinMinutes = 180;
+        private const int DefaultLateJoinLimit = DefaultLateJoinMinutes * LateJoinUnitsPerMinute;
 
         /// <summary>
         /// Writes sensible defaults for the game's own spectator stream so the "Spectator
@@ -122,6 +134,62 @@ namespace TadaPlay.Utils
             }
             key.SetValue(name, value, RegistryValueKind.DWord);
             return true;
+        }
+
+        /// <summary>
+        /// Opens inbound TCP <see cref="SpectatorPort"/> - the game's OWN spectator port - so
+        /// other players can actually reach this host's live game.
+        ///
+        /// UserPatch listens on it for the whole match, but Windows Firewall blocks the inbound
+        /// connection by default, and that block looks exactly like "spectating is broken" from
+        /// the viewer's side: spectate.exe connects, is refused, gets nothing, and closes after
+        /// a couple of seconds. TadaPlay already opens the match-share port (53755); this is its
+        /// live-spectator counterpart and was the missing half. Idempotent, and non-fatal on
+        /// failure - a host whose firewall already permits the game is reachable regardless.
+        /// </summary>
+        public static void EnsureSpectatorPortOpen()
+        {
+            try
+            {
+                if (RunNetsh($"advfirewall firewall show rule name=\"{SpectatorFirewallRuleName}\"") == 0)
+                {
+                    return; // already present
+                }
+
+                int code = RunNetsh($"advfirewall firewall add rule name=\"{SpectatorFirewallRuleName}\" " +
+                                    $"dir=in action=allow protocol=TCP localport={SpectatorPort} " +
+                                    "profile=any description=\"Cho phep nguoi choi khac xem tran truc tiep\"");
+                if (code == 0)
+                {
+                    DebugLogger.Info($"GameSpectator: added firewall rule for spectator TCP {SpectatorPort}.");
+                }
+                else
+                {
+                    DebugLogger.Warn($"GameSpectator: netsh returned {code} adding the spectator " +
+                                     "firewall rule; other players may not be able to watch this host.");
+                }
+            }
+            catch (Exception ex)
+            {
+                DebugLogger.Warn($"GameSpectator: cannot open the spectator port: {ex.Message}");
+            }
+        }
+
+        private static int RunNetsh(string arguments)
+        {
+            var startInfo = new ProcessStartInfo("netsh", arguments)
+            {
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true
+            };
+            using Process process = Process.Start(startInfo);
+            if (process == null) return -1;
+            process.StandardOutput.ReadToEnd();
+            process.StandardError.ReadToEnd();
+            process.WaitForExit(15000);
+            return process.HasExited ? process.ExitCode : -1;
         }
 
         public enum LaunchStatus { Success, NotConfigured, ViewerMissing, LaunchFailed }

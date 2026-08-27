@@ -212,15 +212,24 @@ namespace TadaPlay.Connections
                         if (lastError.Failed) { DebugLogger.Warn("WireguardVPNService: SetIpInterfaceEntry failed: " + lastError); }
                     }
 
-                    foreach (var dnsAddress in _wgConfig.DnsAddresses)
+                    // Deliberately DO NOT configure DNS on the tunnel interface.
+                    //
+                    // This is a split-tunnel game VPN: it routes only 192.168.99.0/24 and
+                    // players connect by IP, so name resolution is never needed through it. But
+                    // the profile ships a public resolver (DNS = 8.8.8.8) and the interface is
+                    // set to metric 0 (the primary), so configuring that DNS made Windows send
+                    // every lookup OUT this interface, sourced from 192.168.99.x - an address
+                    // that cannot reach 8.8.8.8, since only the game subnet is routed here. Each
+                    // query black-holed and timed out after ~12 SECONDS before Windows fell back
+                    // to the physical adapter's resolver, so every web page (YouTube, Facebook,
+                    // any site with many hostnames) crawled the moment the VPN came up, while the
+                    // game itself was unaffected. Measured: 12000 ms -> ~5 ms per lookup once the
+                    // tunnel DNS is removed. Leaving DNS to the physical adapter is correct here.
+                    if (_wgConfig.DnsAddresses != null && _wgConfig.DnsAddresses.Length > 0)
                     {
-                        try
-                        {
-                            var process = Process.Start(new ProcessStartInfo("netsh.exe", $"interface ipv4 add dnsservers name=\"{ADATER_NAME}\" address={dnsAddress} validate=no") { CreateNoWindow = true, UseShellExecute = false });
-                            process?.WaitForExit(5000);
-                            if (process?.ExitCode != 0) { DebugLogger.Warn($"WireguardVPNService: netsh for DNS failed with exit code {process?.ExitCode} for {dnsAddress}"); }
-                        }
-                        catch (Exception ex) { DebugLogger.Error("WireguardVPNService: Failed to set DNS via netsh: " + ex.Message); }
+                        DebugLogger.Info($"WireguardVPNService: not applying {_wgConfig.DnsAddresses.Length} tunnel DNS " +
+                                         "server(s) - a split-tunnel game VPN needs no DNS, and applying an " +
+                                         "unroutable resolver black-holes all web DNS (~12s/lookup).");
                     }
 
                     _adapter.SetConfiguration(_wgConfig); // Apply WireGuard specific configuration
