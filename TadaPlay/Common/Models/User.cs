@@ -82,6 +82,16 @@ namespace TadaPlay.Common.Models
         [JsonProperty("paused")]
         public bool Paused { get; set; }
 
+        /// <summary>
+        /// Whether this player permits others to watch their matches. False means their match
+        /// will never become watchable, which is different from "not watchable yet".
+        ///
+        /// Defaults to TRUE on the wire so a client that predates the field is not mislabelled
+        /// as having opted out - old builds always shared.
+        /// </summary>
+        [JsonProperty("allow_spectate")]
+        public bool AllowSpectate { get; set; } = true;
+
         /// <summary>Seconds until the host's next capture makes more of the match available.</summary>
         [JsonProperty("wait_seconds")]
         public int WaitSeconds { get; set; }

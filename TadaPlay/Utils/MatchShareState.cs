@@ -198,6 +198,23 @@ namespace TadaPlay.Utils
             }
         }
 
+        /// <summary>
+        /// Stops SHARING without ending the match.
+        ///
+        /// Turning sharing off is not the same event as a match finishing, and conflating them
+        /// was a bug: it cleared _inGame, so a player who opted out stopped appearing as playing
+        /// at all until their next match. They are still in a game - other people just cannot
+        /// watch it.
+        /// </summary>
+        public static void SharingStopped()
+        {
+            lock (Gate)
+            {
+                _nextCaptureUtc = null;
+                _pausedSinceUtc = null;
+            }
+        }
+
         /// <summary>Called when the match ends; the published copy stays watchable.</summary>
         public static void MatchEnded()
         {

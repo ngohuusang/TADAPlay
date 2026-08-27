@@ -309,13 +309,55 @@ namespace TadaPlay.Controls
             // serving the stream (Record Game/Allow Spectators off, or an older build).
             if (EnsureSpectatorStreamStarted())
             {
-                MatchStatusPublisher.Publish(webSocketService);
+                MatchStatusPublisher.Publish(webSocketService, appContext.GetAllowSpectateSetting());
                 return;
             }
 
             if (_liveCaptureBusy || !ShouldCaptureNow()) return;
+
+            // Sharing off: still refresh the match clock so other players see "đang chơi 25:30 ·
+            // không spec" rather than a stuck 00:00. Reading the record for its duration is a
+            // local file walk - none of the shadow copy, snapshot or serving that sharing does.
+            if (!appContext.GetAllowSpectateSetting())
+            {
+                _lastCaptureUtc = DateTime.UtcNow;
+                MatchShareState.CaptureInterval = TimeSpan.FromMilliseconds(IdleCaptureIntervalMs);
+                MatchShareState.Captured();
+                _ = System.Threading.Tasks.Task.Run(RefreshClockOnly);
+                return;
+            }
+
             _liveCaptureBusy = true;
             _ = System.Threading.Tasks.Task.Run(CaptureLiveMatch);
+        }
+
+        /// <summary>
+        /// Updates only the match clock, for a player who has opted out of being watched.
+        ///
+        /// They are still playing and the list should say so with a running time; what they
+        /// declined is being watched. This walks the record for its duration and nothing else -
+        /// no shadow copy, no snapshot, no listening port, no bytes on the VPN.
+        /// </summary>
+        private void RefreshClockOnly()
+        {
+            try
+            {
+                string recordPath = MatchShareState.CurrentRecordPath;
+                if (recordPath == null) return;
+
+                LiveRecordReader.RecordAnalysis analysis = LiveRecordReader.AnalyzeFile(recordPath);
+                if (analysis == null || analysis.BodyBytes <= 0) return;
+
+                MatchShareState.ReportDuration(analysis.DurationMs);
+                UiUtils.InvokeOnUiThread(this,
+                    () => MatchStatusPublisher.Publish(webSocketService, appContext.GetAllowSpectateSetting()),
+                    "HOME_CLOCK_ONLY");
+            }
+            catch (Exception ex)
+            {
+                // Never fatal - the clock simply stays where it was.
+                DebugLogger.Warn($"Home: clock-only refresh failed: {ex.Message}");
+            }
         }
 
         /// <summary>
@@ -507,7 +549,7 @@ namespace TadaPlay.Controls
                 // half between updates while captures were really 10s apart.
                 MatchShareState.CaptureInterval = TimeSpan.FromMilliseconds(NextCaptureIntervalMs());
                 MatchShareState.Captured();
-                MatchStatusPublisher.Publish(webSocketService);
+                MatchStatusPublisher.Publish(webSocketService, appContext.GetAllowSpectateSetting());
                 _liveCaptureBusy = false;
             }
         }
@@ -640,9 +682,11 @@ namespace TadaPlay.Controls
             _liveShareServer?.Dispose();
             _liveShareServer = null;
 
-            MatchShareState.MatchEnded();
+            // NOT MatchEnded(): the player is still in their game, others just cannot watch
+            // it. Ending the match here made them vanish from the list as "playing" entirely.
+            MatchShareState.SharingStopped();
             MatchStatusPublisher.Reset();
-            MatchStatusPublisher.Publish(webSocketService, force: true);
+            MatchStatusPublisher.Publish(webSocketService, appContext.GetAllowSpectateSetting(), force: true);
         }
 
         private void StartMatchSharing()
@@ -927,7 +971,7 @@ namespace TadaPlay.Controls
                 // have diverged. Reset first, or the "same as last time" check would suppress
                 // the re-push and leave everyone seeing nothing for the rest of the match.
                 MatchStatusPublisher.Reset();
-                MatchStatusPublisher.Publish(webSocketService, force: true);
+                MatchStatusPublisher.Publish(webSocketService, appContext.GetAllowSpectateSetting(), force: true);
             }, "HOME_WS_CONNECTED");
         }
 
@@ -973,6 +1017,20 @@ namespace TadaPlay.Controls
                     : $"{t.Minutes:00}:{t.Seconds:00}";
                 return (user.Paused ? $"tạm dừng · {clock}" : $"đang chơi · {clock}",
                         user.Paused ? PausedListColor : PlayingColor);
+            }
+
+            // Opted out: they are playing and will never become watchable, so a countdown
+            // would be a promise the app cannot keep.
+            if (user.InGame && !user.AllowSpectate)
+            {
+                TimeSpan playing = user.GameTime;
+                string clock = playing.TotalMilliseconds > 0
+                    ? (playing.TotalHours >= 1
+                        ? $"{(int)playing.TotalHours}:{playing.Minutes:00}:{playing.Seconds:00}"
+                        : $"{playing.Minutes:00}:{playing.Seconds:00}")
+                    : null;
+                return (clock == null ? "đang chơi, không spec" : $"đang chơi {clock}, không spec",
+                        NoSpecColor);
             }
 
             if (user.InGame) return ("chờ xem được", StartingColor);
@@ -1048,6 +1106,8 @@ namespace TadaPlay.Controls
         private static readonly Color HostColor = Color.FromArgb(200, 120, 0);
         private static readonly Color RoomColor = Color.FromArgb(90, 120, 170);
         private static readonly Color PausedListColor = Color.FromArgb(214, 158, 46);
+        /// <summary>Playing, but opted out of being watched - informational, not a warning.</summary>
+        private static readonly Color NoSpecColor = Color.FromArgb(130, 138, 145);
 
         /// <summary>
         /// Tightens the rows. MsgList exposes no row-height, padding or spacing property - the
@@ -1330,7 +1390,7 @@ namespace TadaPlay.Controls
                 // and the countdown viewers see here is the 90s one.
                 MatchShareState.CaptureInterval = TimeSpan.FromMilliseconds(FirstCaptureDelayMs);
                 MatchShareState.MatchStarted(latest);
-                MatchStatusPublisher.Publish(webSocketService);
+                MatchStatusPublisher.Publish(webSocketService, appContext.GetAllowSpectateSetting());
                 printLog($"[Xem] Đã bắt đầu game - chờ {MatchShareState.WaitSeconds} giây để " +
                          "người khác có thể xem.", Color.RoyalBlue);
                 return;
@@ -1381,7 +1441,7 @@ namespace TadaPlay.Controls
                     _spectatorStream?.Dispose();
                     _spectatorStream = null;
                     PublishFinishedMatch(finishedRecordPath);
-                    MatchStatusPublisher.Publish(webSocketService);
+                    MatchStatusPublisher.Publish(webSocketService, appContext.GetAllowSpectateSetting());
 
                     _ = UploadRecordAsync(isAutomatic: true, recordPathOverride: finishedRecordPath);
                 }
