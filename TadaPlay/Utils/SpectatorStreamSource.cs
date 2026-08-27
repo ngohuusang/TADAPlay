@@ -175,6 +175,14 @@ namespace TadaPlay.Utils
                     // detection, and at 3s it is the most responsive clock sample there is.
                     MatchShareState.ReportDuration(analysis.DurationMs);
                 }
+
+                // Logged either way. When the clock sticks at 00:00 this is the only place that
+                // can say WHY - whether the walk found no body at all, or found one and read
+                // zero duration from it - and without it the failure is completely silent.
+                DebugLogger.Info($"SpectatorStreamSource: clock sample - written={BytesWritten} "
+                               + (analysis == null
+                                    ? "analysis=null (header not parsed yet, or body walk empty)"
+                                    : $"body={analysis.BodyBytes} ops={analysis.Operations} duration={analysis.DurationMs}ms"));
             }
             catch (Exception ex)
             {

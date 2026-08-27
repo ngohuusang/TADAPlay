@@ -310,6 +310,18 @@ namespace TadaPlay.Controls
             if (EnsureSpectatorStreamStarted())
             {
                 MatchStatusPublisher.Publish(webSocketService, appContext.GetAllowSpectateSetting());
+
+                // The stream source owns the clock while it is serving - but only if it is
+                // actually producing one. Observed on a live host: the stream connected and
+                // served the match (has_match true, 3s cadence) while game_ms stayed 0 for the
+                // whole game, so every viewer saw 00:00. The clock is worth a periodic read of
+                // the snapshot on its own rather than being a side effect of that path.
+                if (MatchShareState.InGame && MatchShareState.DurationMs == 0
+                    && DateTime.UtcNow - _lastClockFallbackUtc > ClockFallbackInterval)
+                {
+                    _lastClockFallbackUtc = DateTime.UtcNow;
+                    _ = System.Threading.Tasks.Task.Run(RefreshClockOnly);
+                }
                 return;
             }
 
@@ -344,7 +356,7 @@ namespace TadaPlay.Controls
         {
             try
             {
-                string recordPath = MatchShareState.CurrentRecordPath;
+                string recordPath = MatchShareState.CurrentRecordPath ?? _watchedRecordPath;
                 if (recordPath == null) return;
 
                 LiveRecordReader.RecordAnalysis analysis = LiveRecordReader.AnalyzeFile(recordPath);
@@ -1606,6 +1618,10 @@ namespace TadaPlay.Controls
         /// log as "đã nhận thêm N KB" long after they had stopped watching. That is wasted
         /// bandwidth on a tunnel every other player shares.
         /// </summary>
+        /// <summary>Backstop for the match clock when the stream source is not producing one.</summary>
+        private DateTime _lastClockFallbackUtc = DateTime.MinValue;
+        private static readonly TimeSpan ClockFallbackInterval = TimeSpan.FromSeconds(15);
+
         private System.Windows.Forms.Timer _watchExitTimer;
         private const int WatchExitPollMs = 3000;
         private SpectatorOverlay _overlay;
