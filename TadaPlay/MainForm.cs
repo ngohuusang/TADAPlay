@@ -266,6 +266,23 @@ namespace TadaPlay
             }
         }
 
+        /// <summary>
+        /// Listens for the "show yourself" message a second launch broadcasts.
+        ///
+        /// This is what makes clicking the icon while the app sits in the tray do the obvious
+        /// thing - bring the running copy forward - instead of appearing to do nothing and
+        /// tempting the player into clicking again.
+        /// </summary>
+        // Fully qualified: AntdUI also has a Message type, so the bare name is ambiguous here.
+        protected override void WndProc(ref System.Windows.Forms.Message m)
+        {
+            if (m.Msg != 0 && m.Msg == SingleInstance.ShowInstanceMessage)
+            {
+                RestoreFromTray();
+            }
+            base.WndProc(ref m);
+        }
+
         private void RestoreFromTray()
         {
             Show();

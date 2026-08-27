@@ -37,6 +37,23 @@ namespace TadaPlay
             DebugLogger.CleanLog();
             DebugLogger.Info("Project start: " + Application.ProductVersion);
 
+            // One copy only. A second instance would start its own VPN adapter, record watcher
+            // and lobby socket, fighting the first over the same tunnel IP and showing every
+            // other player a duplicate of this account.
+            if (!Utils.SingleInstance.TryAcquire())
+            {
+                // Except when this launch IS the logon task: the app is already up, and yanking
+                // its window open at sign-in because a scheduled task fired would be worse than
+                // doing nothing.
+                if (!StartMinimized)
+                {
+                    Utils.SingleInstance.SignalExistingInstance();
+                }
+                DebugLogger.Info("Project start: another instance is already running - handing over to it.");
+                return;
+            }
+            Application.ApplicationExit += (s, e) => Utils.SingleInstance.Release();
+
             // If this start follows an update, the installer it ran is still sitting in %TEMP%.
             // Done here rather than after login so it also happens for a player who never gets
             // that far - an abandoned 55 MB file should not depend on signing in.
