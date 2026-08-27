@@ -462,7 +462,7 @@ namespace TadaPlay.Controls
                 _liveCaptureBytes = snapshot.Data.Length;
                 // Published so viewers can be told how far into the match they would be
                 // joining, rather than just that something is available.
-                MatchShareState.DurationMs = analysis.DurationMs;
+                MatchShareState.ReportDuration(analysis.DurationMs);
                 var clock = TimeSpan.FromMilliseconds(analysis.DurationMs);
                 printLog($"[Xem] Đã cập nhật trận cho người xem (phút {clock.Minutes:00}:{clock.Seconds:00}, " +
                          $"lần {_liveCaptureCount}: {snapshot.Data.Length / 1024} KB, +{growthKb} KB).",

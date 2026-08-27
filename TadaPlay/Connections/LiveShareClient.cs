@@ -30,6 +30,8 @@ namespace TadaPlay.Connections
             public long Bytes { get; set; }
             /// <summary>Game time in the shared match, in ms - the match clock, not wall time.</summary>
             public long GameMs { get; set; }
+            /// <summary>The host's game is paused: its match clock has stopped advancing.</summary>
+            public bool Paused { get; set; }
             /// <summary>How far into the match the shared record reaches.</summary>
             public TimeSpan GameTime => TimeSpan.FromMilliseconds(GameMs);
             public DateTime? FinishedUtc { get; set; }
@@ -60,6 +62,7 @@ namespace TadaPlay.Connections
                     Match = Read(json, "match")?.Trim('"'),
                     Bytes = long.TryParse(Read(json, "bytes"), out long b) ? b : 0,
                     GameMs = long.TryParse(Read(json, "gameMs"), out long g) ? g : 0,
+                    Paused = Read(json, "paused") == "true",
                     FinishedUtc = DateTime.TryParse(Read(json, "finishedUtc")?.Trim('"'),
                                                     null, System.Globalization.DateTimeStyles.RoundtripKind,
                                                     out DateTime t) ? t : null
@@ -118,6 +121,7 @@ namespace TadaPlay.Connections
                 InGame = user.InGame,
                 HasMatch = user.HasMatch,
                 GameMs = user.GameMs,
+                Paused = user.Paused,
                 WaitSeconds = user.WaitSeconds
             };
         }

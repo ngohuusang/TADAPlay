@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using TadaPlay.Logger;
 using TadaPlay.Websockets.Interface;
 
@@ -40,9 +40,13 @@ namespace TadaPlay.Utils
                 ? LiveRecordSnapshotStore.FindFor(currentMatch) != null
                 : LiveRecordSnapshotStore.Current() != null;
             long gameMs = MatchShareState.DurationMs;
+            bool paused = MatchShareState.Paused;
             int waitSeconds = MatchShareState.WaitSeconds;
 
-            string signature = $"{inGame}|{hasMatch}|{gameMs}";
+            // Paused belongs in the signature: while a game is paused the clock stops moving,
+            // so gameMs alone stops changing too and the pause would never be broadcast - the
+            // one transition viewers most need is exactly the one that suppresses itself.
+            string signature = $"{inGame}|{hasMatch}|{gameMs}|{paused}";
             lock (Gate)
             {
                 if (!force && signature == _lastSent) return;
@@ -57,10 +61,11 @@ namespace TadaPlay.Utils
                     in_game = inGame,
                     has_match = hasMatch,
                     game_ms = gameMs,
+                    paused = paused,
                     wait_seconds = waitSeconds
                 });
                 DebugLogger.Info($"MatchStatusPublisher: sent inGame={inGame} hasMatch={hasMatch} " +
-                                 $"gameMs={gameMs} wait={waitSeconds}s.");
+                                 $"gameMs={gameMs} paused={paused} wait={waitSeconds}s.");
             }
             catch (Exception ex)
             {

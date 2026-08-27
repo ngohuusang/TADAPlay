@@ -455,6 +455,10 @@ namespace TadaPlay.Connections
             string json = "{" +
                           $"\"hasMatch\":{(available ? "true" : "false")}," +
                           $"\"inGame\":{(MatchShareState.InGame ? "true" : "false")}," +
+                          // Direct-probe fallback carries the pause flag too, so an overlay
+                          // talking to a host whose lobby broadcast has not landed yet still
+                          // shows it rather than silently reporting a frozen clock as normal.
+                          $"\"paused\":{(MatchShareState.Paused ? "true" : "false")}," +
                           $"\"waitSeconds\":{MatchShareState.WaitSeconds}," +
                           $"\"gameMs\":{MatchShareState.DurationMs}," +
                           $"\"match\":\"{Escape(name)}\"," +

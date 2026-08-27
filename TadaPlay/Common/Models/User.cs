@@ -70,6 +70,10 @@ namespace TadaPlay.Common.Models
         [JsonProperty("game_ms")]
         public long GameMs { get; set; }
 
+        /// <summary>That player's game is paused - their match clock has stopped advancing.</summary>
+        [JsonProperty("paused")]
+        public bool Paused { get; set; }
+
         /// <summary>Seconds until the host's next capture makes more of the match available.</summary>
         [JsonProperty("wait_seconds")]
         public int WaitSeconds { get; set; }

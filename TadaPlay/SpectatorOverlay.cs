@@ -31,6 +31,8 @@ namespace TadaPlay
         private static readonly Color Ink = Color.FromArgb(245, 245, 245);
         private static readonly Color LiveColor = Color.FromArgb(120, 220, 90);
         private static readonly Color DimColor = Color.FromArgb(165, 165, 165);
+        /// <summary>Paused reads as amber: not running, but not over either.</summary>
+        private static readonly Color PausedColor = Color.FromArgb(250, 190, 60);
 
         private readonly string _hostIp;
         private readonly string _hostLabel;
@@ -207,8 +209,19 @@ namespace TadaPlay
                     return;
                 }
 
-                _who.Text = status.InGame ? $"▶ {_hostLabel} · đang chơi"
-                                          : $"▶ {_hostLabel} · đã kết thúc";
+                // Paused is reported only while still in game - a finished match has a
+                // stopped clock too, and calling that "paused" would be wrong.
+                bool paused = status.InGame && status.Paused;
+
+                if (paused)
+                {
+                    _who.Text = $"⏸ {_hostLabel} · tạm dừng";
+                }
+                else
+                {
+                    _who.Text = status.InGame ? $"▶ {_hostLabel} · đang chơi"
+                                              : $"▶ {_hostLabel} · đã kết thúc";
+                }
 
                 if (status.GameMs > 0)
                 {
@@ -216,7 +229,11 @@ namespace TadaPlay
                     _clock.Text = t.TotalHours >= 1
                         ? $"{(int)t.TotalHours}:{t.Minutes:00}:{t.Seconds:00}"
                         : $"{t.Minutes:00}:{t.Seconds:00}";
-                    _clock.ForeColor = status.InGame ? LiveColor : DimColor;
+                    // The frozen number is the point: it tells a viewer their replay is about
+                    // to catch up to a match that is not moving. Amber says that is expected
+                    // rather than a dropped connection, which is what a dimmed clock means here.
+                    _clock.ForeColor = paused ? PausedColor
+                                              : (status.InGame ? LiveColor : DimColor);
                 }
                 else if (status.InGame)
                 {
