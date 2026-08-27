@@ -131,7 +131,8 @@ namespace TadaPlay.Controls
             UpdateUiBasedOnLobbyState();
             _ = OfferUpdateIfAvailableAsync();
             StartRecordWatcher();
-            StartMatchSharing();
+            BuildSpectateToggle();
+            ApplyMatchSharingSetting();
             // A spectator session swaps the stock age2_x1.5.exe aside; if TadaPlay died before
             // putting it back, do it now rather than leaving the game folder modified.
             GameSpectator.RestoreLaunchTarget(appContext.GetGameFolder());
@@ -508,8 +509,140 @@ namespace TadaPlay.Controls
 
         // Runs for the lifetime of the app alongside the record watcher: publishes this
         // player's matches - periodically while one is running, and again once it finishes.
+        private AntdUI.Switch _spectateToggle;
+
+        // AntdUI's Switch animates, and CheckedChanged fires off the back of that animation -
+        // after construction has returned, so a "still building" flag does not catch it. On a
+        // fresh profile that raised the handler unprompted, briefly opening the share port and
+        // logging "đã bật chia sẻ" then "đã tắt" before anyone touched anything.
+        //
+        // So the handler acts only on input the user actually gave: set by a real click on the
+        // switch, and re-checked against the stored setting so a repeated or spurious event
+        // cannot do any work twice. The stored setting is the truth; the control reports.
+        private bool _userToggledSpectate;
+
+        /// <summary>
+        /// The "let others watch me" switch, directly under BẮT ĐẦU.
+        ///
+        /// It lives here rather than buried in Settings because it is a decision players make
+        /// per session - "am I willing to be watched in this game?" - and because the cost of
+        /// leaving it on is paid by everyone: sharing streams tens of megabytes per viewer
+        /// across the same VPN the whole lobby plays through. A control you can see is one you
+        /// can turn off.
+        ///
+        /// Added in code, not the designer: playPanel is a Dock layout whose order comes from
+        /// z-order, and Home.Designer.cs is regenerated whenever anyone opens the form.
+        /// </summary>
+        private void BuildSpectateToggle()
+        {
+            if (_spectateToggle != null) return;
+
+            // A compact row rather than a docked switch: Dock=Top stretches an AntdUI.Switch
+            // across the full width, which reads as a grey bar rather than a toggle.
+            var row = new System.Windows.Forms.Panel
+            {
+                Dock = DockStyle.Top,
+                Height = 42,
+                BackColor = Color.Transparent,
+            };
+
+            _spectateToggle = new AntdUI.Switch
+            {
+                Size = new Size(44, 24),
+                Location = new Point(8, 9),
+                Checked = appContext.GetAllowSpectateSetting(),
+            };
+
+            var caption = new AntdUI.Label
+            {
+                Text = "Cho phép người khác xem trận của tôi",
+                Font = new Font("Segoe UI", 11F),
+                ForeColor = Color.FromArgb(90, 98, 105),
+                Location = new Point(62, 10),
+                Size = new Size(420, 24),
+                BackColor = Color.Transparent,
+            };
+
+            // Only a real click counts as intent - see the note on _userToggledSpectate.
+            _spectateToggle.MouseDown += (sender, e) => _userToggledSpectate = true;
+
+            _spectateToggle.CheckedChanged += (sender, e) =>
+            {
+                if (!_userToggledSpectate) return;
+
+                bool wanted = _spectateToggle.Checked;
+                // Nothing to do if this only restates what is already stored: keeps a repeated
+                // animation event from re-running the start/stop work and logging it twice.
+                if (wanted == appContext.GetAllowSpectateSetting()) return;
+
+                appContext.SetAllowSpectateSetting(wanted);
+                ApplyMatchSharingSetting();
+                printLog(wanted
+                        ? "[Xem] Đã bật cho phép người khác xem trận của bạn."
+                        : "[Xem] Đã tắt chia sẻ trận - không ai xem được trận của bạn.",
+                    wanted ? Color.RoyalBlue : Color.Gray);
+            };
+
+            row.Controls.Add(caption);
+            row.Controls.Add(_spectateToggle);
+
+            playPanel.Controls.Add(row);
+            // Dock order is reverse z-order: the LAST child added docks topmost. Index 1 puts
+            // this just above the log box (index 0, Dock=Fill) and therefore directly beneath
+            // the start button, which is what "under BẮT ĐẦU" means on screen.
+            playPanel.Controls.SetChildIndex(row, 1);
+        }
+
+        /// <summary>
+        /// Starts or stops sharing to match the current setting. Safe to call repeatedly, so the
+        /// settings dialog can call it the moment the switch is flipped rather than making the
+        /// player restart to have their own choice take effect.
+        /// </summary>
+        public void ApplyMatchSharingSetting()
+        {
+            if (appContext.GetAllowSpectateSetting())
+            {
+                StartMatchSharing();
+            }
+            else
+            {
+                StopMatchSharing();
+            }
+        }
+
+        /// <summary>
+        /// Tears sharing down: no capture timer, no listening port, and nothing advertised to
+        /// the lobby. Also clears any match already published, or a player who turns this off
+        /// mid-match would stay watchable for the rest of it - which is the opposite of what
+        /// they just asked for.
+        /// </summary>
+        private void StopMatchSharing()
+        {
+            _liveShareTimer?.Stop();
+            LiveShareServer.WatcherChanged -= LiveShare_WatcherChanged;
+
+            _spectatorStream?.Dispose();
+            _spectatorStream = null;
+
+            _liveShareServer?.Dispose();
+            _liveShareServer = null;
+
+            MatchShareState.MatchEnded();
+            MatchStatusPublisher.Reset();
+            MatchStatusPublisher.Publish(webSocketService, force: true);
+        }
+
         private void StartMatchSharing()
         {
+            // Off by default: capturing the record on a timer, listening on a port and streaming
+            // tens of megabytes per viewer across the shared VPN is not a cost to impose on
+            // someone who never asked for it.
+            if (!appContext.GetAllowSpectateSetting())
+            {
+                DebugLogger.Info("Home: match sharing is off (Cho phép xem trận is disabled).");
+                return;
+            }
+
             LiveRecordSnapshotStore.Prune();
 
             // The countdown a viewer is shown is the wait for the FIRST capture; after that a
