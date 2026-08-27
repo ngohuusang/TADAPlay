@@ -4,6 +4,7 @@ using System.Windows.Forms;
 using TadaPlay.Common.Models;
 using AntdUI;
 using TadaPlay.Connections;
+using TadaPlay.Logger;
 using TadaPlay.Controls;
 
 namespace TadaPlay
@@ -54,6 +55,8 @@ namespace TadaPlay
         private readonly AntdUI.Tag _state = new();
         private readonly AntdUI.Label _detail = new();
         private readonly AntdUI.Button _watchButton = new();
+        private readonly AntdUI.Button _pingButton = new();
+        private readonly AntdUI.Label _pingResult = new();
         private readonly System.Windows.Forms.Timer _refresh = new() { Interval = RefreshMs };
         private bool _probing;
 
@@ -68,7 +71,7 @@ namespace TadaPlay
             StartPosition = FormStartPosition.CenterParent;
             MaximizeBox = false;
             MinimizeBox = false;
-            ClientSize = new Size(440, 268);
+            ClientSize = new Size(440, 306);
             Font = new Font("Segoe UI", 9.75F);
             BackColor = UiTheme.PageBg;
 
@@ -130,8 +133,25 @@ namespace TadaPlay
             card.Controls.Add(_state);
             card.Controls.Add(_detail);
 
+            _pingResult.Location = new Point(18, 192);
+            _pingResult.Size = new Size(408, 36);
+            _pingResult.ForeColor = UiTheme.Muted;
+            _pingResult.Font = new Font("Segoe UI", 9.5F);
+            _pingResult.TextMultiLine = true;
+            _pingResult.BackColor = Color.Transparent;
+            _pingResult.Text = "";
+
+            _pingButton.Text = "Đo ping";
+            _pingButton.Location = new Point(14, 240);
+            _pingButton.Size = new Size(110, 44);
+            _pingButton.Type = TTypeMini.Default;
+            _pingButton.Shape = TShape.Round;
+            _pingButton.Font = new Font("Segoe UI Semibold", 10F, FontStyle.Bold);
+            _pingButton.Cursor = Cursors.Hand;
+            _pingButton.Click += (s, e) => MeasurePing();
+
             _watchButton.Text = "Xem trận";
-            _watchButton.Location = new Point(196, 202);
+            _watchButton.Location = new Point(196, 240);
             _watchButton.Size = new Size(110, 44);
             _watchButton.Type = TTypeMini.Primary;
             _watchButton.Shape = TShape.Round;
@@ -143,11 +163,13 @@ namespace TadaPlay
 
             var close = UiTheme.Quiet("Đóng", height: 44);
             close.Dock = DockStyle.None;
-            close.Location = new Point(316, 202);
+            close.Location = new Point(316, 240);
             close.Size = new Size(110, 44);
             close.DialogResult = DialogResult.Cancel;
 
             Controls.Add(card);
+            Controls.Add(_pingResult);
+            Controls.Add(_pingButton);
             Controls.Add(_watchButton);
             Controls.Add(close);
             CancelButton = close;
@@ -155,6 +177,98 @@ namespace TadaPlay
             _refresh.Tick += (s, e) => Probe();
             _refresh.Start();
             Probe();
+        }
+
+        /// <summary>
+        /// Measures round-trip latency to this player over the VPN.
+        ///
+        /// This is the number that actually matters for a game: the VPN is hub-and-spoke while
+        /// AoE2 is peer-to-peer, so a packet between two players crosses the tunnel server and
+        /// back. What comes out here is that whole path, not half of it - which is why it can
+        /// be a lot larger than either player's ping to the server.
+        ///
+        /// Several samples rather than one: a single round trip says nothing about jitter, and
+        /// jitter is what a lockstep RTS actually feels.
+        /// </summary>
+        private async void MeasurePing()
+        {
+            string ip = (_lookup?.Invoke(_user.Username)?.IpAddress ?? _user.IpAddress ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(ip))
+            {
+                _pingResult.ForeColor = IdleColor;
+                _pingResult.Text = "Người này chưa có địa chỉ VPN để đo.";
+                return;
+            }
+
+            _pingButton.Enabled = false;
+            _pingButton.Loading = true;
+            _pingResult.ForeColor = UiTheme.Muted;
+            _pingResult.Text = $"Đang đo tới {ip}...";
+
+            var times = new System.Collections.Generic.List<long>();
+            int lost = 0;
+
+            try
+            {
+                using var ping = new System.Net.NetworkInformation.Ping();
+                for (int i = 0; i < 5; i++)
+                {
+                    try
+                    {
+                        var reply = await ping.SendPingAsync(ip, 2000);
+                        if (reply.Status == System.Net.NetworkInformation.IPStatus.Success)
+                        {
+                            times.Add(reply.RoundtripTime);
+                        }
+                        else
+                        {
+                            lost++;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        lost++;
+                        DebugLogger.Warn($"UserStatusDialog: ping to {ip} failed: {ex.Message}");
+                    }
+
+                    if (IsDisposed) return;
+                    await System.Threading.Tasks.Task.Delay(200);
+                }
+            }
+            finally
+            {
+                if (!IsDisposed)
+                {
+                    _pingButton.Loading = false;
+                    _pingButton.Enabled = true;
+                }
+            }
+
+            if (IsDisposed) return;
+
+            if (times.Count == 0)
+            {
+                // Deliberately not "offline". Windows blocks inbound ICMP by default, and
+                // measured against live peers, about half were silent while perfectly
+                // connected. Reporting that as a dead player would be wrong far too often.
+                _pingResult.ForeColor = WaitColor;
+                _pingResult.Text = "Không nhận được phản hồi. Máy của họ có thể đang chặn ping "
+                                 + "(bản cũ của TADA Play chưa mở), không hẳn là mất kết nối.";
+                return;
+            }
+
+            long min = times[0], max = times[0], total = 0;
+            foreach (long t in times)
+            {
+                if (t < min) min = t;
+                if (t > max) max = t;
+                total += t;
+            }
+            long avg = total / times.Count;
+
+            string lossText = lost > 0 ? $", mất {lost}/5 gói" : string.Empty;
+            _pingResult.ForeColor = avg <= 60 ? LiveColor : WaitColor;
+            _pingResult.Text = $"Ping: {avg} ms  (thấp nhất {min}, cao nhất {max}{lossText})";
         }
 
         private async void Probe()

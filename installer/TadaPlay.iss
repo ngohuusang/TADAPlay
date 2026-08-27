@@ -80,6 +80,7 @@ Filename: "{app}\{#MyAppExeName}"; Flags: nowait runasoriginaluser; Check: Wants
 [UninstallRun]
 Filename: "{sys}\schtasks.exe"; Parameters: "/Delete /TN ""TadaPlay"" /F"; Flags: runhidden; RunOnceId: "DeleteTadaPlayScheduledTask"
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""TadaPlay match sharing"""; Flags: runhidden; RunOnceId: "DeleteTadaPlayFirewallRule"
+Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""TadaPlay VPN ping"""; Flags: runhidden; RunOnceId: "DeleteTadaPlayPingRule"
 
 [Code]
 // True when the installer was started with /RELAUNCH, which only the in-app updater does.

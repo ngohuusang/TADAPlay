@@ -148,6 +148,10 @@ namespace TadaPlay.Controls
             // Same idea: older builds opened an inbound rule for the game's spectator port.
             // Nothing listens there now, so take our own leftover back off the player's firewall.
             GameSpectator.RemoveSpectatorPortRule();
+            // Let other players measure their latency to this machine. Windows blocks inbound
+            // ping by default, and half the connected peers were silent when checked - so
+            // without this the new "Đo ping" button reports failure for about half the lobby.
+            VpnFirewall.EnsureVpnPingAllowed();
             // TadaPlay no longer WRITES the in-game profile at all. The old ProfileTemplateEnforcer
             // rewrote player.nfz every 10s, which wiped the game's profile<->hotkey link and reset
             // the player's hotkeys. Instead we WATCH player.nfz and, whenever the name changes, READ
