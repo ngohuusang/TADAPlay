@@ -83,6 +83,15 @@ namespace TadaPlay.Controls
             userList.ItemSelected += userList_ItemSelected;
             StyleUserList();
 
+            // BẮT ĐẦU sat visibly inset from the log box below it. Measured against a window
+            // capture: 25px of gutter each side and 14px top/bottom, against a Padding of
+            // (16,8,16,8) - AntdUI paints the button inside its Padding, and this display scales
+            // it by 150%. Margin is NOT involved (zeroing it changed the rendering by 0px), so
+            // the horizontal padding is what has to go. The vertical 8 stays: it is what gives
+            // the button its height presence, and removing it only makes the label crowd the
+            // edge. Set here rather than in the designer file, which Visual Studio regenerates.
+            startGameButton.Padding = new Padding(0, 8, 0, 8);
+
             // The live stream keeps appending to a file on a background loop; without this it
             // would outlive the control it reports to and go on writing to a replay nobody
             // has open. Hooked here rather than in Dispose(bool) because that lives in the
