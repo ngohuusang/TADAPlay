@@ -22,16 +22,19 @@ namespace TadaPlay.Utils
         private static DateTime? _nextCaptureUtc;
         private static string _recordPath;
         private static long _durationMs;
-        private static DateTime? _durationSampledUtc;
+        private static DateTime? _clockLastAdvancedUtc;
         private static DateTime? _pausedSinceUtc;
 
         /// <summary>
-        /// A wall-clock gap must be at least this long before two duration samples can say
-        /// anything about a pause. Guards against two captures landing close together (a
-        /// viewer joining forces one immediately) and reading as "stalled" purely because
-        /// barely any time passed between them.
+        /// How long the match clock must stand still before it counts as a pause.
+        ///
+        /// Measured as a stall duration rather than as the gap between two consecutive samples,
+        /// because the clock is now reported from two places at very different rates: the
+        /// capture loop (10s while watched, 90s idle) and SpectatorStreamSource (every 3s while
+        /// streaming). A per-gap rule silently never fires on the 3s path, since no single gap
+        /// ever reaches the threshold. Accumulating the stall works at any sampling rate.
         /// </summary>
-        private const int PauseDetectWallMs = 8000;
+        private const int PauseAfterStallMs = 8000;
 
         /// <summary>
         /// Game time advancing by less than this across such a gap counts as not advancing.
@@ -148,28 +151,26 @@ namespace TadaPlay.Utils
             {
                 DateTime now = DateTime.UtcNow;
 
-                if (_durationSampledUtc.HasValue)
+                if (_clockLastAdvancedUtc == null)
                 {
-                    double wallMs = (now - _durationSampledUtc.Value).TotalMilliseconds;
-                    long advancedMs = durationMs - _durationMs;
-
-                    if (advancedMs > PauseGameToleranceMs)
-                    {
-                        // The game moved: definitively not paused, whatever we thought before.
-                        _pausedSinceUtc = null;
-                    }
-                    else if (wallMs >= PauseDetectWallMs && _pausedSinceUtc == null)
-                    {
-                        // Stalled across a gap long enough to be meaningful. Dated back to the
-                        // previous sample, not to now - that is the last moment the clock was
-                        // known to be moving, so "paused for" does not under-report by a full
-                        // capture interval.
-                        _pausedSinceUtc = _durationSampledUtc;
-                    }
+                    // First sample of the match: nothing to compare against yet.
+                    _clockLastAdvancedUtc = now;
+                }
+                else if (durationMs - _durationMs > PauseGameToleranceMs)
+                {
+                    // The game moved: definitively not paused, whatever we thought before.
+                    _clockLastAdvancedUtc = now;
+                    _pausedSinceUtc = null;
+                }
+                else if ((now - _clockLastAdvancedUtc.Value).TotalMilliseconds >= PauseAfterStallMs
+                         && _pausedSinceUtc == null)
+                {
+                    // Dated to when the clock was last seen moving, not to now, so "paused for"
+                    // does not under-report by however long the detection took.
+                    _pausedSinceUtc = _clockLastAdvancedUtc;
                 }
 
                 _durationMs = durationMs;
-                _durationSampledUtc = now;
             }
         }
 
@@ -183,7 +184,7 @@ namespace TadaPlay.Utils
                 _nextCaptureUtc = DateTime.UtcNow + CaptureInterval;
                 _recordPath = recordPath;
                 _durationMs = 0;
-                _durationSampledUtc = null;
+                _clockLastAdvancedUtc = null;
                 _pausedSinceUtc = null;
             }
         }
@@ -207,7 +208,7 @@ namespace TadaPlay.Utils
                 _nextCaptureUtc = null;
                 // A finished match is not a paused one - without this the overlay would keep
                 // showing "tạm dừng" over a game that simply ended.
-                _durationSampledUtc = null;
+                _clockLastAdvancedUtc = null;
                 _pausedSinceUtc = null;
                 // Cleared last: from here the finished match is served from the snapshot
                 // folder like any other, which is what PublishFinished is about to write.
