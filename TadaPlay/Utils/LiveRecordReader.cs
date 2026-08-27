@@ -282,6 +282,51 @@ namespace TadaPlay.Utils
             }
         }
 
+        /// <summary>
+        /// Reads how far the running game has read into its open recorded-game file - a proxy
+        /// for the replay playhead used by <see cref="PlayheadGovernor"/>.
+        ///
+        /// The game reads a little AHEAD of what it is drawing, so this runs slightly ahead of
+        /// the visible position - the safe direction for a "near the end" check (it errs toward
+        /// slowing down a touch early rather than too late). Querying FILE_CURRENT with a zero
+        /// distance returns the shared pointer's position without moving it, so it does not
+        /// disturb the game's reads. Returns false when no game is running, it has no record
+        /// open, or the process cannot be opened (needs the Administrator the manifest requests).
+        /// </summary>
+        public static bool TryGetReplayReadPosition(out long position, out long total, out string path)
+        {
+            position = 0; total = 0; path = null;
+
+            Process game = FindGameProcess();
+            if (game == null) return false;
+            int pid = game.Id;
+            game.Dispose();
+
+            IntPtr hProc = OpenProcess(PROCESS_DUP_HANDLE | PROCESS_QUERY_INFORMATION, false, pid);
+            if (hProc == IntPtr.Zero) return false;
+
+            IntPtr dup = IntPtr.Zero;
+            try
+            {
+                if (!TryFindRecordHandle(hProc, pid, out IntPtr handleValue, out path)) return false;
+                if (!DuplicateHandle(hProc, handleValue, GetCurrentProcess(), out dup,
+                                     0, false, DUPLICATE_SAME_ACCESS)) return false;
+                if (!GetFileSizeEx(dup, out total)) return false;
+                if (!SetFilePointerEx(dup, 0, out position, FILE_CURRENT)) return false;
+                return position > 0 && total > 0;
+            }
+            catch (Exception ex)
+            {
+                DebugLogger.Warn($"LiveRecordReader: replay read-position query failed: {ex.Message}");
+                return false;
+            }
+            finally
+            {
+                if (dup != IntPtr.Zero) CloseHandle(dup);
+                CloseHandle(hProc);
+            }
+        }
+
         // ------------------------------------------------------------------
         // reading a file the game holds without FILE_SHARE_READ
         // ------------------------------------------------------------------
@@ -733,6 +778,7 @@ namespace TadaPlay.Utils
         private const uint DUPLICATE_SAME_ACCESS = 0x02;
         private const uint FILE_TYPE_DISK = 1;
         private const uint FILE_END = 2;
+        private const uint FILE_CURRENT = 1;
         private const int SystemExtendedHandleInformation = 0x40;
         private const uint STATUS_INFO_LENGTH_MISMATCH = 0xC0000004;
         private const uint STATUS_BUFFER_TOO_SMALL = 0xC0000023;
