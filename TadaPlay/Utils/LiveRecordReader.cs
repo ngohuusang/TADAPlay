@@ -197,7 +197,7 @@ namespace TadaPlay.Utils
         {
             try
             {
-                return Analyze(File.ReadAllBytes(path), path);
+                return Analyze(ReadAllBytesShared(path), path);
             }
             catch (Exception ex)
             {
@@ -260,6 +260,39 @@ namespace TadaPlay.Utils
                 return found[0];
             }
             return null;
+        }
+
+        /// <summary>
+        /// Reads a file that something else may be writing right now.
+        ///
+        /// File.ReadAllBytes opens with FileShare.Read, meaning "other handles may read this,
+        /// but not write it". The live snapshot is held open for WRITING by
+        /// SpectatorStreamSource, so that request is refused - "the process cannot access the
+        /// file because it is being used by another process" - even though the writer had
+        /// explicitly allowed readers. Share flags have to be compatible in BOTH directions.
+        ///
+        /// That is why the match clock sat at 00:00 for a whole game on a live host: every
+        /// three seconds the duration walk threw this, and both the stream's own clock and the
+        /// backstop added to work around it failed for the same reason. The record parsing was
+        /// never at fault; the file simply could not be opened.
+        ///
+        /// Length is re-read rather than trusted: the file is growing, so the amount actually
+        /// read is what matters.
+        /// </summary>
+        private static byte[] ReadAllBytesShared(string path)
+        {
+            using var stream = new FileStream(path, FileMode.Open, FileAccess.Read,
+                                              FileShare.ReadWrite | FileShare.Delete);
+            var data = new byte[stream.Length];
+            int total = 0;
+            while (total < data.Length)
+            {
+                int read = stream.Read(data, total, data.Length - total);
+                if (read <= 0) break;
+                total += read;
+            }
+            if (total != data.Length) Array.Resize(ref data, total);
+            return data;
         }
 
         /// <summary>True when the file cannot be opened for reading yet - i.e. the game still owns it.</summary>
