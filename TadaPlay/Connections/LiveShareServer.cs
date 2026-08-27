@@ -26,7 +26,7 @@ namespace TadaPlay.Connections
     /// Requests carry a "from" offset so a viewer can keep pulling just the new tail for
     /// the whole match instead of re-downloading it - see LiveStreamSession.
     ///
-    /// Everyone is on 192.168.99.x through the VPN, so no port forwarding is involved.
+    /// Everyone is on the VPN subnet (10.10.0.0/16), so no port forwarding is involved.
     /// </summary>
     public sealed class LiveShareServer : IDisposable
     {

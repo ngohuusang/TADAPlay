@@ -232,11 +232,11 @@ namespace TadaPlay.Connections
 
                     // Only hand Windows a DNS server the tunnel can actually carry.
                     //
-                    // This is a split-tunnel game VPN: it routes only 192.168.99.0/24 and players
+                    // This is a split-tunnel game VPN: it routes only the game subnet (10.10.0.0/16) and
                     // connect by IP, so nothing inside it is ever reached by name. But the profiles
                     // shipped a public resolver (DNS = 8.8.8.8) and the adapter was pinned to
                     // metric 0, so Windows ranked it above the physical NIC and sent the whole
-                    // machine's lookups here - sourced from 192.168.99.x, an address that cannot
+                    // machine's lookups here - sourced from a tunnel address that cannot
                     // reach 8.8.8.8 because only the game subnet is routed through the tunnel.
                     // Every query black-holed and burned the resolver's full retry backoff before
                     // falling back to the real NIC, so any page with many hostnames (YouTube,
@@ -496,7 +496,7 @@ namespace TadaPlay.Connections
             }
         }
 
-        // A player whose home LAN happens to sit in the same range as the tunnel (192.168.99.0/24)
+        // A player whose home LAN happens to sit in the same range as the tunnel (10.10.0.0/16)
         // has that whole network pulled into the VPN the moment this route is installed - router,
         // printer and NAS all stop answering, and it looks like the app broke their internet. The
         // client can't route its way out of a genuine collision, but silently breaking someone's
