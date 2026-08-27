@@ -37,6 +37,11 @@ namespace TadaPlay
             DebugLogger.CleanLog();
             DebugLogger.Info("Project start: " + Application.ProductVersion);
 
+            // If this start follows an update, the installer it ran is still sitting in %TEMP%.
+            // Done here rather than after login so it also happens for a player who never gets
+            // that far - an abandoned 55 MB file should not depend on signing in.
+            Services.UpdateService.CleanupDownloadedInstallers();
+
             ConfigureServices();
 
             // Ensure the WebSocketService is disposed when the application exits

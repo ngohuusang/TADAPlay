@@ -13,6 +13,7 @@ using TadaPlay.Logger;
 using TadaPlay.Contexts;
 using TadaPlay.Contexts.Interfaces;
 using TadaPlay.Services;
+using TadaPlay.Utils;
 using TadaPlay.Services.Interface;
 
 namespace TadaPlay.Controls
@@ -92,22 +93,82 @@ namespace TadaPlay.Controls
                 CancelText = "Thoát"
             };
 
-            bool download = AntdUI.Modal.open(config) == DialogResult.OK;
+            config.OkText = "Cập nhật ngay";
+            if (AntdUI.Modal.open(config) != DialogResult.OK)
+            {
+                Application.Exit();
+                return;
+            }
 
-            if (download && !string.IsNullOrWhiteSpace(ex.DownloadUrl))
+            _ = RunForcedUpdateAsync(ex.DownloadUrl);
+        }
+
+        /// <summary>
+        /// Downloads and installs the newer client in place, rather than sending the player to a
+        /// web page to do it by hand.
+        ///
+        /// This is the whole point of the updater: a build old enough to be refused at login is
+        /// the one least able to help itself, and "go and re-download it" is a step a lot of
+        /// people simply do not take. If anything goes wrong we fall back to opening the page,
+        /// which is exactly what used to happen every time.
+        /// </summary>
+        private async System.Threading.Tasks.Task RunForcedUpdateAsync(string fallbackUrl)
+        {
+            signInButton.Loading = true;
+            signInButton.Enabled = false;
+            try
+            {
+                UpdateService.UpdateInfo info = await UpdateService.CheckAsync();
+                if (info == null)
+                {
+                    // The server told us to update but cannot tell us what to - nothing sensible
+                    // left to do in-app.
+                    OpenDownloadPage(fallbackUrl);
+                    return;
+                }
+
+                string installer = await UpdateService.DownloadAsync(info, message =>
+                    UiUtils.InvokeOnUiThread(this, () =>
+                        AntdUI.Notification.info(form, "Cập nhật", message,
+                                                 AntdUI.TAlignFrom.Bottom, Font), "LOGIN_UPDATE_PROGRESS"));
+
+                if (installer == null || !UpdateService.StartInstaller(installer))
+                {
+                    OpenDownloadPage(fallbackUrl);
+                    return;
+                }
+
+                // The installer replaces files this process is running from, so it cannot
+                // finish while we are alive. It restarts the app itself (/RELAUNCH).
+                Application.Exit();
+            }
+            catch (Exception ex)
+            {
+                DebugLogger.Warn("Login: in-app update failed: " + ex.Message);
+                OpenDownloadPage(fallbackUrl);
+            }
+            finally
+            {
+                signInButton.Loading = false;
+                signInButton.Enabled = true;
+            }
+        }
+
+        private void OpenDownloadPage(string url)
+        {
+            if (!string.IsNullOrWhiteSpace(url))
             {
                 try
                 {
                     // UseShellExecute so the URL opens in the default browser; without it .NET
                     // tries to exec the string as a program and throws.
-                    Process.Start(new ProcessStartInfo(ex.DownloadUrl) { UseShellExecute = true });
+                    Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
                 }
                 catch (Exception openEx)
                 {
                     DebugLogger.Warn("Login: could not open the download URL: " + openEx.Message);
                 }
             }
-
             Application.Exit();
         }
 

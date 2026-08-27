@@ -4,7 +4,7 @@
 ; Then compile this script with ISCC.exe (Inno Setup 6).
 
 #define MyAppName "TADA Play"
-#define MyAppVersion "3.28.4"
+#define MyAppVersion "3.28.9"
 #define MyAppExeName "TadaPlay.exe"
 #define MyPublishDir "..\publish\TadaPlay"
 
@@ -70,7 +70,32 @@ Filename: "{sys}\schtasks.exe"; Parameters: "/Create /TN ""TadaPlay"" /TR ""\""{
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""TadaPlay match sharing"""; Flags: runhidden
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall add rule name=""TadaPlay match sharing"" dir=in action=allow protocol=TCP localport=53755 profile=any"; Flags: runhidden; StatusMsg: "Đang mở cổng chia sẻ trận đấu..."
 Filename: "{app}\{#MyAppExeName}"; Description: "Khởi chạy {#MyAppName}"; Flags: nowait postinstall skipifsilent
+; The auto-updater runs this installer silently and then has to get the app back up, but the
+; entry above is skipifsilent by design (a silent install triggered by anything else should not
+; spawn a window). So the updater passes /RELAUNCH and gets exactly one relaunch from this line.
+; runasoriginaluser matters: the updater is elevated, and without it the app would be restarted
+; as whatever elevated identity ran the installer rather than as the player.
+Filename: "{app}\{#MyAppExeName}"; Flags: nowait runasoriginaluser; Check: WantsRelaunch
 
 [UninstallRun]
 Filename: "{sys}\schtasks.exe"; Parameters: "/Delete /TN ""TadaPlay"" /F"; Flags: runhidden; RunOnceId: "DeleteTadaPlayScheduledTask"
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""TadaPlay match sharing"""; Flags: runhidden; RunOnceId: "DeleteTadaPlayFirewallRule"
+
+[Code]
+// True when the installer was started with /RELAUNCH, which only the in-app updater does.
+// Written as a plain command-line scan rather than {param:...} so it behaves the same however
+// the parameter is quoted.
+function WantsRelaunch(): Boolean;
+var
+  I: Integer;
+begin
+  Result := False;
+  for I := 1 to ParamCount do
+  begin
+    if CompareText(ParamStr(I), '/RELAUNCH') = 0 then
+    begin
+      Result := True;
+      Exit;
+    end;
+  end;
+end;

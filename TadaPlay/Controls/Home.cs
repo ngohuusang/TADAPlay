@@ -14,6 +14,7 @@ using TadaPlay.Connections.Interface;
 using TadaPlay.Contexts.Interfaces;
 using TadaPlay.Logger;
 using TadaPlay.Services.Interface;
+using TadaPlay.Services;
 using TadaPlay.Utils;
 using TadaPlay.Websockets.Interface;
 using TadaPlay.Websockets.Models;
@@ -128,6 +129,7 @@ namespace TadaPlay.Controls
             wireGuardVpnService.OnIpAddressChanged += WireGuardVpnService_OnIpAddressChanged;
 
             UpdateUiBasedOnLobbyState();
+            _ = OfferUpdateIfAvailableAsync();
             StartRecordWatcher();
             StartMatchSharing();
             // A spectator session swaps the stock age2_x1.5.exe aside; if TadaPlay died before
@@ -957,6 +959,98 @@ namespace TadaPlay.Controls
                 userItem.Tag = user;
 
                 userList.Items.Add(userItem);
+            }
+        }
+
+        // Asked once per run. A player who says no should not be nagged every time the lobby
+        // list refreshes, and a second prompt cannot arrive while the first is still open.
+        private bool _updatePrompted;
+
+        /// <summary>
+        /// Offers a newer client when one exists, and installs it in place if the player agrees.
+        ///
+        /// Separate from the login gate on purpose. The gate is about builds too old to WORK -
+        /// it refuses them. This is about builds that work but are behind, which is most of
+        /// them most of the time, and the only way they ever caught up before was somebody
+        /// noticing a message and re-downloading by hand.
+        ///
+        /// Never forced: it asks, and it asks once. Restarting the app underneath someone who
+        /// is mid-match to save them a click would be a bad trade.
+        /// </summary>
+        private async System.Threading.Tasks.Task OfferUpdateIfAvailableAsync()
+        {
+            if (_updatePrompted) return;
+
+            try
+            {
+                UpdateService.UpdateInfo info = await UpdateService.CheckAsync();
+                if (!UpdateService.UpdateAvailable(info)) return;
+
+                // A match in progress outranks an optional update - the record watcher is
+                // capturing and other players may be watching. It will be offered next run.
+                if (MatchShareState.InGame)
+                {
+                    DebugLogger.Info($"Home: update {info.LatestVersion} available; deferred, a match is running.");
+                    return;
+                }
+
+                if (_updatePrompted) return;
+                _updatePrompted = true;
+
+                UiUtils.InvokeOnUiThread(this, () =>
+                {
+                    var config = new AntdUI.Modal.Config(mainForm, "Có bản cập nhật mới",
+                        $"Phiên bản {info.LatestVersion} đã sẵn sàng (bạn đang dùng {UpdateService.CurrentVersion}).\n\n" +
+                        "TADA Play sẽ tự tải và cài đặt, rồi mở lại. Quá trình này mất khoảng một phút.",
+                        AntdUI.TType.Info)
+                    {
+                        OkText = "Cập nhật ngay",
+                        CancelText = "Để sau"
+                    };
+
+                    if (AntdUI.Modal.open(config) == DialogResult.OK)
+                    {
+                        _ = RunUpdateAsync(info);
+                    }
+                }, "HOME_UPDATE_PROMPT");
+            }
+            catch (Exception ex)
+            {
+                // An update check must never be able to stop the app working.
+                DebugLogger.Warn($"Home: update check failed: {ex.Message}");
+            }
+        }
+
+        private async System.Threading.Tasks.Task RunUpdateAsync(UpdateService.UpdateInfo info)
+        {
+            printLog($"[Cập nhật] Đang tải bản {info.LatestVersion}...", Color.RoyalBlue);
+            try
+            {
+                string installer = await UpdateService.DownloadAsync(info, message =>
+                    UiUtils.InvokeOnUiThread(this, () => printLog($"[Cập nhật] {message}", Color.RoyalBlue),
+                                             "HOME_UPDATE_PROGRESS"));
+
+                if (installer == null)
+                {
+                    printLog("[Cập nhật] Không tải được bản mới - sẽ thử lại lần sau.", Color.Orange);
+                    return;
+                }
+
+                if (!UpdateService.StartInstaller(installer))
+                {
+                    printLog("[Cập nhật] Không mở được trình cài đặt - vui lòng tải thủ công.", Color.Orange);
+                    return;
+                }
+
+                printLog("[Cập nhật] Đang cài đặt, TADA Play sẽ tự mở lại...", Color.DarkGreen);
+                // The installer replaces files this process is running from, so it cannot finish
+                // while we hold them open. /RELAUNCH brings the app back afterwards.
+                Application.Exit();
+            }
+            catch (Exception ex)
+            {
+                DebugLogger.Error($"Home: update failed: {ex.Message}");
+                printLog($"[Cập nhật] Lỗi khi cập nhật: {ex.Message}", Color.Red);
             }
         }
 
