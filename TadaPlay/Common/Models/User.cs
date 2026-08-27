@@ -30,6 +30,14 @@ namespace TadaPlay.Common.Models
         [JsonProperty("nick_name")]
         public string NickName { get; set; }
 
+        /// <summary>
+        /// The name this player uses inside the game - what everyone actually sees in the AoE2
+        /// lobby, which is often nothing like their TadaPlay username. Broadcast with the user
+        /// list; null for a player whose client has never reported one.
+        /// </summary>
+        [JsonProperty("in_game_name")]
+        public string InGameName { get; set; }
+
         [JsonProperty("is_online")]
         public bool IsOnline { get; set; }
 

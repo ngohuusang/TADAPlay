@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
@@ -80,6 +80,7 @@ namespace TadaPlay.Controls
             accountService = _accountService;
 
             userList.ItemSelected += userList_ItemSelected;
+            StyleUserList();
 
             // The live stream keeps appending to a file on a background loop; without this it
             // would outlive the control it reports to and go on writing to a replay nobody
@@ -581,6 +582,23 @@ namespace TadaPlay.Controls
                 else if (result.Success)
                 {
                     _lastSyncedInGameName = inGameName;
+                    // Tell the lobby too. The REST call above updates the database, which is
+                    // what a client reads when it CONNECTS - without this, everyone already
+                    // online keeps showing the old name until they reconnect.
+                    try
+                    {
+                        _ = webSocketService.SendMessageAsync(new
+                        {
+                            command = "in_game_name",
+                            in_game_name = inGameName
+                        });
+                    }
+                    catch (Exception ex)
+                    {
+                        // Never fatal: the name is saved server-side regardless, so the worst
+                        // case is other players seeing it a reconnect later.
+                        DebugLogger.Warn($"Home: could not broadcast in-game name: {ex.Message}");
+                    }
                     printLog($"[Hồ sơ] Đã đồng bộ tên trong game \"{inGameName}\" với máy chủ.", Color.DarkGreen);
                 }
                 // Other (transient) failures: leave _lastSyncedInGameName so the next poll retries.
@@ -787,6 +805,13 @@ namespace TadaPlay.Controls
         /// minutes into a game - it says "online" for both. Falls back to that field for
         /// players whose build does not report a match.
         /// </summary>
+        /// <summary>
+        /// The right-hand status label, in full.
+        ///
+        /// MsgList gives the name priority on that line and leaves the status whatever width
+        /// remains, so this only fits because StyleUserList widens the panel - at the original
+        /// 33% even "20:40" rendered as "20...".
+        /// </summary>
         private static (string Label, Color Colour) DescribeActivity(User user, string status)
         {
             if (user.IsWatchable)
@@ -795,16 +820,57 @@ namespace TadaPlay.Controls
                 string clock = t.TotalHours >= 1
                     ? $"{(int)t.TotalHours}:{t.Minutes:00}:{t.Seconds:00}"
                     : $"{t.Minutes:00}:{t.Seconds:00}";
-                return ($"● đang chơi · {clock}", PlayingColor);
+                return (user.Paused ? $"tạm dừng · {clock}" : $"đang chơi · {clock}",
+                        user.Paused ? PausedListColor : PlayingColor);
             }
 
-            if (user.InGame)
+            if (user.InGame) return ("chờ xem được", StartingColor);
+
+            switch ((status ?? string.Empty).ToLowerInvariant())
             {
-                // In a game, but nothing captured yet - watchable shortly, not now.
-                return ("đang chơi · chờ xem được", StartingColor);
+                case "host": return ("chủ phòng", HostColor);
+                case "joined": return ("trong phòng", RoomColor);
+                case "spectating": return ("đang xem", RoomColor);
+                // "online" is dropped deliberately: this is the list of players who are online,
+                // so stamping it on nearly every row said nothing.
+                default: return (string.Empty, Color.Gray);
             }
+        }
 
-            return (status, status == "online" ? Color.Green : Color.Gray);
+        /// <summary>
+        /// The two lines of a row: who they are, and the supporting detail underneath.
+        ///
+        /// The in-game name leads the detail line because it is what identifies a player inside
+        /// Age of Empires - it is frequently nothing like their TadaPlay username, and matching
+        /// the two up is the whole reason someone scans this list. Quoted so it reads as a
+        /// handle rather than running into the address beside it.
+        ///
+        /// Most accounts also have a full name equal to the username, so the row used to print
+        /// the same string twice - once truncated on the top line, once in full below. When they
+        /// match, the repeat is dropped.
+        /// </summary>
+        private static (string Name, string Detail) DescribeIdentity(User user)
+        {
+            string username = (user.Username ?? string.Empty).Trim();
+            string fullName = (user.FullName ?? string.Empty).Trim();
+            string address = (user.IpAddress ?? string.Empty).Trim();
+            string inGame = (user.InGameName ?? string.Empty).Trim();
+
+            bool sameName = fullName.Length == 0
+                            || string.Equals(fullName, username, StringComparison.OrdinalIgnoreCase);
+            string name = sameName ? username : fullName;
+
+            var parts = new List<string>();
+            // Skip a game name that just repeats the row's own title - that is the duplication
+            // this layout exists to avoid, not an extra piece of information.
+            if (inGame.Length > 0 && !string.Equals(inGame, name, StringComparison.OrdinalIgnoreCase))
+            {
+                parts.Add($"\u201c{inGame}\u201d");
+            }
+            if (!sameName && username.Length > 0) parts.Add(username);
+            if (address.Length > 0) parts.Add(address);
+
+            return (name, string.Join(" · ", parts));
         }
 
         /// <summary>
@@ -822,6 +888,40 @@ namespace TadaPlay.Controls
             return 2;
         }
 
+        // The second line (username / VPN address) is reference detail, not the thing being
+        // scanned for, so it is smaller and grey. Both are per-item fonts, which MsgList honours
+        // independently of its own Font - that one sets the NAME size and, with it, row height.
+        private static readonly Font RowDetailFont = new("Segoe UI", 8.25F);
+        private static readonly Font RowStatusFont = new("Segoe UI Semibold", 8.25F);
+        private static readonly Color RowDetailColor = Color.FromArgb(120, 128, 134);
+        private static readonly Color HostColor = Color.FromArgb(200, 120, 0);
+        private static readonly Color RoomColor = Color.FromArgb(90, 120, 170);
+        private static readonly Color PausedListColor = Color.FromArgb(214, 158, 46);
+
+        /// <summary>
+        /// Tightens the rows. MsgList exposes no row-height, padding or spacing property - the
+        /// height is derived from the control's own Font (verified: per-item fonts change the
+        /// text but not the pitch; the control Font changes both). So this is the only lever,
+        /// and it trades a slightly smaller name against noticeably more players on screen.
+        /// Applied here rather than in the designer file, which Visual Studio rewrites.
+        /// </summary>
+        private void StyleUserList()
+        {
+            // 11pt is a measured floor, not a taste call. MsgList derives the status column's
+            // width from this font and then fixes it, so at 9pt "đang chơi · 20:40" truncates to
+            // "đang chơi · 20..." no matter how wide the window is - verified up to 440px with a
+            // one-character name. A long player name then eats into what is left, so 10pt was
+            // still cutting the longer names' clocks; 11pt clears both. This same font sets the
+            // row height too, so it is as compact as the rows get with the status readable.
+            userList.Font = new Font("Segoe UI Semibold", 11F);
+
+            // The status label shares its line with the player name and comes second, so at the
+            // original 33% split there was no room for it - every label, even "20:40", rendered
+            // truncated. Widening the column is what makes a full status possible; the right
+            // pane keeps enough width for the log and the start button.
+            homeGridPanel.Span = "42% 58%";
+        }
+
         private void UpdateOnlineUsersListView(IReadOnlyList<User> users)
         {
             userList.Items.Clear();
@@ -834,13 +934,15 @@ namespace TadaPlay.Controls
             foreach (var user in ordered)
             {
                 AntdUI.Chat.MsgItem userItem = new AntdUI.Chat.MsgItem();
-                string username = user.FullName ?? user.Username;
-                string nickname = user.Username;
                 string status = user.Status ?? "";
+                (string name, string detail) = DescribeIdentity(user);
 
                 userItem.Icon = Properties.Resources.user_icon;
-                userItem.Text = string.IsNullOrWhiteSpace(user.IpAddress) ? nickname : $"{nickname} · {user.IpAddress}";
-                userItem.Name = username;
+                userItem.Text = detail;
+                userItem.TextFont = RowDetailFont;
+                userItem.TextColor = RowDetailColor;
+                userItem.TimeFont = RowStatusFont;
+                userItem.Name = name;
                 // What a player is DOING beats what the lobby calls them. The server's own
                 // status stays "online" for the whole of a match, so on its own this column
                 // never moved - the one thing anybody actually watches it for.
