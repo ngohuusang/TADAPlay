@@ -48,6 +48,36 @@ namespace TadaPlay
             rankingButton.Click += rankingButton_Click;
             matchesButton.Click += matchesButton_Click;
             settingButton.Click += btn_setting_Click;
+
+            ShowVersionInTitle();
+        }
+
+        /// <summary>
+        /// Puts the running version in the title bar and the taskbar entry.
+        ///
+        /// Read from the assembly at runtime rather than written into the designer file, so it
+        /// cannot drift from the build the player is actually running - a hardcoded string here
+        /// would be wrong the first time someone forgot to update it, and a wrong version on
+        /// screen is worse than none when the question is "did the update actually take?".
+        ///
+        /// It goes on Text, not SubText: SubText is rewritten with the current page's name on
+        /// every navigation, so a version there would vanish the moment anyone clicked anything.
+        /// </summary>
+        private void ShowVersionInTitle()
+        {
+            try
+            {
+                string version = UpdateService.CurrentVersion;
+                if (string.IsNullOrWhiteSpace(version)) return;
+
+                windowBar.Text = $"TADA Play v{version}";
+                Text = $"TADA Play v{version} - aoe2.io.vn";
+            }
+            catch (Exception ex)
+            {
+                // Cosmetic - never let it stop the window opening.
+                DebugLogger.Warn($"MainForm: could not show the version in the title: {ex.Message}");
+            }
         }
 
         private void rankingButton_Click(object sender, EventArgs e)
@@ -114,7 +144,11 @@ namespace TadaPlay
                     ? $"{names} vừa online."
                     : $"{newlyOnlineUsers.Count} người vừa online: {names}";
 
-                trayIcon.ShowBalloonTip(3000, "TADA Play", message, ToolTipIcon.Info);
+                // ToolTipIcon.None, not .Info: Windows plays its own system sound for an Info
+                // balloon, and with our own alert underneath it that lands as two overlapping
+                // noises for one event. Losing the small info glyph is the cheaper trade.
+                trayIcon.ShowBalloonTip(3000, "TADA Play", message, ToolTipIcon.None);
+                NotificationSound.PlayUserOnline();
             }, "MAINFORM_USER_ONLINE");
         }
 
