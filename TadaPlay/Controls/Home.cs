@@ -359,8 +359,31 @@ namespace TadaPlay.Controls
                 string recordPath = MatchShareState.CurrentRecordPath ?? _watchedRecordPath;
                 if (recordPath == null) return;
 
-                LiveRecordReader.RecordAnalysis analysis = LiveRecordReader.AnalyzeFile(recordPath);
-                if (analysis == null || analysis.BodyBytes <= 0) return;
+                // Read the SNAPSHOT, never the live record. The game holds its own record open
+                // (LiveRecordReader.IsLockedByGame) so File.ReadAllBytes on it just throws -
+                // that is the entire reason the shadow-copy capture exists. Analyzing the live
+                // path here is what made the first version of this backstop do nothing at all:
+                // it failed silently on every call and the clock stayed at 00:00.
+                string snapshotPath = LiveRecordSnapshotStore.FindFor(recordPath)
+                                      ?? LiveRecordSnapshotStore.Current();
+                if (snapshotPath == null)
+                {
+                    // No snapshot means nothing has been captured - true for a player who has
+                    // opted out of sharing. They get no clock, which is honest: the status
+                    // already reads "đang chơi, không spec" without a time.
+                    DebugLogger.Info("Home: clock refresh skipped - no snapshot for this match yet.");
+                    return;
+                }
+
+                LiveRecordReader.RecordAnalysis analysis = LiveRecordReader.AnalyzeFile(snapshotPath);
+                if (analysis == null || analysis.BodyBytes <= 0)
+                {
+                    DebugLogger.Info($"Home: clock refresh found no usable body in '{snapshotPath}'.");
+                    return;
+                }
+
+                DebugLogger.Info($"Home: clock refresh - duration {analysis.DurationMs}ms "
+                               + $"from {analysis.BodyBytes} body bytes.");
 
                 MatchShareState.ReportDuration(analysis.DurationMs);
                 UiUtils.InvokeOnUiThread(this,
