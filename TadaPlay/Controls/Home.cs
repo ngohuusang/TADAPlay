@@ -1648,6 +1648,7 @@ namespace TadaPlay.Controls
         private System.Windows.Forms.Timer _watchExitTimer;
         private const int WatchExitPollMs = 3000;
         private SpectatorOverlay _overlay;
+        private PlayheadGovernor _playheadGovernor;
 
         private void StartLiveStream(string hostIp, string hostLabel, LiveShareClient.FetchResult fetch)
         {
@@ -1659,6 +1660,9 @@ namespace TadaPlay.Controls
                 if (_liveStream is { IsRunning: false })
                 {
                     CloseOverlay();
+                    // Nothing left to fast-forward into once the stream is done.
+                    _playheadGovernor?.Dispose();
+                    _playheadGovernor = null;
                     // Spectating is over (match ended, all data received - a clean finish, not a
                     // connection problem), so close the game that was opened just to watch it,
                     // instead of leaving the viewer to alt-tab and quit the replay by hand.
@@ -1672,6 +1676,12 @@ namespace TadaPlay.Controls
             // and that is precisely when a viewer needs it, to judge how far behind live they
             // are. So it also floats above the game.
             ShowOverlay(hostIp, hostLabel);
+
+            // Stop fast-forward from running the replay off its end: as the playhead nears the
+            // last byte, this floors the game speed back to normal (see PlayheadGovernor).
+            _playheadGovernor?.Dispose();
+            _playheadGovernor = new PlayheadGovernor(fetch.Path, msg => printLog(msg, Color.RoyalBlue));
+            _playheadGovernor.Start();
         }
 
         /// <summary>
@@ -1823,6 +1833,8 @@ namespace TadaPlay.Controls
             LiveStreamSession session = _liveStream;
             _liveStream = null;
             session?.Dispose();
+            _playheadGovernor?.Dispose();
+            _playheadGovernor = null;
             CloseOverlay();
         }
 
