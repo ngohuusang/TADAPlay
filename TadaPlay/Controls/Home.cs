@@ -1286,7 +1286,14 @@ namespace TadaPlay.Controls
                 printLog(message, isProblem ? Color.Orange : Color.RoyalBlue);
                 // A session reports its final message with IsRunning already false, so this is
                 // how the overlay learns the match is over without polling for it.
-                if (_liveStream is { IsRunning: false }) CloseOverlay();
+                if (_liveStream is { IsRunning: false })
+                {
+                    CloseOverlay();
+                    // Spectating is over (match ended, all data received - a clean finish, not a
+                    // connection problem), so close the game that was opened just to watch it,
+                    // instead of leaving the viewer to alt-tab and quit the replay by hand.
+                    if (!isProblem) _ = AutoCloseSpectatorGameAsync();
+                }
             });
             _liveStream.Start();
 
@@ -1294,6 +1301,36 @@ namespace TadaPlay.Controls
             // and that is precisely when a viewer needs it, to judge how far behind live they
             // are. So it also floats above the game.
             ShowOverlay(hostIp, hostLabel);
+        }
+
+        /// <summary>
+        /// Closes the game opened for spectating once the watched match is over. A short grace
+        /// period first, so the viewer sees the final moments / score screen rather than the
+        /// game vanishing the instant the last byte arrives - and if they have meanwhile picked
+        /// a new match to watch, that new game is left alone.
+        /// </summary>
+        private async System.Threading.Tasks.Task AutoCloseSpectatorGameAsync()
+        {
+            try { await System.Threading.Tasks.Task.Delay(TimeSpan.FromSeconds(8)); }
+            catch { /* app closing */ }
+
+            // A new watch started during the grace period owns the game now - leave it running.
+            if (_liveStream is { IsRunning: true }) return;
+
+            try
+            {
+                var game = LiveRecordReader.FindGameProcess();
+                if (game == null) return;
+                int pid = game.Id;
+                try { if (!game.HasExited) { game.Kill(); game.WaitForExit(3000); } }
+                finally { game.Dispose(); }
+                DebugLogger.Info($"Home: auto-closed spectator game (PID {pid}) after the match ended.");
+                printLog("[Xem] Trận đã kết thúc - đã tự động đóng game.", Color.RoyalBlue);
+            }
+            catch (Exception ex)
+            {
+                DebugLogger.Warn($"Home: could not auto-close spectator game: {ex.Message}");
+            }
         }
 
         private void ShowOverlay(string hostIp, string hostLabel)

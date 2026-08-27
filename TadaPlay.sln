@@ -10,6 +10,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TadaPlay", "TadaPlay\TadaPl
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WireGuardNT-PInvoke", "WireGuardNT-PInvoke\WireGuardNT-PInvoke.csproj", "{62C14723-AC02-AD33-F3C4-EDEBCCA5CB14}"
 EndProject
+Project("{54435603-DBB4-11D2-8724-00A0C9A8B90C}") = "TADAPlay", "..\promt\TADAPlay\TADAPlayInstaller.vdproj", "{39341F46-3259-4937-89ED-8C58786A6177}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -34,6 +36,14 @@ Global
 		{62C14723-AC02-AD33-F3C4-EDEBCCA5CB14}.Release|Any CPU.Build.0 = Release|Any CPU
 		{62C14723-AC02-AD33-F3C4-EDEBCCA5CB14}.Release|x64.ActiveCfg = Release|Any CPU
 		{62C14723-AC02-AD33-F3C4-EDEBCCA5CB14}.Release|x64.Build.0 = Release|Any CPU
+		{39341F46-3259-4937-89ED-8C58786A6177}.Debug|Any CPU.ActiveCfg = Debug
+		{39341F46-3259-4937-89ED-8C58786A6177}.Debug|Any CPU.Build.0 = Debug
+		{39341F46-3259-4937-89ED-8C58786A6177}.Debug|x64.ActiveCfg = Debug
+		{39341F46-3259-4937-89ED-8C58786A6177}.Debug|x64.Build.0 = Debug
+		{39341F46-3259-4937-89ED-8C58786A6177}.Release|Any CPU.ActiveCfg = Release
+		{39341F46-3259-4937-89ED-8C58786A6177}.Release|Any CPU.Build.0 = Release
+		{39341F46-3259-4937-89ED-8C58786A6177}.Release|x64.ActiveCfg = Release
+		{39341F46-3259-4937-89ED-8C58786A6177}.Release|x64.Build.0 = Release
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
