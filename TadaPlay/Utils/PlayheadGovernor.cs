@@ -10,35 +10,68 @@ namespace TadaPlay.Utils
     ///
     /// The viewer watches a growing .mgz: fine at normal speed, but fast-forwarding races the
     /// playhead to the last byte, where AoE2 ends the replay even though the host is still
-    /// playing. There is no way to make the game wait at end-of-file, so instead this watches
-    /// how close the playhead is to the end and, once it comes within a safety window of it,
-    /// presses "Slow Down Game" (numpad minus) enough to floor the replay back to normal speed
-    /// (50, from 100 at full fast-forward) - so it simply cannot be sped up into the end.
+    /// playing. Nothing can make the game wait at end-of-file, so instead this watches how close
+    /// the playhead is to the end and, while it is inside a safety window AND still outrunning
+    /// real time, injects the viewer's Ctrl+Left "slower" control one step per tick until the
+    /// replay is back to normal speed (50).
     ///
-    /// Two things are necessarily approximate and are tuned toward safety:
-    /// - The playhead is read from the game's file-read position, which runs a little ahead of
-    ///   what is on screen, so the slow-down triggers slightly early rather than too late.
-    /// - "Within the safety window of the end" is estimated from the record's average bytes-per-second, since
-    ///   converting a byte offset to an exact game-time on every tick would be too costly.
+    /// It is a closed loop on purpose. Injected keys reach the game only intermittently, so a
+    /// one-shot "set the speed to 50" run (floor to 0, then two steps back up) turned dropped
+    /// taps into a speed INCREASE and measurably flapped between 50 and 100. Stepping down once
+    /// per tick can only ever slow the replay, needs no knowledge of the current speed, and stops
+    /// by itself as soon as the playhead is back to ~1x - so it never runs on down into pause.
+    ///
+    /// The trigger is "how many REAL seconds before the playhead would catch the live edge",
+    /// which needs two measurements rather than one: how fast the playhead consumes the record,
+    /// and how fast the HOST is appending to it. The host plays in real time, so its append rate
+    /// IS 1x, and the gap only closes at the difference between the two. Fast-forwarded playback
+    /// was measured at 15-30x the host's rate, so a window expressed in game time collapsed to
+    /// about three real seconds - far too little to get a keypress in.
+    ///
+    /// The playhead is read from the game's file-read position, which runs a little ahead of what
+    /// is on screen, so it triggers slightly early rather than too late.
     ///
     /// Keys are only injected while the GAME is the foreground window, so a press never lands in
     /// TadaPlay or anywhere else if the viewer has alt-tabbed away.
     /// </summary>
     public sealed class PlayheadGovernor : IDisposable
     {
-        private const int TickMs = 1500;
-        private const int SafetySeconds = 120;         // start flooring within this of the end
-        // How much faster than 1x the playhead must move to count as fast-forwarding. Tunable.
-        private const double FastForwardFactor = 1.8;
-        private static readonly TimeSpan ReanalyseEvery = TimeSpan.FromSeconds(6);
+        private const int TickMs = 600;
+        // How much REAL time we want in hand before the playhead would hit the end. This is the
+        // control variable, and it has to be real seconds rather than game seconds: measured on a
+        // live match, a fast-forwarded replay consumed the record at ~25,600 bytes/s against a 1x
+        // rate of ~790 bytes/s, i.e. about 32x. A "120 seconds of game time" window is therefore
+        // only ~3.6 REAL seconds at that speed - too little to press anything - while the same
+        // window is a comfortable stretch at 2x. Working in real time adapts to whatever speed
+        // the viewer actually chose.
+        private const double ReactSeconds = 30;
+        // How much faster than 1x the playhead must move to count as fast-forwarding.
+        // Kept low on purpose: the playback steps are 0/25/50/75/99/100 with 50 normal, so speed
+        // 75 only moves the playhead at 1.5x. At the old 1.8 threshold that read as "not fast
+        // forwarding", so the governor stopped while the replay still outran the incoming data
+        // and reached the end anyway. 1.25 catches 75 (1.5x) and 100 (2x) but not normal (1.0x).
+        private const double FastForwardFactor = 1.25;
+        // Minimum gap between two injected presses. Ticking fast keeps the measurement current,
+        // but hammering the game with presses is what stopped them registering at all: ~1.6
+        // presses a second produced 99 consecutive no-ops, while presses ~3s apart did slow the
+        // replay. This paces the presses without slowing down the detection.
+        private static readonly TimeSpan InjectEvery = TimeSpan.FromMilliseconds(3000);
+        // The governor used to log only when it acted, which left every "why did it not act?"
+        // question unanswerable. This is how often it reports what it is seeing instead.
+        private static readonly TimeSpan StatusEvery = TimeSpan.FromSeconds(10);
 
         private readonly string _replayPath;
         private readonly Action<string> _log;
 
         private System.Threading.Timer _timer;
-        private DateTime _lastAnalyseUtc = DateTime.MinValue;
-        private double _bodyBytesPerMs;   // record's average density, to turn the window into bytes
+        private double _appendRate;       // smoothed host write rate, bytes per second = 1x
+        private double _playheadRate;     // playhead consumption, bytes per second
         private bool _pinning;
+        private bool _warnedElevation;
+        private volatile bool _injecting;
+        private DateTime _lastInjectUtc = DateTime.MinValue;
+        private DateTime _lastStatusUtc = DateTime.MinValue;
+        private int _attempts;
         private long _prevPos;
         private long _prevTotal;
         private DateTime _prevTickUtc = DateTime.MinValue;
@@ -54,7 +87,7 @@ namespace TadaPlay.Utils
             if (string.IsNullOrWhiteSpace(_replayPath)) return;
             _timer = new System.Threading.Timer(_ => Tick(), null, TickMs, TickMs);
             DebugLogger.Info($"PlayheadGovernor: watching '{_replayPath}', will floor speed within " +
-                             $"{SafetySeconds}s of the end.");
+                             $"{ReactSeconds}s (real time) of the end.");
         }
 
         private void Tick()
@@ -69,64 +102,106 @@ namespace TadaPlay.Utils
                 // Only govern OUR spectator replay, never another recorded game the player opened.
                 if (!string.IsNullOrEmpty(path) && !SamePath(path, _replayPath)) return;
 
-                RefreshRate();
-
                 double elapsedMs = _prevTickUtc == DateTime.MinValue ? 0 : (DateTime.UtcNow - _prevTickUtc).TotalMilliseconds;
                 long posDelta = pos - _prevPos;
                 long totalDelta = total - _prevTotal;
+                bool first = _prevTickUtc == DateTime.MinValue;
                 _prevPos = pos; _prevTotal = total; _prevTickUtc = DateTime.UtcNow;
-
-                if (_bodyBytesPerMs <= 0 || elapsedMs <= 0) return;
+                if (first || elapsedMs <= 0) return;
 
                 long remainingBytes = total - pos;
-                double safetyBytes = _bodyBytesPerMs * SafetySeconds * 1000.0;
-                if (remainingBytes > safetyBytes)
+
+                // 1x is the rate the HOST is writing at - it is playing in real time, so its
+                // append rate is the definition of real time for this record. The record's
+                // average bytes-per-second is NOT a usable reference: density varies several-fold
+                // between quiet and busy stretches of a match, which both hid real fast-forwarding
+                // and invented it where there was none.
+                double appendNow = totalDelta / (elapsedMs / 1000.0);
+                double playheadNow = posDelta / (elapsedMs / 1000.0);
+                _appendRate = _appendRate <= 0 ? appendNow : (_appendRate * 0.7) + (appendNow * 0.3);
+
+                // Fast attack, slow release. Pressing fast-forward multiplies the playhead rate
+                // ~20x in one step; a symmetric average needed several ticks to believe it, and by
+                // then the runway it was protecting had already been spent - measured going from
+                // "5.1s left" to "0.0s left" in a single second. Rising rates are therefore taken
+                // immediately and only falling ones are smoothed.
+                _playheadRate = playheadNow > _playheadRate
+                    ? playheadNow
+                    : (_playheadRate * 0.6) + (playheadNow * 0.4);
+
+                // The playhead only reaches the end if it gains on the live edge; what matters is
+                // the rate the gap CLOSES at, not the playback rate on its own.
+                double closingRate = _playheadRate - _appendRate;
+                bool gaining = closingRate > (_appendRate * 0.25) + 200;
+
+                if (DateTime.UtcNow - _lastStatusUtc >= StatusEvery)
                 {
-                    _pinning = false;   // far from the end: fast-forward freely
+                    _lastStatusUtc = DateTime.UtcNow;
+                    string runway = gaining && closingRate > 0
+                        ? $"{remainingBytes / closingRate:F1}s"
+                        : "not gaining";
+                    DebugLogger.Info($"PlayheadGovernor: status - playhead {_playheadRate:F0} B/s, " +
+                                     $"host {_appendRate:F0} B/s ({_playheadRate / Math.Max(_appendRate, 1):F1}x), " +
+                                     $"closing {closingRate:F0} B/s, {remainingBytes} bytes behind live, " +
+                                     $"runway {runway}.");
+                }
+
+                if (!gaining)
+                {
+                    _pinning = false;   // keeping pace with the host - nothing to protect against
                     return;
                 }
 
-                // Near the end. Only step in if the playhead is actually being fast-forwarded:
-                // it is advancing markedly faster than 1x. The 1x reference is the larger of how
-                // fast the file itself is growing (the host's real-time rate) and the record's
-                // average density - so watching the tail at normal speed does NOT get pinned,
-                // only genuine fast-forwarding does.
-                double oneXBytes = Math.Max(totalDelta, _bodyBytesPerMs * elapsedMs);
-                bool fastForwarding = posDelta > oneXBytes * FastForwardFactor;
-
-                if (!fastForwarding)
+                double secondsToEof = remainingBytes / closingRate;
+                if (secondsToEof > ReactSeconds)
                 {
-                    _pinning = false;   // at normal speed near the end - leave it alone (no jitter)
+                    _pinning = false;   // plenty of runway: fast-forward freely
                     return;
                 }
 
                 if (!GameInput.IsGameForeground()) return;
-                // Try both delivery paths - SendInput (works windowed/non-exclusive) and a
-                // PostMessage straight to the game window (a chance for fullscreen-exclusive).
-                GameInput.SetReplaySpeedNormal();
-                GameInput.SetReplaySpeedNormalViaPost();
+
+                // Key injection needs elevation (UIPI): a Medium-integrity TadaPlay cannot send
+                // input to the game. Warn once so this failure mode is obvious rather than silent.
+                if (!GameInput.IsElevated() && !_warnedElevation)
+                {
+                    _warnedElevation = true;
+                    _log("[Xem] ⚠️ TadaPlay không chạy quyền Admin nên KHÔNG điều khiển được tốc độ " +
+                         "replay. Hãy chạy TadaPlay bằng Administrator để tính năng ghìm tốc độ hoạt động.");
+                }
+
+                // A burst holds keys for a few hundred ms, longer than one tick, so it runs
+                // off-thread; ticks during a burst, and within the pacing gap after it, are
+                // skipped. The pacing matters: presses fired as fast as the tick allows stopped
+                // registering with the game altogether.
+                if (_injecting || DateTime.UtcNow - _lastInjectUtc < InjectEvery) return;
+                _injecting = true;
+                _lastInjectUtc = DateTime.UtcNow;
+                _attempts++;
+                System.Threading.Tasks.Task.Run(() =>
+                {
+                    // Stepping DOWN only, then re-measuring, is what makes this converge: a
+                    // one-shot "set it to 50" run (floor to 0, then back up two steps) turned
+                    // intermittently-dropped keys into a speed INCREASE and measurably flapped
+                    // between 50 and 100. Two steps per burst because full speed is three steps
+                    // from normal (100 -> 99 -> 75 -> 50); overshooting one notch to 25 is
+                    // harmless, as firing stops there and the viewer can speed back up.
+                    try { GameInput.StepSlowerOnce(); }
+                    finally { _injecting = false; }
+                });
                 if (!_pinning)
                 {
                     _pinning = true;
-                    _log("[Xem] Gần hết trận - đã đưa tốc độ về 50 (không tua nữa) để tránh kết thúc sớm.");
+                    _log("[Xem] Gần hết trận - đang hạ tốc độ về 50 (không tua nữa) để tránh kết thúc sớm.");
                 }
-                DebugLogger.Info($"PlayheadGovernor: fast-forward near EOF (posDelta {posDelta} > " +
-                                 $"~{oneXBytes * FastForwardFactor:F0}, {remainingBytes} to end) -> set speed 50.");
+                DebugLogger.Info($"PlayheadGovernor: step slower #{_attempts} - playhead " +
+                                 $"{_playheadRate:F0} B/s vs host {_appendRate:F0} B/s " +
+                                 $"({_playheadRate / Math.Max(_appendRate, 1):F1}x), closing {closingRate:F0} B/s, " +
+                                 $"{remainingBytes} bytes = {secondsToEof:F1}s to the end.");
             }
             catch (Exception ex)
             {
                 DebugLogger.Warn($"PlayheadGovernor: tick failed: {ex.Message}");
-            }
-        }
-
-        private void RefreshRate()
-        {
-            if (_bodyBytesPerMs > 0 && DateTime.UtcNow - _lastAnalyseUtc < ReanalyseEvery) return;
-            _lastAnalyseUtc = DateTime.UtcNow;
-            LiveRecordReader.RecordAnalysis a = LiveRecordReader.AnalyzeFile(_replayPath);
-            if (a != null && a.DurationMs > 0 && a.BodyBytes > 0)
-            {
-                _bodyBytesPerMs = (double)a.BodyBytes / a.DurationMs;
             }
         }
 
