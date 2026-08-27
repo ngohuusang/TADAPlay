@@ -320,9 +320,11 @@ namespace TadaPlay.Controls
             // local file walk - none of the shadow copy, snapshot or serving that sharing does.
             if (!appContext.GetAllowSpectateSetting())
             {
+                // Paced with _lastCaptureUtc only - deliberately NOT MatchShareState.Captured(),
+                // which also re-arms the countdown viewers are shown. Doing that here published
+                // "chờ 90 giây" to everyone while sharing was off, i.e. a countdown to a capture
+                // that is never coming, which is the exact thing this change set out to remove.
                 _lastCaptureUtc = DateTime.UtcNow;
-                MatchShareState.CaptureInterval = TimeSpan.FromMilliseconds(IdleCaptureIntervalMs);
-                MatchShareState.Captured();
                 _ = System.Threading.Tasks.Task.Run(RefreshClockOnly);
                 return;
             }

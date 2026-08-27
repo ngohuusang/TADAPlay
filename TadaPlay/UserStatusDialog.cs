@@ -386,6 +386,18 @@ namespace TadaPlay
                 return;
             }
 
+            if (status.InGame && !status.AllowSpectate)
+            {
+                // Playing, but they have turned off being watched. The countdown below would
+                // be a promise nothing is going to keep, and "không xem được" alone reads like
+                // a fault - so say which it is.
+                string clock = status.GameMs > 0 ? $" - đã chơi {Clock(status.GameTime)}" : string.Empty;
+                Show("ĐANG CHƠI - KHÔNG SPEC", IdleColor,
+                     $"Người này đang trong trận{clock}, nhưng đã tắt cho phép người khác xem. "
+                     + "Không thể xem trận của họ.", false);
+                return;
+            }
+
             if (status.InGame && !status.HasMatch)
             {
                 // In a game, but nothing has been captured yet. That is a countdown, not a

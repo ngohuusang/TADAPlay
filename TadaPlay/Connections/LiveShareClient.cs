@@ -32,6 +32,15 @@ namespace TadaPlay.Connections
             public long GameMs { get; set; }
             /// <summary>The host's game is paused: its match clock has stopped advancing.</summary>
             public bool Paused { get; set; }
+
+            /// <summary>
+            /// Whether the host permits being watched. False means their match will never
+            /// become watchable, as opposed to not being watchable yet.
+            ///
+            /// Defaults to true, which is also right for the direct probe below: a host who
+            /// answers on their share port is by definition sharing.
+            /// </summary>
+            public bool AllowSpectate { get; set; } = true;
             /// <summary>How far into the match the shared record reaches.</summary>
             public TimeSpan GameTime => TimeSpan.FromMilliseconds(GameMs);
             public DateTime? FinishedUtc { get; set; }
@@ -122,6 +131,7 @@ namespace TadaPlay.Connections
                 HasMatch = user.HasMatch,
                 GameMs = user.GameMs,
                 Paused = user.Paused,
+                AllowSpectate = user.AllowSpectate,
                 WaitSeconds = user.WaitSeconds
             };
         }
