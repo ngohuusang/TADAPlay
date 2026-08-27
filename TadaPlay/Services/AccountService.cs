@@ -3,6 +3,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System.Net;
 using System.Net.Http;
+using System.Reflection;
 using System.Text;
 using TadaPlay.Common.Models;
 using TadaPlay.Contexts.Interfaces;
@@ -19,6 +20,40 @@ public class AccountService : IAccountService
     private readonly HttpClient _httpClient;
     private readonly IAppContext _appContext;
 
+    /// <summary>
+    /// This client's version, sent on EVERY request so the server can gate old builds.
+    ///
+    /// The server rejects a login whose version it cannot read with "Phiên bản ... không xác
+    /// định" - and the client used to send its version only on upload_record, never on
+    /// login/auth, so a perfectly current build was told to update. It is sent three ways so
+    /// it matches whatever the server reads: an X-Client-Version header (covers header-based
+    /// checks and the body-less GET auth call), the User-Agent, and a client_version field in
+    /// the login body. The "+&lt;git-sha&gt;" suffix ProductVersion can carry is stripped so a
+    /// plain "3.27.0" compares cleanly against the server's minimum.
+    /// </summary>
+    private static readonly string ClientVersion = GetClientVersion();
+
+    private static string GetClientVersion()
+    {
+        string v;
+        try
+        {
+            // Read the version straight off this assembly rather than trusting
+            // Application.ProductVersion, so it can never come back empty at runtime and send
+            // the server a blank version (which it reads as "không xác định" and rejects).
+            var asm = System.Reflection.Assembly.GetExecutingAssembly();
+            v = asm.GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>()?.InformationalVersion;
+            if (string.IsNullOrWhiteSpace(v)) v = asm.GetName().Version?.ToString();
+            if (string.IsNullOrWhiteSpace(v)) v = System.Windows.Forms.Application.ProductVersion;
+        }
+        catch { v = System.Windows.Forms.Application.ProductVersion; }
+
+        v = (v ?? "").Trim();
+        int plus = v.IndexOf('+');   // drop the "+<git-sha>" suffix -> plain "3.27.0"
+        if (plus >= 0) v = v.Substring(0, plus);
+        return v;
+    }
+
     public AccountService(IAppContext appContext)
     {
         System.Net.ServicePointManager.SecurityProtocol = System.Net.SecurityProtocolType.Tls12;
@@ -29,6 +64,19 @@ public class AccountService : IAccountService
         // upload over a possibly slow VPN link) rather than the old 10s, which was aborting
         // uploads that hadn't even finished sending yet.
         _httpClient.Timeout = TimeSpan.FromMinutes(5);
+
+        // Advertise the client version on every request so the server's version gate sees it
+        // (including on login and the GET auto-login/auth call, which carry no body).
+        try
+        {
+            if (!string.IsNullOrEmpty(ClientVersion))
+            {
+                _httpClient.DefaultRequestHeaders.Add("X-Client-Version", ClientVersion);
+                _httpClient.DefaultRequestHeaders.UserAgent.ParseAdd($"TadaPlay/{ClientVersion}");
+            }
+        }
+        catch (Exception ex) { DebugLogger.Warn("AccountService: could not set version headers: " + ex.Message); }
+
         _appContext = appContext;
     }
 
@@ -134,7 +182,10 @@ public class AccountService : IAccountService
         var loginData = new
         {
             username = Username,
-            password = Password
+            password = Password,
+            // Also in the body: a server that reads the version from the JSON login payload
+            // (rather than a header) still sees it, so a current client is never told to update.
+            client_version = ClientVersion
         };
 
         var json = JsonConvert.SerializeObject(loginData);
