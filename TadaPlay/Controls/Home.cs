@@ -170,7 +170,7 @@ namespace TadaPlay.Controls
             if (!string.IsNullOrWhiteSpace(appContext.GetGameFolder())) return;
 
             AntdUI.Modal.open(new AntdUI.Modal.Config(mainForm, "Chưa cấu hình thư mục game",
-                "Bạn cần chọn thư mục cài đặt AoE2 (nơi chứa SaveGame) trong Cài đặt để TadaPlay có thể đồng bộ tên, theo dõi và tải lên record trận đấu.",
+                "Bạn cần chọn thư mục cài đặt AoE2 trong Cài đặt để TadaPlay có thể đồng bộ tên, theo dõi và tải lên record trận đấu.",
                 AntdUI.TType.Warn)
             {
                 OkText = "Mở cài đặt",
@@ -807,10 +807,31 @@ namespace TadaPlay.Controls
             return (status, status == "online" ? Color.Green : Color.Gray);
         }
 
+        /// <summary>
+        /// Where a player belongs in the list: the ones in a match first, then everybody else.
+        ///
+        /// A lobby of thirty people buries the two or three who are actually playing somewhere
+        /// in the middle, and those are the only rows worth clicking - they are the ones that
+        /// open a match to watch. Watchable comes above merely-in-a-game so the top of the
+        /// list is the part that can be acted on right now.
+        /// </summary>
+        private static int ActivityRank(User user)
+        {
+            if (user.IsWatchable) return 0;
+            if (user.InGame) return 1;
+            return 2;
+        }
+
         private void UpdateOnlineUsersListView(IReadOnlyList<User> users)
         {
             userList.Items.Clear();
-            foreach (var user in users)
+            // Alphabetical within each group rather than the order the server happened to send:
+            // the list is rebuilt from scratch on every broadcast, so without a total order the
+            // rows shuffle under the cursor every few seconds.
+            var ordered = users.OrderBy(ActivityRank)
+                               .ThenBy(u => u.Username ?? string.Empty, StringComparer.OrdinalIgnoreCase)
+                               .ToList();
+            foreach (var user in ordered)
             {
                 AntdUI.Chat.MsgItem userItem = new AntdUI.Chat.MsgItem();
                 string username = user.FullName ?? user.Username;
@@ -1351,7 +1372,7 @@ namespace TadaPlay.Controls
                 string gameFolder = appContext.GetGameFolder();
                 if (string.IsNullOrWhiteSpace(gameFolder))
                 {
-                    string cfgMsg = "Chưa cấu hình thư mục game. Vào Cài đặt để chọn thư mục cài đặt AoE2 (nơi chứa SaveGame).";
+                    string cfgMsg = "Chưa cấu hình thư mục game. Vào Cài đặt để chọn thư mục cài đặt AoE2.";
                     printLog($"[Record] {cfgMsg}", Color.Red);
                     if (!isAutomatic)
                     {

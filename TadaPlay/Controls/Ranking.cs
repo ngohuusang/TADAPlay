@@ -1,7 +1,9 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
 using System.Windows.Forms;
+using AntdUI;
 using TadaPlay.Logger;
 using TadaPlay.Services.Interface;
 using TadaPlay.Utils;
@@ -10,6 +12,11 @@ namespace TadaPlay.Controls
 {
     /// <summary>
     /// Native ELO leaderboard view. Pulls ranked players from api.php?action=leaderboard.
+    ///
+    /// Drawn with <see cref="AntdUI.Table"/> rather than a ListView: the striping, the header
+    /// styling and the per-cell colours were all being hand-set on ListViewItems before, down to
+    /// a 1x32 blank bitmap in an ImageList purely to make the rows taller. The table does all of
+    /// that, and matches the rest of the app.
     /// </summary>
     public class Ranking : UserControl
     {
@@ -19,119 +26,154 @@ namespace TadaPlay.Controls
         public event EventHandler BackRequested;
 
         private readonly IAccountService _accountService;
-        private readonly ListView _listView;
-        private readonly Label _statusLabel;
-        private readonly Button _refreshButton;
+        private readonly AntdUI.Table _table;
+        private readonly AntdUI.Label _statusLabel;
+        private readonly AntdUI.Button _refreshButton;
 
         public Ranking(IAccountService accountService)
         {
             _accountService = accountService;
             Dock = DockStyle.Fill;
             Font = new Font("Segoe UI", 9.75F);
+            BackColor = UiTheme.PageBg;
 
-            var header = new Panel { Dock = DockStyle.Top, Height = 48, Padding = new Padding(12, 8, 12, 8) };
-            var backButton = new Button { Text = "← Trang chủ", Dock = DockStyle.Left, Width = 110 };
+            var header = new System.Windows.Forms.Panel { Dock = DockStyle.Top, Height = 56, Padding = new Padding(14, 10, 14, 8), BackColor = Color.Transparent };
+
+            var backButton = UiTheme.Quiet("← Trang chủ");
+            backButton.Dock = DockStyle.Left;
+            backButton.Width = 130;
             backButton.Click += (s, e) => BackRequested?.Invoke(this, EventArgs.Empty);
-            var title = new Label
+
+            var title = new AntdUI.Label
             {
-                Text = "   🏆 Bảng xếp hạng (ELO)",
+                Text = "Bảng xếp hạng (ELO)",
                 Dock = DockStyle.Left,
-                AutoSize = true,
+                Width = 260,
+                PrefixSvg = UiTheme.IconTrophy,
+                PrefixColor = UiTheme.AccentAccount,
+                IconGap = 10,
+                Padding = new Padding(14, 0, 0, 0),
                 Font = new Font("Segoe UI Semibold", 12F, FontStyle.Bold),
-                TextAlign = ContentAlignment.MiddleLeft
+                ForeColor = UiTheme.Ink,
+                TextAlign = ContentAlignment.MiddleLeft,
+                BackColor = Color.Transparent,
             };
-            _refreshButton = new Button { Text = "Làm mới", Dock = DockStyle.Right, Width = 90 };
+
+            _refreshButton = UiTheme.Quiet("Làm mới");
+            _refreshButton.Dock = DockStyle.Right;
+            _refreshButton.Width = 110;
             _refreshButton.Click += async (s, e) => await LoadAsync();
-            var webButton = new Button { Text = "Mở trang web", Dock = DockStyle.Right, Width = 110 };
+
+            var webButton = UiTheme.Quiet("Mở trang web");
+            webButton.Dock = DockStyle.Right;
+            webButton.Width = 130;
             webButton.Click += (s, e) => OpenWeb();
 
-            // Add in right-to-left / left-to-right dock order: title after back so it sits to its right.
+            // Dock=Left/Right stack in add order from their own edge inwards.
             header.Controls.Add(title);
             header.Controls.Add(backButton);
             header.Controls.Add(_refreshButton);
+            header.Controls.Add(UiTheme.Spacer(DockStyle.Right, 8));
             header.Controls.Add(webButton);
 
-            _listView = new ListView
+            _table = new AntdUI.Table
             {
                 Dock = DockStyle.Fill,
-                View = View.Details,
-                FullRowSelect = true,
-                GridLines = false,
-                MultiSelect = false,
-                HeaderStyle = ColumnHeaderStyle.Nonclickable,
+                Bordered = true,
+                BorderColor = UiTheme.CardBorder,
+                Radius = 8,
                 Font = new Font("Segoe UI", 10F),
-                BorderStyle = BorderStyle.FixedSingle
+                ColumnFont = new Font("Segoe UI Semibold", 10F, FontStyle.Bold),
+                RowHeight = 38,
+                Columns = new ColumnCollection
+                {
+                    new Column(nameof(Row.Rank), "#", ColumnAlign.Center) { Width = "60" },
+                    new Column(nameof(Row.Player), "Người chơi"),
+                    new Column(nameof(Row.Elo), "ELO", ColumnAlign.Right) { Width = "90" },
+                    new Column(nameof(Row.Games), "Trận", ColumnAlign.Right) { Width = "80" },
+                    new Column(nameof(Row.Wins), "Thắng", ColumnAlign.Right) { Width = "80" },
+                    new Column(nameof(Row.Losses), "Bại", ColumnAlign.Right) { Width = "80" },
+                    new Column(nameof(Row.WinRate), "Tỉ lệ thắng", ColumnAlign.Right) { Width = "120" },
+                },
             };
-            // Taller, more breathable rows - ListView row height tracks the SmallImageList's
-            // item size, so a blank placeholder image is the usual way to bump it (no real icons).
-            var rowSizer = new ImageList { ImageSize = new Size(1, 32) };
-            rowSizer.Images.Add(new Bitmap(1, 32));
-            _listView.SmallImageList = rowSizer;
-            _listView.Columns.Add("#", 50, HorizontalAlignment.Center);
-            _listView.Columns.Add("Người chơi", 200, HorizontalAlignment.Left);
-            _listView.Columns.Add("ELO", 80, HorizontalAlignment.Right);
-            _listView.Columns.Add("Trận", 70, HorizontalAlignment.Right);
-            _listView.Columns.Add("Thắng", 70, HorizontalAlignment.Right);
-            _listView.Columns.Add("Bại", 70, HorizontalAlignment.Right);
-            _listView.Columns.Add("Tỉ lệ thắng", 110, HorizontalAlignment.Right);
-            // Stretch the win-rate column to fill any leftover width so row backgrounds (zebra
-            // stripes) span the full list instead of leaving a blank gap on the right.
-            _listView.Resize += (s, e) => UiUtils.StretchLastListViewColumn(_listView, 110);
 
-            _statusLabel = new Label
+            var tableHost = new System.Windows.Forms.Panel { Dock = DockStyle.Fill, Padding = new Padding(14, 0, 14, 8), BackColor = Color.Transparent };
+            tableHost.Controls.Add(_table);
+
+            _statusLabel = new AntdUI.Label
             {
                 Dock = DockStyle.Bottom,
-                Height = 26,
-                Padding = new Padding(12, 4, 12, 4),
-                ForeColor = Color.Gray
+                Height = 30,
+                Padding = new Padding(16, 0, 16, 6),
+                ForeColor = UiTheme.Muted,
+                Font = new Font("Segoe UI", 9.5F),
+                TextAlign = ContentAlignment.MiddleLeft,
+                BackColor = Color.Transparent,
             };
 
-            Controls.Add(_listView);
+            Controls.Add(tableHost);
             Controls.Add(_statusLabel);
             Controls.Add(header);
 
             Load += async (s, e) => await LoadAsync();
         }
 
+        /// <summary>
+        /// One table row. The property NAMES are the column keys, so they have to keep matching
+        /// the <see cref="Column"/>s above - which is why those use nameof rather than literals.
+        ///
+        /// The typed cells (<see cref="CellText"/>, <see cref="CellTag"/>) are how a single cell
+        /// gets its own colour or weight without styling the whole row.
+        /// </summary>
+        private sealed class Row
+        {
+            public object Rank { get; set; }
+            public object Player { get; set; }
+            public object Elo { get; set; }
+            public int Games { get; set; }
+            public int Wins { get; set; }
+            public int Losses { get; set; }
+            public object WinRate { get; set; }
+        }
+
         private async System.Threading.Tasks.Task LoadAsync()
         {
             _refreshButton.Enabled = false;
-            _statusLabel.ForeColor = Color.Gray;
+            _refreshButton.Loading = true;
+            _statusLabel.ForeColor = UiTheme.Muted;
             _statusLabel.Text = "Đang tải bảng xếp hạng...";
             try
             {
                 var players = await _accountService.GetLeaderboardAsync();
 
-                _listView.BeginUpdate();
-                _listView.Items.Clear();
-                for (int i = 0; i < players.Count; i++)
+                var bold = new Font("Segoe UI Semibold", 10F, FontStyle.Bold);
+                // The medals need a font that actually has them. AntdUI.Table draws its own text
+                // and does not fall back the way a WinForms Label does, so a podium row rendered
+                // as an empty box until the cell was given Segoe UI Emoji explicitly.
+                var medal = new Font("Segoe UI Emoji", 12F, FontStyle.Regular);
+                var rows = new List<Row>(players.Count);
+                foreach (var p in players)
                 {
-                    var p = players[i];
+                    // A medal for the top three, the number for everyone else.
                     string rankText = p.Rank switch { 1 => "🥇", 2 => "🥈", 3 => "🥉", _ => p.Rank.ToString() };
-                    var item = new ListViewItem(rankText)
+                    bool podium = p.Rank <= 3;
+                    bool winning = p.WinRate >= 50;
+
+                    rows.Add(new Row
                     {
-                        UseItemStyleForSubItems = false,
-                        // Zebra striping so long lists stay readable without gridlines.
-                        BackColor = i % 2 == 0 ? Color.White : UiColors.ZebraStripe,
-                        Font = new Font(_listView.Font, p.Rank <= 3 ? FontStyle.Bold : FontStyle.Regular)
-                    };
-                    item.SubItems.Add(p.DisplayName ?? p.Username);
-
-                    var eloSubItem = item.SubItems.Add(p.Rating.ToString());
-                    eloSubItem.Font = new Font(_listView.Font, FontStyle.Bold);
-
-                    item.SubItems.Add(p.GamesPlayed.ToString());
-                    item.SubItems.Add(p.Wins.ToString());
-                    item.SubItems.Add(p.Losses.ToString());
-
-                    var winRateSubItem = item.SubItems.Add(p.WinRate + "%");
-                    winRateSubItem.ForeColor = p.WinRate >= 50 ? UiColors.Winner : Color.Gray;
-                    winRateSubItem.Font = new Font(_listView.Font, p.WinRate >= 50 ? FontStyle.Bold : FontStyle.Regular);
-
-                    _listView.Items.Add(item);
+                        Rank = new CellText(rankText) { Font = podium ? medal : null },
+                        Player = new CellText(p.DisplayName ?? p.Username) { Font = podium ? bold : null },
+                        Elo = new CellText(p.Rating.ToString()) { Font = bold },
+                        Games = p.GamesPlayed,
+                        Wins = p.Wins,
+                        Losses = p.Losses,
+                        // A tag rather than coloured text: it is a verdict on the player, and it
+                        // is the one cell anybody scans the column for.
+                        WinRate = new CellTag(p.WinRate + "%", winning ? TTypeMini.Success : TTypeMini.Default),
+                    });
                 }
-                _listView.EndUpdate();
-                UiUtils.StretchLastListViewColumn(_listView, 110);
+
+                _table.DataSource = rows;
 
                 _statusLabel.Text = players.Count == 0
                     ? "Chưa có trận đấu nào được xếp hạng."
@@ -145,6 +187,7 @@ namespace TadaPlay.Controls
             }
             finally
             {
+                _refreshButton.Loading = false;
                 _refreshButton.Enabled = true;
             }
         }

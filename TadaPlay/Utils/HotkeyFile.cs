@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Reflection;
 using TadaPlay.Logger;
 
 namespace TadaPlay.Utils
@@ -48,9 +49,46 @@ namespace TadaPlay.Utils
         public float Version = 1.0f;
         public readonly List<HotkeyGroup> Groups = new List<HotkeyGroup>();
 
+        /// <summary>
+        /// The layout TadaPlay ships, used by "reset to default" in the editor.
+        ///
+        /// A player4.hki taken from a v1.5 Game Data folder - the same folder the game itself
+        /// reads (see HotkeyEditorForm.ResolveHotkeyDirectory), so it is a layout the game has
+        /// written and accepted rather than one assembled here. It names the mod's extra
+        /// buildings, so a reset yields a Palisade Gate that is bound rather than merely
+        /// bindable.
+        ///
+        /// Embedded as a plain manifest resource, like the other binaries here - see the
+        /// comment in TadaPlay.csproj for why a .resx System.Byte[] entry is not usable.
+        /// </summary>
+        private const string DefaultResourceName = "TadaPlay.Resources.player.hki.template";
+
         public static HotkeyFile Load(string path)
         {
-            byte[] raw = GameProfileNameWriter.Inflate(File.ReadAllBytes(path));
+            return FromBytes(File.ReadAllBytes(path));
+        }
+
+        /// <summary>
+        /// Reads a layout from the bytes of a .hki, wherever they came from - a file, an embedded
+        /// resource, or a backup pulled down from the server.
+        /// </summary>
+        public static HotkeyFile FromBytes(byte[] fileBytes)
+        {
+            return Parse(GameProfileNameWriter.Inflate(fileBytes));
+        }
+
+        /// <summary>Loads the layout shipped with the app. Throws if the resource is missing.</summary>
+        public static HotkeyFile LoadDefault()
+        {
+            using Stream resourceStream = Assembly.GetExecutingAssembly().GetManifestResourceStream(DefaultResourceName)
+                ?? throw new InvalidOperationException($"Embedded resource '{DefaultResourceName}' not found.");
+            using var buffer = new MemoryStream();
+            resourceStream.CopyTo(buffer);
+            return FromBytes(buffer.ToArray());
+        }
+
+        private static HotkeyFile Parse(byte[] raw)
+        {
             using var ms = new MemoryStream(raw, writable: false);
             using var reader = new BinaryReader(ms);
 
@@ -77,7 +115,83 @@ namespace TadaPlay.Utils
             return file;
         }
 
+        /// <summary>
+        /// Slots the HD-era data mods fill in for commands The Conquerors never had.
+        ///
+        /// The build group has always been 30 slots wide, but AoC only ever named 25 of them;
+        /// the rest sit in the file as placeholders (StringId -1, everything else zeroed). A mod
+        /// that adds a building does not grow the group - it names one of those spare slots. So a
+        /// player whose .hki predates the mod has a Palisade Gate slot sitting right there,
+        /// nameless, and no way to reach it: the editor only shows slots that name a command,
+        /// which is what keeps the structural padding out of the list.
+        ///
+        /// Read off the mod's own files rather than guessed - a player*.hki written by the game
+        /// with WololoKingdoms active has 19212 at slot 28 and 19075 at slot 29 of group 3.
+        /// </summary>
+        private static readonly (int Group, int Slot, int StringId)[] ModCommandSlots =
+        {
+            (3, 28, 19212),   // Palisade Gate
+            (3, 29, 19075),   // Feitoria
+        };
+
+        /// <summary>
+        /// Names the placeholder slots this game's data actually uses, so they can be bound.
+        /// Returns how many were adopted.
+        ///
+        /// <paramref name="hasName"/> decides whether a command exists in THIS installation -
+        /// pass it a lookup over the game's own language data. That is the whole guard against
+        /// inventing commands: on plain AoC nothing names 19212, so the slot stays a placeholder
+        /// and stays hidden, which is correct because that game has no Palisade Gate to build.
+        ///
+        /// Never touches a slot that already names something. Writing over a real command would
+        /// silently rebind whatever was there, and the layout differing from what is assumed
+        /// here is exactly the case where that would happen.
+        /// </summary>
+        public int AdoptModCommands(Func<int, bool> hasName)
+        {
+            if (hasName == null) return 0;
+
+            int adopted = 0;
+            foreach ((int group, int slot, int stringId) in ModCommandSlots)
+            {
+                if (group < 0 || group >= Groups.Count) continue;
+                var bindings = Groups[group].Bindings;
+                if (slot < 0 || slot >= bindings.Count) continue;
+
+                HotkeyBinding binding = bindings[slot];
+                if (binding.IsCommand) continue;          // a real command already lives here
+                if (!hasName(stringId)) continue;         // this installation does not have it
+
+                // Only the name is taken on. The key stays as the placeholder left it - zero,
+                // meaning unbound - so the row turns up asking to be assigned rather than
+                // claiming a binding the player never chose.
+                binding.StringId = stringId;
+                adopted++;
+                DebugLogger.Info($"HotkeyFile: named placeholder slot {group}/{slot} as string {stringId}.");
+            }
+            return adopted;
+        }
+
         public void Save(string path)
+        {
+            byte[] compressed = ToBytes();
+
+            // Write to a temp file next to the target, then swap in - avoids leaving a half-written
+            // .hki behind if something fails mid-write (the game would refuse to load a truncated one).
+            string tmp = path + ".tmp";
+            File.WriteAllBytes(tmp, compressed);
+            if (File.Exists(path)) File.Delete(path);
+            File.Move(tmp, path);
+            DebugLogger.Info($"HotkeyFile: saved '{path}' ({compressed.Length} bytes).");
+        }
+
+        /// <summary>
+        /// The layout exactly as it would be written to disk.
+        ///
+        /// Shared with <see cref="Save"/> so a backup and the file the game reads cannot come out
+        /// differently - a backup that did not restore byte-for-byte would be worse than none.
+        /// </summary>
+        public byte[] ToBytes()
         {
             using var ms = new MemoryStream();
             using (var writer = new BinaryWriter(ms))
@@ -99,15 +213,7 @@ namespace TadaPlay.Utils
                 }
             }
 
-            byte[] compressed = GameProfileNameWriter.Deflate(ms.ToArray());
-
-            // Write to a temp file next to the target, then swap in - avoids leaving a half-written
-            // .hki behind if something fails mid-write (the game would refuse to load a truncated one).
-            string tmp = path + ".tmp";
-            File.WriteAllBytes(tmp, compressed);
-            if (File.Exists(path)) File.Delete(path);
-            File.Move(tmp, path);
-            DebugLogger.Info($"HotkeyFile: saved '{path}' ({compressed.Length} bytes).");
+            return GameProfileNameWriter.Deflate(ms.ToArray());
         }
     }
 }
