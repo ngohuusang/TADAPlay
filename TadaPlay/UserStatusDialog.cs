@@ -57,6 +57,12 @@ namespace TadaPlay
         private readonly AntdUI.Button _watchButton = new();
         private readonly AntdUI.Button _pingButton = new();
         private readonly AntdUI.Label _pingResult = new();
+
+        /// <summary>
+        /// Set while a measurement is running so the button can stop it. Thirty seconds is long
+        /// enough that "wait for it to finish or close the dialog" is not an acceptable answer.
+        /// </summary>
+        private System.Threading.CancellationTokenSource _pingCancel;
         private readonly System.Windows.Forms.Timer _refresh = new() { Interval = RefreshMs };
         private bool _probing;
 
@@ -134,7 +140,7 @@ namespace TadaPlay
             card.Controls.Add(_detail);
 
             _pingResult.Location = new Point(18, 192);
-            _pingResult.Size = new Size(408, 36);
+            _pingResult.Size = new Size(408, 40);
             _pingResult.ForeColor = UiTheme.Muted;
             _pingResult.Font = new Font("Segoe UI", 9.5F);
             _pingResult.TextMultiLine = true;
@@ -148,7 +154,11 @@ namespace TadaPlay
             _pingButton.Shape = TShape.Round;
             _pingButton.Font = new Font("Segoe UI Semibold", 10F, FontStyle.Bold);
             _pingButton.Cursor = Cursors.Hand;
-            _pingButton.Click += (s, e) => MeasurePing();
+            _pingButton.Click += (s, e) =>
+            {
+                if (_pingCancel != null) { _pingCancel.Cancel(); return; }
+                MeasurePing();
+            };
 
             _watchButton.Text = "Xem trận";
             _watchButton.Location = new Point(196, 240);
@@ -179,16 +189,24 @@ namespace TadaPlay
             Probe();
         }
 
+        /// <summary>How long a measurement runs, and how often it samples.</summary>
+        private const int PingSeconds = 30;
+        private const int PingIntervalMs = 1000;
+
         /// <summary>
-        /// Measures round-trip latency to this player over the VPN.
+        /// Measures round-trip latency to this player over the VPN for half a minute.
         ///
-        /// This is the number that actually matters for a game: the VPN is hub-and-spoke while
-        /// AoE2 is peer-to-peer, so a packet between two players crosses the tunnel server and
-        /// back. What comes out here is that whole path, not half of it - which is why it can
-        /// be a lot larger than either player's ping to the server.
+        /// This is the number that matters for a game: the VPN is hub-and-spoke while AoE2 is
+        /// peer-to-peer, so a packet between two players crosses the tunnel server and comes
+        /// back. What comes out is that whole path, which is why it can be much larger than
+        /// either player's ping to the server.
         ///
-        /// Several samples rather than one: a single round trip says nothing about jitter, and
-        /// jitter is what a lockstep RTS actually feels.
+        /// Thirty samples over thirty seconds rather than a quick burst, because the question
+        /// is whether the link is STEADY. A handful of pings a fifth of a second apart all land
+        /// inside the same moment of network weather and will look fine even on a connection
+        /// that stutters every few seconds - and a lockstep RTS runs at the pace of the worst
+        /// moment, not the average one. So the verdict is driven by jitter and loss, with the
+        /// average reported alongside rather than on its own.
         /// </summary>
         private async void MeasurePing()
         {
@@ -200,22 +218,23 @@ namespace TadaPlay
                 return;
             }
 
-            _pingButton.Enabled = false;
-            _pingButton.Loading = true;
-            _pingResult.ForeColor = UiTheme.Muted;
-            _pingResult.Text = $"Đang đo tới {ip}...";
+            var cancel = new System.Threading.CancellationTokenSource();
+            _pingCancel = cancel;
+            _pingButton.Text = "Dừng";
 
             var times = new System.Collections.Generic.List<long>();
-            int lost = 0;
+            int lost = 0, sent = 0;
 
             try
             {
                 using var ping = new System.Net.NetworkInformation.Ping();
-                for (int i = 0; i < 5; i++)
+                for (int i = 0; i < PingSeconds && !cancel.IsCancellationRequested; i++)
                 {
+                    var started = DateTime.UtcNow;
+                    sent++;
                     try
                     {
-                        var reply = await ping.SendPingAsync(ip, 2000);
+                        var reply = await ping.SendPingAsync(ip, PingIntervalMs);
                         if (reply.Status == System.Net.NetworkInformation.IPStatus.Success)
                         {
                             times.Add(reply.RoundtripTime);
@@ -232,43 +251,100 @@ namespace TadaPlay
                     }
 
                     if (IsDisposed) return;
-                    await System.Threading.Tasks.Task.Delay(200);
+                    ShowPingProgress(sent, times, lost);
+
+                    // Pace to roughly one sample a second, counting the time the reply already
+                    // took - otherwise a slow link stretches a 30s measurement well past a
+                    // minute and the reading stops matching what the label promised.
+                    var elapsed = (int)(DateTime.UtcNow - started).TotalMilliseconds;
+                    int wait = PingIntervalMs - elapsed;
+                    if (wait > 0)
+                    {
+                        try { await System.Threading.Tasks.Task.Delay(wait, cancel.Token); }
+                        catch (OperationCanceledException) { break; }
+                    }
                 }
             }
             finally
             {
+                _pingCancel = null;
+                cancel.Dispose();
                 if (!IsDisposed)
                 {
-                    _pingButton.Loading = false;
+                    _pingButton.Text = "Đo ping";
                     _pingButton.Enabled = true;
                 }
             }
 
             if (IsDisposed) return;
+            ShowPingVerdict(times, lost, sent);
+        }
 
+        private void ShowPingProgress(int sent, System.Collections.Generic.List<long> times, int lost)
+        {
+            string latest = times.Count > 0 ? $"{times[times.Count - 1]} ms" : "không phản hồi";
+            _pingResult.ForeColor = UiTheme.Muted;
+            _pingResult.Text = $"Đang đo... {sent}/{PingSeconds}  ·  gần nhất: {latest}"
+                             + (lost > 0 ? $"  ·  mất {lost}" : string.Empty);
+        }
+
+        /// <summary>
+        /// Turns the samples into an answer to "is it stable?".
+        ///
+        /// Jitter is mean absolute deviation, the same figure ping reports as mdev. It is the
+        /// one that decides how a match feels: a steady 60ms is playable, while 30ms that
+        /// regularly spikes to 120ms is not, and an average alone cannot tell those apart.
+        /// Loss outranks it - a lockstep game stalls every player when one packet goes missing.
+        /// </summary>
+        private void ShowPingVerdict(System.Collections.Generic.List<long> times, int lost, int sent)
+        {
             if (times.Count == 0)
             {
                 // Deliberately not "offline". Windows blocks inbound ICMP by default, and
-                // measured against live peers, about half were silent while perfectly
+                // measured against live peers about half were silent while perfectly
                 // connected. Reporting that as a dead player would be wrong far too often.
                 _pingResult.ForeColor = WaitColor;
                 _pingResult.Text = "Không nhận được phản hồi. Máy của họ có thể đang chặn ping "
-                                 + "(bản cũ của TADA Play chưa mở), không hẳn là mất kết nối.";
+                                 + "(bản TADA Play cũ chưa mở), không hẳn là mất kết nối.";
                 return;
             }
 
             long min = times[0], max = times[0], total = 0;
-            foreach (long t in times)
-            {
-                if (t < min) min = t;
-                if (t > max) max = t;
-                total += t;
-            }
+            foreach (long t in times) { if (t < min) min = t; if (t > max) max = t; total += t; }
             long avg = total / times.Count;
 
-            string lossText = lost > 0 ? $", mất {lost}/5 gói" : string.Empty;
-            _pingResult.ForeColor = avg <= 60 ? LiveColor : WaitColor;
-            _pingResult.Text = $"Ping: {avg} ms  (thấp nhất {min}, cao nhất {max}{lossText})";
+            double deviation = 0;
+            foreach (long t in times) { deviation += Math.Abs(t - avg); }
+            double jitter = deviation / times.Count;
+
+            int lossPercent = sent > 0 ? (int)Math.Round(lost * 100.0 / sent) : 0;
+
+            string verdict;
+            Color colour;
+            if (lossPercent >= 5)
+            {
+                verdict = $"KHÔNG ỔN ĐỊNH - mất {lossPercent}% gói";
+                colour = WaitColor;
+            }
+            else if (jitter >= 15)
+            {
+                verdict = "DAO ĐỘNG NHIỀU - dễ giật trong trận";
+                colour = WaitColor;
+            }
+            else if (jitter >= 5)
+            {
+                verdict = "ỔN ĐỊNH";
+                colour = LiveColor;
+            }
+            else
+            {
+                verdict = "RẤT ỔN ĐỊNH";
+                colour = LiveColor;
+            }
+
+            _pingResult.ForeColor = colour;
+            _pingResult.Text = $"{verdict}  ·  trung bình {avg} ms (thấp nhất {min}, cao nhất {max})\n"
+                             + $"dao động {jitter:F1} ms, mất {lost}/{sent} gói trong {sent} giây";
         }
 
         private async void Probe()
