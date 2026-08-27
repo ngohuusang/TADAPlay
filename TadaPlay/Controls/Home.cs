@@ -133,6 +133,9 @@ namespace TadaPlay.Controls
             // A spectator session swaps the stock age2_x1.5.exe aside; if TadaPlay died before
             // putting it back, do it now rather than leaving the game folder modified.
             GameSpectator.RestoreLaunchTarget(appContext.GetGameFolder());
+            // Same idea: older builds opened an inbound rule for the game's spectator port.
+            // Nothing listens there now, so take our own leftover back off the player's firewall.
+            GameSpectator.RemoveSpectatorPortRule();
             // TadaPlay no longer WRITES the in-game profile at all. The old ProfileTemplateEnforcer
             // rewrote player.nfz every 10s, which wiped the game's profile<->hotkey link and reset
             // the player's hotkeys. Instead we WATCH player.nfz and, whenever the name changes, READ
@@ -1039,19 +1042,10 @@ namespace TadaPlay.Controls
 
         private void LaunchGame()
         {
-            // Pre-fill the game's "Spectator Stream" settings before it reads them, so a host
-            // is watchable without opening that dialog and configuring it every game: Allow
-            // Spectators ticked, plus default max connections / join delay / late-join limit.
-            if (GameSpectator.EnsureSpectatorStreamDefaults())
-            {
-                printLog("[Xem] Đã đặt sẵn thông số cho phép xem trận (Allow Spectators, số kết nối, " +
-                         "độ trễ tham gia) để người khác xem được trận của bạn.", Color.RoyalBlue);
-            }
-
-            // Open the game's own spectator port inbound. Without this the game listens but
-            // Windows Firewall refuses the connection, so viewers' spectate.exe gets nothing and
-            // closes - which is the "Disconnected from host" seen when watching a live game.
-            GameSpectator.EnsureSpectatorPortOpen();
+            // Nothing here touches the game's spectator settings any more. Viewers watch through
+            // the replay stream, which needs neither "Allow Spectators" nor an inbound port - so
+            // rewriting the player's game config on every launch, and telling them it is how
+            // others watch them, was both pointless and untrue.
 
             string exePath = GameExecutablePreparer.PrepareAndGetExePath(appContext.GetGameFolder(), appContext.GetGameLaunchMode());
             var (status, message) = GameLauncher.Launch(exePath);

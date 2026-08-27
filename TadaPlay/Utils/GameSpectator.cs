@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Diagnostics;
 using System.IO;
 using Microsoft.Win32;
@@ -147,6 +147,38 @@ namespace TadaPlay.Utils
         /// live-spectator counterpart and was the missing half. Idempotent, and non-fatal on
         /// failure - a host whose firewall already permits the game is reachable regardless.
         /// </summary>
+        /// <summary>
+        /// Removes the inbound firewall rule this app used to add for the game's spectator port.
+        ///
+        /// TadaPlay no longer routes viewers through the game's own spectator, so nothing
+        /// listens on that port any more - but every player who ran an older build still has an
+        /// inbound allow rule sitting in Windows Firewall for it. Leaving our own leftovers open
+        /// on other people's machines is not acceptable just because we stopped using them, so
+        /// each launch clears it.
+        ///
+        /// `netsh ... delete rule` removes every rule with the name and exits non-zero when
+        /// there is nothing to delete, which is the normal case once it has run once.
+        /// </summary>
+        public static void RemoveSpectatorPortRule()
+        {
+            try
+            {
+                if (RunNetsh($"advfirewall firewall show rule name=\"{SpectatorFirewallRuleName}\"") != 0)
+                {
+                    return; // nothing to clean up
+                }
+
+                if (RunNetsh($"advfirewall firewall delete rule name=\"{SpectatorFirewallRuleName}\"") == 0)
+                {
+                    DebugLogger.Info($"GameSpectator: removed the obsolete spectator firewall rule (TCP {SpectatorPort}).");
+                }
+            }
+            catch (Exception ex)
+            {
+                DebugLogger.Warn($"GameSpectator: could not remove the spectator firewall rule: {ex.Message}");
+            }
+        }
+
         public static void EnsureSpectatorPortOpen()
         {
             try
