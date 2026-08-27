@@ -50,12 +50,16 @@ namespace TadaPlay.Utils
         // 75 only moves the playhead at 1.5x. At the old 1.8 threshold that read as "not fast
         // forwarding", so the governor stopped while the replay still outran the incoming data
         // and reached the end anyway. 1.25 catches 75 (1.5x) and 100 (2x) but not normal (1.0x).
-        private const double FastForwardFactor = 1.25;
+        // Stop point. Normal speed (50) replays the record at exactly the rate the host writes
+        // it, so a playhead running at ~1x the host's rate IS normal and must be left alone; the
+        // next step up (75) runs at ~1.5x. Sitting the threshold between them is what makes the
+        // loop settle on 50 instead of walking on down to 25 and 0.
+        private const double FastForwardFactor = 1.35;
         // Minimum gap between two injected presses. Ticking fast keeps the measurement current,
         // but hammering the game with presses is what stopped them registering at all: ~1.6
         // presses a second produced 99 consecutive no-ops, while presses ~3s apart did slow the
         // replay. This paces the presses without slowing down the detection.
-        private static readonly TimeSpan InjectEvery = TimeSpan.FromMilliseconds(3000);
+        private static readonly TimeSpan InjectEvery = TimeSpan.FromMilliseconds(2000);
         // The governor used to log only when it acted, which left every "why did it not act?"
         // question unanswerable. This is how often it reports what it is seeing instead.
         private static readonly TimeSpan StatusEvery = TimeSpan.FromSeconds(10);
@@ -71,6 +75,7 @@ namespace TadaPlay.Utils
         private volatile bool _injecting;
         private DateTime _lastInjectUtc = DateTime.MinValue;
         private DateTime _lastStatusUtc = DateTime.MinValue;
+        private int _gainingTicks;
         private int _attempts;
         private long _prevPos;
         private long _prevTotal;
@@ -132,7 +137,10 @@ namespace TadaPlay.Utils
                 // The playhead only reaches the end if it gains on the live edge; what matters is
                 // the rate the gap CLOSES at, not the playback rate on its own.
                 double closingRate = _playheadRate - _appendRate;
-                bool gaining = closingRate > (_appendRate * 0.25) + 200;
+                // Compared as a RATIO to the host's rate, not as an absolute gap: the ratio is
+                // what identifies the speed setting (1x = 50, 1.5x = 75), so this stops at 50.
+                // The absolute floor covers a host that has gone quiet, where any playback gains.
+                bool gaining = _playheadRate > Math.Max(_appendRate * FastForwardFactor, 400);
 
                 if (DateTime.UtcNow - _lastStatusUtc >= StatusEvery)
                 {
@@ -148,9 +156,15 @@ namespace TadaPlay.Utils
 
                 if (!gaining)
                 {
+                    _gainingTicks = 0;
                     _pinning = false;   // keeping pace with the host - nothing to protect against
                     return;
                 }
+
+                // Two consecutive ticks before acting. A single tick is noisy enough to read as
+                // fast-forwarding when the replay is already at normal speed, and one spurious
+                // press is one step too far down.
+                if (++_gainingTicks < 2) return;
 
                 double secondsToEof = remainingBytes / closingRate;
                 if (secondsToEof > ReactSeconds)
@@ -180,14 +194,20 @@ namespace TadaPlay.Utils
                 _attempts++;
                 System.Threading.Tasks.Task.Run(() =>
                 {
-                    // Stepping DOWN only, then re-measuring, is what makes this converge: a
-                    // one-shot "set it to 50" run (floor to 0, then back up two steps) turned
-                    // intermittently-dropped keys into a speed INCREASE and measurably flapped
-                    // between 50 and 100. Two steps per burst because full speed is three steps
-                    // from normal (100 -> 99 -> 75 -> 50); overshooting one notch to 25 is
-                    // harmless, as firing stops there and the viewer can speed back up.
-                    try { GameInput.StepSlowerOnce(); }
-                    finally { _injecting = false; }
+                    // One deterministic call sets the speed to exactly 50 (floor to 0, then two
+                    // steps up), so there is nothing to converge on and no way to overshoot into
+                    // a pause - see GameInput.SetReplaySpeedNormal.
+                    try { GameInput.SetReplaySpeedNormal(); }
+                    finally
+                    {
+                        // Forget the pre-press rate. The fast-attack average would otherwise keep
+                        // reporting the old fast-forward speed for several ticks after the replay
+                        // had already slowed, and each of those ticks would press again - which is
+                        // how a single overshoot turns into a pause.
+                        _playheadRate = 0;
+                        _gainingTicks = 0;
+                        _injecting = false;
+                    }
                 });
                 if (!_pinning)
                 {

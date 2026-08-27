@@ -30,7 +30,9 @@ namespace TadaPlay.Utils
         private const ushort VkControl = 0x11;   // VK_CONTROL
         private const ushort ScanControl = 0x1D;
         private const ushort VkLeft = 0x25;      // VK_LEFT (extended)
+        private const ushort VkRight = 0x27;     // VK_RIGHT (extended)
         private const ushort ScanLeft = 0x4B;
+        private const ushort ScanRight = 0x4D;
 
         /// <summary>
         /// Presses Ctrl+Left ONCE - one step slower in a replay.
@@ -44,40 +46,48 @@ namespace TadaPlay.Utils
         /// calling it until the playhead is back to real time and then simply stop, which also
         /// removes any need to know the current speed.
         /// </summary>
-        public static void StepSlowerOnce()
+        /// <summary>
+        /// Sets a replay to exactly normal speed (50) from ANY current speed.
+        ///
+        /// The playback speeds step 0 - 25 - 50 - 75 - 99 - 100, and nothing here can read which
+        /// one is active. What makes this deterministic is that 0 is a hard floor: five Ctrl+Left
+        /// presses reach it from the fastest setting, and further presses at 0 do nothing. From
+        /// that known state exactly two Ctrl+Right presses land on 50 (0 -> 25 -> 50), whatever
+        /// the speed was to begin with.
+        ///
+        /// Stepping down one notch at a time and re-measuring instead is tempting but cannot stop
+        /// cleanly: the measurement lags the change, so the loop kept pressing after the replay
+        /// had already slowed and walked 75 -> 50 -> 25 -> 0, leaving it paused.
+        ///
+        /// Ctrl is held down across the whole sequence, and every press is held long enough for
+        /// the game's per-frame DirectInput poll to see it.
+        /// </summary>
+        public static void SetReplaySpeedNormal()
         {
             try
             {
-                // This mirrors the only configuration that has ever measurably slowed the replay:
-                // activate the window first (as WScript.Shell AppActivate does before SendKeys),
-                // then hold Ctrl DOWN across a long run of arrow taps rather than pressing the
-                // chord once. The game polls the keyboard through DirectInput about once a frame,
-                // and a chord held for only a couple of hundred milliseconds is routinely missed -
-                // holding Ctrl for a couple of seconds with several taps inside gives many more
-                // polls a chance to see both keys down together.
-                //
-                // Only Left is ever sent. An earlier version floored the speed to 0 and then
-                // pressed Right twice to come back to 50, which turned dropped taps into a speed
-                // INCREASE (two of six Lefts landing, then both Rights, ends up back at 100) and
-                // was measured flapping between 50 and 100. Overshooting downward is harmless by
-                // comparison: at worst the replay pauses, which is the outcome this class exists
-                // to guarantee anyway.
+                // Activate the window first, as WScript.Shell AppActivate does before SendKeys.
                 BringGameToForeground();
                 Thread.Sleep(120);
                 if (!Send(MakeKey(VkControl, ScanControl, keyUp: false, extended: false))) return;
-                Thread.Sleep(250);
-                for (int i = 0; i < TapsPerBurst; i++) TapArrow(VkLeft, ScanLeft);
+                Thread.Sleep(200);
+                for (int i = 0; i < FloorPresses; i++) TapArrow(VkLeft, ScanLeft);   // -> 0
                 Thread.Sleep(150);
+                for (int i = 0; i < RaisePresses; i++) TapArrow(VkRight, ScanRight); // 0 -> 25 -> 50
+                Thread.Sleep(120);
                 Send(MakeKey(VkControl, ScanControl, keyUp: true, extended: false));
             }
             catch (Exception ex)
             {
-                DebugLogger.Warn($"GameInput: StepSlowerOnce failed: {ex.Message}");
+                DebugLogger.Warn($"GameInput: SetReplaySpeedNormal failed: {ex.Message}");
             }
         }
 
-        /// <summary>Arrow taps inside one Ctrl hold. Four spans ~2s of Ctrl being held.</summary>
-        private const int TapsPerBurst = 4;
+        /// <summary>Ctrl+Left presses to reach 0 from the fastest setting (100/99/75/50/25 -> 0).</summary>
+        private const int FloorPresses = 5;
+
+        /// <summary>Ctrl+Right presses from 0 up to normal speed (0 -> 25 -> 50).</summary>
+        private const int RaisePresses = 2;
 
         /// <summary>
         /// Activates the game window the way WScript.Shell.AppActivate does before SendKeys -
