@@ -28,6 +28,10 @@ namespace TadaPlay.Utils
         // recorded-game viewer control, NOT the .hki "Slow Down Game" hotkey (numpad minus,
         // which only changes a LIVE game and does nothing to a replay). Arrow keys are extended.
         private const ushort VkControl = 0x11;   // VK_CONTROL
+        private const ushort VkShift = 0x10;     // VK_SHIFT
+        private const ushort ScanShift = 0x2A;   // left shift
+        private const ushort VkDown = 0x28;      // VK_DOWN (extended)
+        private const ushort ScanDown = 0x50;
         private const ushort ScanControl = 0x1D;
         private const ushort VkLeft = 0x25;      // VK_LEFT (extended)
         private const ushort VkRight = 0x27;     // VK_RIGHT (extended)
@@ -35,29 +39,74 @@ namespace TadaPlay.Utils
         private const ushort ScanRight = 0x4D;
 
         /// <summary>
-        /// Sets a replay to exactly normal speed (50) from ANY current speed.
+        /// Sets a replay to exactly normal speed (50) from ANY current speed, with the
+        /// Ctrl+Shift+Down chord.
         ///
-        /// The playback speeds step 0 - 25 - 50 - 75 - 99 - 100, and nothing here can read which
-        /// one is active. What makes this deterministic is that 0 is a hard floor: five Ctrl+Left
-        /// presses reach it from the fastest setting, and further presses at 0 do nothing. From
-        /// that known state exactly two Ctrl+Right presses land on 50 (0 -> 25 -> 50), whatever
-        /// the speed was to begin with.
+        /// This is an ABSOLUTE control - it lands on 50 from anywhere, including from a floored
+        /// 0 - unlike Ctrl+Left / Ctrl+Right, which only step one notch at a time. It was found
+        /// by trying it against a running replay, and it does not appear in any player*.hki:
+        /// those files bind single keys with modifier flags and carry no Ctrl+arrow entries at
+        /// all, so a three-key chord like this one is invisible to that search. Ctrl+Up, tried
+        /// first on the same reasoning, genuinely does nothing.
         ///
-        /// Stepping down one notch at a time and re-measuring instead is tempting but cannot stop
-        /// cleanly: the measurement lags the change, so the loop kept pressing after the replay
-        /// had already slowed and walked 75 -> 50 -> 25 -> 0, leaving it paused.
-        ///
-        /// Ctrl is held down across the whole sequence, and every press is held long enough for
-        /// the game's per-frame DirectInput poll to see it.
-        ///
-        /// Abandoning the sequence part-way (the viewer alt-tabbed) leaves the replay at an
-        /// unknown speed - possibly paused, if the Lefts landed but the Rights did not. That is
-        /// acceptable precisely because this call is deterministic from ANY starting speed,
-        /// including 0: the governor's next attempt puts it back on 50. It also errs in the safe
-        /// direction, since a paused replay can be resumed while one that has run off the end
-        /// cannot.
+        /// <see cref="SetReplaySpeedNormalByStepping"/> remains as the fallback: it reaches the
+        /// same state using only the relative controls, at the cost of ~2.4 seconds and a
+        /// visible ramp down through 0.
         /// </summary>
-        public static void SetReplaySpeedNormal() => FloorThenRaise(RaisePresses, "50 (bình thường)");
+        public static void SetReplaySpeedNormal() =>
+            CtrlShiftChord(VkDown, ScanDown, "50 (bình thường)");
+
+        /// <summary>
+        /// Reaches normal speed using only the relative Ctrl+Left / Ctrl+Right controls: five
+        /// Lefts to floor at 0 (a hard floor, so extra presses are no-ops), then exactly two
+        /// Rights (0 -> 25 -> 50). Deterministic from any starting speed, but slow and visible -
+        /// kept as the fallback for a build where the chord above does not work.
+        /// </summary>
+        public static void SetReplaySpeedNormalByStepping() =>
+            FloorThenRaise(RaisePresses, "50 (bình thường, theo từng nấc)");
+
+        /// <summary>
+        /// Presses Ctrl+Shift+key as a chord: both modifiers down first, the key held long enough
+        /// for the game's per-frame DirectInput poll to see all three together, then everything
+        /// released. The modifiers come back up on every path - a stuck Ctrl or Shift would turn
+        /// every later keystroke into a chord, in the game or in whatever the viewer switches to.
+        /// </summary>
+        private static void CtrlShiftChord(ushort vk, ushort scan, string target)
+        {
+            bool ctrlDown = false, shiftDown = false;
+            try
+            {
+                // Activate the window first, as WScript.Shell AppActivate does before SendKeys.
+                BringGameToForeground();
+                Thread.Sleep(120);
+
+                // SendInput is GLOBAL - it goes to whatever has focus rather than to a window we
+                // name - so the game must still be foreground at the moment of the press.
+                if (!IsGameForeground()) return;
+
+                if (!Send(MakeKey(VkControl, ScanControl, keyUp: false, extended: false))) return;
+                ctrlDown = true;
+                Thread.Sleep(80);
+                if (!Send(MakeKey(VkShift, ScanShift, keyUp: false, extended: false))) return;
+                shiftDown = true;
+                Thread.Sleep(80);
+
+                Send(MakeKey(vk, scan, keyUp: false, extended: true));
+                Thread.Sleep(KeyHoldMs);
+                Send(MakeKey(vk, scan, keyUp: true, extended: true));
+                Thread.Sleep(60);
+                DebugLogger.Info($"GameInput: replay speed set to {target} (Ctrl+Shift+Down).");
+            }
+            catch (Exception ex)
+            {
+                DebugLogger.Warn($"GameInput: setting replay speed to {target} failed: {ex.Message}");
+            }
+            finally
+            {
+                if (shiftDown) Send(MakeKey(VkShift, ScanShift, keyUp: true, extended: false));
+                if (ctrlDown) Send(MakeKey(VkControl, ScanControl, keyUp: true, extended: false));
+            }
+        }
 
         /// <summary>
         /// Stops a replay dead by flooring its speed to 0 - the FALLBACK for pausing, used only
