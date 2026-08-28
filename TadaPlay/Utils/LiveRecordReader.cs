@@ -326,37 +326,158 @@ namespace TadaPlay.Utils
         /// disturb the game's reads. Returns false when no game is running, it has no record
         /// open, or the process cannot be opened (needs the Administrator the manifest requests).
         /// </summary>
+        // Where the game's record handle was last found. TryFindRecordHandle walks EVERY handle
+        // on the system, and PlayheadGovernor asks for the position every 600ms - so without a
+        // cache that is roughly 1.7 whole-system handle enumerations per second, on the viewer's
+        // machine, while they are gaming. The handle does not move for as long as the game keeps
+        // the file open, so the scan is only worth doing once per match.
+        private static readonly object HandleCacheGate = new object();
+        private static int _cachedHandlePid;
+        private static IntPtr _cachedHandleValue;
+        private static string _cachedHandlePath;
+
         public static bool TryGetReplayReadPosition(out long position, out long total, out string path)
         {
             position = 0; total = 0; path = null;
 
             Process game = FindGameProcess();
-            if (game == null) return false;
+            if (game == null)
+            {
+                // No game: whatever was cached belongs to a process that has gone.
+                InvalidateRecordHandleCache();
+                return false;
+            }
             int pid = game.Id;
             game.Dispose();
 
             IntPtr hProc = OpenProcess(PROCESS_DUP_HANDLE | PROCESS_QUERY_INFORMATION, false, pid);
             if (hProc == IntPtr.Zero) return false;
 
-            IntPtr dup = IntPtr.Zero;
             try
             {
-                if (!TryFindRecordHandle(hProc, pid, out IntPtr handleValue, out path)) return false;
-                if (!DuplicateHandle(hProc, handleValue, GetCurrentProcess(), out dup,
-                                     0, false, DUPLICATE_SAME_ACCESS)) return false;
-                if (!GetFileSizeEx(dup, out total)) return false;
-                if (!SetFilePointerEx(dup, 0, out position, FILE_CURRENT)) return false;
-                return position > 0 && total > 0;
+                // Pass 0 uses the cached handle; pass 1 runs the full scan. A cached handle that
+                // turns out to be stale drops through to the scan rather than failing the tick.
+                for (int pass = 0; pass < 2; pass++)
+                {
+                    // Declared up front: the short-circuit below leaves them unassigned when
+                    // pass != 0, which the compiler rightly refuses on an inline out.
+                    IntPtr handleValue = IntPtr.Zero;
+                    string handlePath = null;
+                    bool fromCache = pass == 0 && TryGetCachedRecordHandle(pid, out handleValue, out handlePath);
+                    if (!fromCache)
+                    {
+                        if (pass == 0) continue;   // nothing cached - go straight to the scan
+                        if (!TryFindRecordHandle(hProc, pid, out handleValue, out handlePath)) return false;
+                        CacheRecordHandle(pid, handleValue, handlePath);
+                    }
+
+                    IntPtr dup = IntPtr.Zero;
+                    try
+                    {
+                        if (!DuplicateHandle(hProc, handleValue, GetCurrentProcess(), out dup,
+                                             0, false, DUPLICATE_SAME_ACCESS))
+                        {
+                            if (fromCache) { InvalidateRecordHandleCache(); continue; }
+                            return false;
+                        }
+
+                        // A handle VALUE is reused once the game closes the record and opens
+                        // something else, so a cached one has to be proved still to point at the
+                        // same file before its position is trusted. One path query is far cheaper
+                        // than re-walking the system handle table.
+                        if (fromCache && !HandleStillPointsAt(dup, handlePath))
+                        {
+                            InvalidateRecordHandleCache();
+                            continue;
+                        }
+
+                        if (!GetFileSizeEx(dup, out total))
+                        {
+                            if (fromCache) { InvalidateRecordHandleCache(); continue; }
+                            return false;
+                        }
+                        if (!SetFilePointerEx(dup, 0, out position, FILE_CURRENT))
+                        {
+                            if (fromCache) { InvalidateRecordHandleCache(); continue; }
+                            return false;
+                        }
+
+                        path = handlePath;
+                        return position > 0 && total > 0;
+                    }
+                    finally
+                    {
+                        if (dup != IntPtr.Zero) CloseHandle(dup);
+                    }
+                }
+                return false;
             }
             catch (Exception ex)
             {
                 DebugLogger.Warn($"LiveRecordReader: replay read-position query failed: {ex.Message}");
+                InvalidateRecordHandleCache();
                 return false;
             }
             finally
             {
-                if (dup != IntPtr.Zero) CloseHandle(dup);
                 CloseHandle(hProc);
+            }
+        }
+
+        private static bool TryGetCachedRecordHandle(int pid, out IntPtr handleValue, out string path)
+        {
+            lock (HandleCacheGate)
+            {
+                if (_cachedHandlePid == pid && _cachedHandleValue != IntPtr.Zero && _cachedHandlePath != null)
+                {
+                    handleValue = _cachedHandleValue;
+                    path = _cachedHandlePath;
+                    return true;
+                }
+            }
+            handleValue = IntPtr.Zero;
+            path = null;
+            return false;
+        }
+
+        private static void CacheRecordHandle(int pid, IntPtr handleValue, string path)
+        {
+            lock (HandleCacheGate)
+            {
+                _cachedHandlePid = pid;
+                _cachedHandleValue = handleValue;
+                _cachedHandlePath = path;
+            }
+        }
+
+        /// <summary>Forgets the cached handle, so the next call pays for a fresh scan.</summary>
+        public static void InvalidateRecordHandleCache()
+        {
+            lock (HandleCacheGate)
+            {
+                _cachedHandlePid = 0;
+                _cachedHandleValue = IntPtr.Zero;
+                _cachedHandlePath = null;
+            }
+        }
+
+        /// <summary>True when a duplicated handle still resolves to the expected file.</summary>
+        private static bool HandleStillPointsAt(IntPtr dup, string expectedPath)
+        {
+            try
+            {
+                var name = new System.Text.StringBuilder(512);
+                if (GetFinalPathNameByHandle(dup, name, name.Capacity, 0) == 0) return false;
+                string actual = name.ToString();
+                if (actual.StartsWith(@"\\?\", StringComparison.Ordinal)) actual = actual.Substring(4);
+                string expected = expectedPath;
+                if (expected.StartsWith(@"\\?\", StringComparison.Ordinal)) expected = expected.Substring(4);
+                return string.Equals(actual, expected, StringComparison.OrdinalIgnoreCase);
+            }
+            catch (Exception ex)
+            {
+                DebugLogger.Warn($"LiveRecordReader: cached handle path check failed: {ex.Message}");
+                return false;
             }
         }
 
