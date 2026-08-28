@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Threading;
 using TadaPlay.Connections;
@@ -7,7 +7,11 @@ using TadaPlay.Logger;
 namespace TadaPlay.Utils
 {
     /// <summary>
-    /// Keeps a spectator's replay in step with the match it is watching.
+    /// Makes a spectator's replay follow the match it is watching.
+    ///
+    /// Two rules, and deliberately nothing else. This is not a control loop and regulates
+    /// nothing; it mirrors the host's reported state onto the viewer's replay and otherwise
+    /// stays out of the way. Fast-forwarding is the viewer's to do by hand.
     ///
     /// The viewer watches a growing .mgz. Two things can go wrong, and this handles exactly those
     /// two - both driven by what the HOST reports about itself, never by inference from the file:
@@ -37,7 +41,7 @@ namespace TadaPlay.Utils
     /// "faster", so a resume that silently failed would leave the replay stopped for the rest of
     /// the match.
     /// </summary>
-    public sealed class PlayheadGovernor : IDisposable
+    public sealed class ReplayFollower : IDisposable
     {
         private const int TickMs = 600;
 
@@ -100,7 +104,6 @@ namespace TadaPlay.Utils
         private volatile bool _injecting;
         private DateTime _lastInjectUtc = DateTime.MinValue;
         private DateTime _lastStatusUtc = DateTime.MinValue;
-        private int _attempts;
 
         // The outstanding proof: what the playhead has to do, and from where.
         private DateTime _proofSentUtc = DateTime.MinValue;
@@ -112,7 +115,7 @@ namespace TadaPlay.Utils
         private long _playbackMs;
         private DateTime _lastPlaybackUtc = DateTime.MinValue;
 
-        public PlayheadGovernor(string replayPath, Action<string> log = null,
+        public ReplayFollower(string replayPath, Action<string> log = null,
                                 Func<LiveShareClient.HostStatus> hostStatus = null,
                                 string gameFolder = null)
         {
@@ -127,7 +130,7 @@ namespace TadaPlay.Utils
             if (string.IsNullOrWhiteSpace(_replayPath)) return;
             _pauseKey = ResolvePauseKey(_gameFolder);
             _timer = new System.Threading.Timer(_ => Tick(), null, TickMs, TickMs);
-            DebugLogger.Info($"PlayheadGovernor: watching '{_replayPath}'. Pause key VK 0x{_pauseKey:X2}; " +
+            DebugLogger.Info($"ReplayFollower: watching '{_replayPath}'. Pause key VK 0x{_pauseKey:X2}; " +
                              $"speed returns to normal within {CatchUpWithin.TotalSeconds:F0}s of the host's clock.");
         }
 
@@ -154,7 +157,7 @@ namespace TadaPlay.Utils
                             {
                                 if (b.StringId == PauseGameCommandId && b.KeyCode > 0)
                                 {
-                                    DebugLogger.Info($"PlayheadGovernor: pause key from '{Path.GetFileName(file)}' " +
+                                    DebugLogger.Info($"ReplayFollower: pause key from '{Path.GetFileName(file)}' " +
                                                      $"= VK 0x{b.KeyCode:X2}.");
                                     return (ushort)b.KeyCode;
                                 }
@@ -165,7 +168,7 @@ namespace TadaPlay.Utils
             }
             catch (Exception ex)
             {
-                DebugLogger.Warn($"PlayheadGovernor: could not read the pause binding: {ex.Message}");
+                DebugLogger.Warn($"ReplayFollower: could not read the pause binding: {ex.Message}");
             }
             return GameInput.VkPauseDefault;
         }
@@ -174,7 +177,9 @@ namespace TadaPlay.Utils
         {
             try
             {
-                if (!LiveRecordReader.TryGetReplayReadPosition(out long pos, out long total, out string path))
+                // The file size is discarded: only the playhead matters now. How far it sat from
+                // end-of-file was the runway rule's input, and that rule is gone.
+                if (!LiveRecordReader.TryGetReplayReadPosition(out long pos, out _, out string path))
                     return; // no game reading a record right now
 
                 // Only govern OUR spectator replay, never another recorded game the player opened.
@@ -187,7 +192,7 @@ namespace TadaPlay.Utils
                 // just before the ending they are trying to watch.
                 bool hostPaused = host != null && host.InGame && host.Paused;
 
-                ReportStatus(host, pos, total, hostPaused);
+                ReportStatus(host, hostPaused);
 
                 if (hostPaused)
                 {
@@ -209,11 +214,11 @@ namespace TadaPlay.Utils
             }
             catch (Exception ex)
             {
-                DebugLogger.Warn($"PlayheadGovernor: tick failed: {ex.Message}");
+                DebugLogger.Warn($"ReplayFollower: tick failed: {ex.Message}");
             }
         }
 
-        private void ReportStatus(LiveShareClient.HostStatus host, long pos, long total, bool hostPaused)
+        private void ReportStatus(LiveShareClient.HostStatus host, bool hostPaused)
         {
             if (DateTime.UtcNow - _lastStatusUtc < StatusEvery) return;
             _lastStatusUtc = DateTime.UtcNow;
@@ -222,8 +227,7 @@ namespace TadaPlay.Utils
                              : host.GameMs > 0 ? $"{host.GameMs / 1000}s" + (hostPaused ? " PAUSED" : "")
                              : "no clock";
             string mine = _playbackMs > 0 ? $"{_playbackMs / 1000}s" : "unknown";
-            DebugLogger.Info($"PlayheadGovernor: status - playback {mine}, host {hostClock}, " +
-                             $"hold {_hold}, {total - pos} bytes behind the file end.");
+            DebugLogger.Info($"ReplayFollower: status - playback {mine}, host {hostClock}, hold {_hold}.");
         }
 
         /// <summary>
@@ -239,7 +243,7 @@ namespace TadaPlay.Utils
             try { return _hostStatus?.Invoke(); }
             catch (Exception ex)
             {
-                DebugLogger.Warn($"PlayheadGovernor: host status unavailable: {ex.Message}");
+                DebugLogger.Warn($"ReplayFollower: host status unavailable: {ex.Message}");
                 return null;
             }
         }
@@ -254,7 +258,7 @@ namespace TadaPlay.Utils
             _hold = HoldMethod.PauseKey;
             ArmProof(pos, expectsMovement: false);
             _log("[Xem] ⏸ Chủ nhà đã TẠM DỪNG - đã tự động dừng replay của bạn.");
-            DebugLogger.Info($"PlayheadGovernor: host paused - pressed the pause key (VK 0x{_pauseKey:X2}).");
+            DebugLogger.Info($"ReplayFollower: host paused - pressed the pause key (VK 0x{_pauseKey:X2}).");
         }
 
         private void ProveHold(long pos)
@@ -264,7 +268,7 @@ namespace TadaPlay.Utils
 
             if (pos - _proofPos <= HoldSlackBytes)
             {
-                DebugLogger.Info($"PlayheadGovernor: hold confirmed - playhead moved only {pos - _proofPos} bytes.");
+                DebugLogger.Info($"ReplayFollower: hold confirmed - playhead moved only {pos - _proofPos} bytes.");
                 _proofSentUtc = DateTime.MinValue;
                 return;
             }
@@ -275,7 +279,7 @@ namespace TadaPlay.Utils
                 // NOT another pause-key press: it is a toggle, and if the first press did land
                 // late, a second would resume the replay. Escalate to the speed floor instead,
                 // which is idempotent and known to stop playback.
-                DebugLogger.Warn($"PlayheadGovernor: the pause key did not stop the replay " +
+                DebugLogger.Warn($"ReplayFollower: the pause key did not stop the replay " +
                                  $"({pos - _proofPos} bytes consumed) - falling back to speed 0.");
                 _hold = HoldMethod.SpeedFloor;
                 _proofRetries = 0;
@@ -288,7 +292,7 @@ namespace TadaPlay.Utils
                 _proofSentUtc = DateTime.MinValue;
                 _gaveUp = true;
                 _log("[Xem] ⚠️ Không tự dừng được replay - hãy tự tạm dừng trong game để không xem vượt.");
-                DebugLogger.Warn("PlayheadGovernor: gave up holding the replay.");
+                DebugLogger.Warn("ReplayFollower: gave up holding the replay.");
                 return;
             }
 
@@ -311,7 +315,7 @@ namespace TadaPlay.Utils
             _gaveUp = false;
             ArmProof(pos, expectsMovement: true);
             _log("[Xem] ▶ Chủ nhà đã chơi tiếp - đã cho replay chạy lại.");
-            DebugLogger.Info($"PlayheadGovernor: host resumed - released via {held}.");
+            DebugLogger.Info($"ReplayFollower: host resumed - released via {held}.");
         }
 
         /// <summary>
@@ -325,7 +329,7 @@ namespace TadaPlay.Utils
 
             if (pos - _proofPos >= MovingProofBytes)
             {
-                DebugLogger.Info($"PlayheadGovernor: resume confirmed - playhead moved {pos - _proofPos} bytes.");
+                DebugLogger.Info($"ReplayFollower: resume confirmed - playhead moved {pos - _proofPos} bytes.");
                 _proofSentUtc = DateTime.MinValue;
                 return true;
             }
@@ -334,7 +338,7 @@ namespace TadaPlay.Utils
             {
                 _proofSentUtc = DateTime.MinValue;
                 _log("[Xem] ⚠️ Replay vẫn đang dừng - hãy nhấn phím tạm dừng trong game để xem tiếp.");
-                DebugLogger.Warn("PlayheadGovernor: gave up resuming the replay - it is still frozen.");
+                DebugLogger.Warn("ReplayFollower: gave up resuming the replay - it is still frozen.");
                 return true;
             }
 
@@ -344,7 +348,7 @@ namespace TadaPlay.Utils
             Action press = _proofRetries == 1
                 ? (Action)(() => GameInput.PressPauseKey(_pauseKey))
                 : GameInput.SetReplaySpeedNormal;
-            DebugLogger.Warn($"PlayheadGovernor: resume did not take (playhead moved {pos - _proofPos} " +
+            DebugLogger.Warn($"ReplayFollower: resume did not take (playhead moved {pos - _proofPos} " +
                              $"bytes) - retry {_proofRetries}.");
             if (TryInject(press)) ArmProof(pos, expectsMovement: true, keepRetries: true);
             return false;
@@ -376,7 +380,7 @@ namespace TadaPlay.Utils
             _caughtUp = true;
             _log($"[Xem] ⏩ Đã gần đuổi kịp chủ nhà (còn {Math.Max(0, behindMs) / 1000}s) - " +
                  "đã hạ tốc độ về bình thường.");
-            DebugLogger.Info($"PlayheadGovernor: caught up - playback {_playbackMs}ms vs host {host.GameMs}ms " +
+            DebugLogger.Info($"ReplayFollower: caught up - playback {_playbackMs}ms vs host {host.GameMs}ms " +
                              $"({behindMs}ms behind); speed back to normal.");
         }
 
@@ -411,11 +415,10 @@ namespace TadaPlay.Utils
 
             _injecting = true;
             _lastInjectUtc = DateTime.UtcNow;
-            _attempts++;
             System.Threading.Tasks.Task.Run(() =>
             {
                 try { press(); }
-                catch (Exception ex) { DebugLogger.Warn($"PlayheadGovernor: injection failed: {ex.Message}"); }
+                catch (Exception ex) { DebugLogger.Warn($"ReplayFollower: injection failed: {ex.Message}"); }
                 finally { _injecting = false; }
             });
             return true;
@@ -430,7 +433,7 @@ namespace TadaPlay.Utils
         public void Dispose()
         {
             try { _timer?.Dispose(); _timer = null; }
-            catch (Exception ex) { DebugLogger.Warn($"PlayheadGovernor: dispose failed: {ex.Message}"); }
+            catch (Exception ex) { DebugLogger.Warn($"ReplayFollower: dispose failed: {ex.Message}"); }
         }
     }
 }

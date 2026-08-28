@@ -367,7 +367,7 @@ namespace TadaPlay.Utils
 
         /// <summary>
         /// Reads how far the running game has read into its open recorded-game file - a proxy
-        /// for the replay playhead used by <see cref="PlayheadGovernor"/>.
+        /// for the replay playhead used by <see cref="ReplayFollower"/>.
         ///
         /// The game reads a little AHEAD of what it is drawing, so this runs slightly ahead of
         /// the visible position - the safe direction for a "near the end" check (it errs toward
@@ -377,7 +377,7 @@ namespace TadaPlay.Utils
         /// open, or the process cannot be opened (needs the Administrator the manifest requests).
         /// </summary>
         // Where the game's record handle was last found. TryFindRecordHandle walks EVERY handle
-        // on the system, and PlayheadGovernor asks for the position every 600ms - so without a
+        // on the system, and ReplayFollower asks for the position every 600ms - so without a
         // cache that is roughly 1.7 whole-system handle enumerations per second, on the viewer's
         // machine, while they are gaming. The handle does not move for as long as the game keeps
         // the file open, so the scan is only worth doing once per match.
