@@ -123,7 +123,7 @@ namespace TadaPlay.Utils
         /// </summary>
         public static bool Paused
         {
-            get { lock (Gate) return _pausedSinceUtc.HasValue; }
+            get { lock (Gate) { EvaluatePause(DateTime.UtcNow); return _pausedSinceUtc.HasValue; } }
         }
 
         /// <summary>How long the game has been paused, or null when it is running.</summary>
@@ -133,8 +133,43 @@ namespace TadaPlay.Utils
             {
                 lock (Gate)
                 {
+                    EvaluatePause(DateTime.UtcNow);
                     return _pausedSinceUtc.HasValue ? DateTime.UtcNow - _pausedSinceUtc.Value : null;
                 }
+            }
+        }
+
+        /// <summary>
+        /// Decides whether the stalled clock has stalled long enough to count as a pause.
+        ///
+        /// This runs when the state is READ, not only when a new sample is reported, and that is
+        /// the whole point. Pause detection used to live entirely inside
+        /// <see cref="ReportDuration"/>, so it could only ever fire on the arrival of a fresh
+        /// clock sample - and while the spectator stream is healthy the ONLY caller of that is
+        /// SpectatorStreamSource.MaybePublishDuration, which runs inside the socket read loop and
+        /// returns early unless the byte count moved. A paused game sends no bytes, so nothing
+        /// called it, so the pause was never noticed: the detector was fed exclusively by data
+        /// arriving and could not observe data stopping. Hosts reported "paused":false for the
+        /// entire duration of a real pause.
+        ///
+        /// Evaluating on read costs nothing - the status publisher and /live/status already read
+        /// these properties every couple of seconds - and it cannot be starved, because it does
+        /// not depend on anything upstream still being alive.
+        /// </summary>
+        private static void EvaluatePause(DateTime now)
+        {
+            if (_pausedSinceUtc != null) return;        // already known to be paused
+            if (!_inGame) return;                       // no match, nothing to judge
+            if (_clockLastAdvancedUtc == null) return;  // no sample yet
+            // A match whose clock has never produced a reading is "not started", not "paused" -
+            // saying otherwise would announce a pause during the opening seconds of every game.
+            if (_durationMs <= 0) return;
+
+            if ((now - _clockLastAdvancedUtc.Value).TotalMilliseconds >= PauseAfterStallMs)
+            {
+                // Dated to when the clock was last seen moving, not to now, so "paused for" does
+                // not under-report by however long the detection took.
+                _pausedSinceUtc = _clockLastAdvancedUtc;
             }
         }
 
@@ -162,15 +197,12 @@ namespace TadaPlay.Utils
                     _clockLastAdvancedUtc = now;
                     _pausedSinceUtc = null;
                 }
-                else if ((now - _clockLastAdvancedUtc.Value).TotalMilliseconds >= PauseAfterStallMs
-                         && _pausedSinceUtc == null)
-                {
-                    // Dated to when the clock was last seen moving, not to now, so "paused for"
-                    // does not under-report by however long the detection took.
-                    _pausedSinceUtc = _clockLastAdvancedUtc;
-                }
+
 
                 _durationMs = durationMs;
+                // Same test as a read would apply, so a sample that arrives after a long stall
+                // reports the pause immediately rather than waiting for the next reader.
+                EvaluatePause(now);
             }
         }
 
