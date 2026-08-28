@@ -1687,7 +1687,8 @@ namespace TadaPlay.Controls
             _playheadGovernor = new PlayheadGovernor(
                 fetch.Path,
                 msg => printLog(msg, Color.RoyalBlue),
-                () => LiveShareClient.FromBroadcast(LookupOnlineUser(hostLabel)));
+                () => LiveShareClient.FromBroadcast(LookupOnlineUser(hostLabel)),
+                appContext.GetGameFolder());
             _playheadGovernor.Start();
         }
 

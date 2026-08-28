@@ -60,21 +60,81 @@ namespace TadaPlay.Utils
         public static void SetReplaySpeedNormal() => FloorThenRaise(RaisePresses, "50 (bình thường)");
 
         /// <summary>
-        /// Stops a replay dead, from ANY current speed - the viewer's half of "the host paused".
+        /// Stops a replay dead by flooring its speed to 0 - the FALLBACK for pausing, used only
+        /// when the real pause key (<see cref="PressPauseKey"/>) is proved not to have worked.
         ///
-        /// This is the SAME floor the speed control uses, simply without the two steps back up:
-        /// speed 0 is a full stop, and it is reached with the hardcoded Ctrl+Left viewer control
-        /// that is already known to land. It is deliberately NOT the game's "Pause Game" key.
-        /// That is an .hki binding, and .hki bindings are exactly what was measured NOT to affect
-        /// a replay - the "Slow Down Game" attempt that started this whole mechanism did nothing
-        /// for that reason. It is also user-rebindable and a TOGGLE, so nothing here could know
-        /// whether a press paused or resumed, and one dropped press would invert the state.
-        ///
-        /// Flooring has neither problem: extra presses at 0 are no-ops, so the result is the same
-        /// whether five presses land or fifty, and <see cref="SetReplaySpeedNormal"/> resumes from
-        /// it deterministically.
+        /// It is a fallback rather than the first choice because it visibly ramps the playback
+        /// speed down through 75/50/25 on the way to 0, which a viewer sees and dislikes. Its
+        /// merit is that it is the hardcoded Ctrl+Left viewer control, which is known to land,
+        /// and that it is idempotent: extra presses at 0 are no-ops, so repeating it is safe in
+        /// a way that re-pressing a toggle is not.
         /// </summary>
-        public static void PauseReplay() => FloorThenRaise(0, "0 (tạm dừng)");
+        public static void FloorReplaySpeed() => FloorThenRaise(0, "0 (dừng hẳn)");
+
+        /// <summary>Virtual-key for the game's default "Pause Game" binding (F3).</summary>
+        public const ushort VkPauseDefault = 0x72;
+
+        /// <summary>
+        /// Presses the game's "Pause Game" key - hotkey command id 19323, F3 by default.
+        ///
+        /// This is a real pause: the game shows its own "Game Paused" banner and the playhead
+        /// stops, with none of the speed ramping <see cref="FloorReplaySpeed"/> causes.
+        ///
+        /// It is a TOGGLE, and nothing here can read whether the game is currently paused, so a
+        /// press is never repeated blindly. Callers press once, then prove the outcome by
+        /// watching the playhead: frozen means it worked, still moving means it did not. Pressing
+        /// again "just in case" would resume a replay that had in fact paused.
+        ///
+        /// The scan code is resolved through MapVirtualKey rather than hardcoded, so a rebound
+        /// pause key works as well as the default.
+        /// </summary>
+        public static void PressPauseKey(ushort vk = VkPauseDefault)
+        {
+            try
+            {
+                BringGameToForeground();
+                Thread.Sleep(120);
+                if (!IsGameForeground()) return;
+
+                ushort scan = (ushort)MapVirtualKey(vk, MAPVK_VK_TO_VSC);
+                // Extended keys are the navigation cluster and the numpad enter/divide; a function
+                // key never is, but a rebound pause could be, so this is derived rather than assumed.
+                bool extended = IsExtendedKey(vk);
+
+                Send(MakeKey(vk, scan, keyUp: false, extended: extended));
+                Thread.Sleep(KeyHoldMs);
+                Send(MakeKey(vk, scan, keyUp: true, extended: extended));
+                DebugLogger.Info($"GameInput: pressed the pause key (VK 0x{vk:X2}, scan 0x{scan:X2}).");
+            }
+            catch (Exception ex)
+            {
+                DebugLogger.Warn($"GameInput: pause key press failed: {ex.Message}");
+            }
+        }
+
+        private static bool IsExtendedKey(ushort vk)
+        {
+            switch (vk)
+            {
+                case 0x21: case 0x22: case 0x23: case 0x24:   // PgUp PgDn End Home
+                case 0x25: case 0x26: case 0x27: case 0x28:   // arrows
+                case 0x2D: case 0x2E:                         // Insert Delete
+                case 0x6F:                                    // numpad /
+                case 0x90:                                    // NumLock
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        /// <summary>How long a key is held. Matches TapArrow: long enough for the game's
+        /// per-frame DirectInput poll to see it, which is what makes a press register.</summary>
+        private const int KeyHoldMs = 200;
+
+        private const uint MAPVK_VK_TO_VSC = 0;
+
+        [DllImport("user32.dll")]
+        private static extern uint MapVirtualKey(uint uCode, uint uMapType);
 
         /// <summary>
         /// Floors the playback speed to 0 with Ctrl+Left, then steps it back up

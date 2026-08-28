@@ -155,7 +155,7 @@ namespace TadaPlay
             _clock.Size = new Size(202, 30);
             _clock.BackColor = Color.Transparent;
 
-            _hint.Text = "Hãy tạm dừng trận của bạn để không xem vượt.";
+            _hint.Text = "Đang tự động dừng replay của bạn...";
             _hint.ForeColor = PausedColor;
             _hint.Font = HintFont;
             _hint.Location = new Point(14, 74);
