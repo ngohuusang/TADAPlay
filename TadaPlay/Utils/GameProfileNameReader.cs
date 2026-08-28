@@ -1,7 +1,8 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Text;
 using TadaPlay.Logger;
 
@@ -30,6 +31,57 @@ namespace TadaPlay.Utils
     public static class GameProfileNameReader
     {
         private static readonly string[] ProfilePatterns = { "player*.nfz", "player*.nfx" };
+
+        /// <summary>
+        /// How the fixed 256-byte name buffer is decoded.
+        ///
+        /// It was Encoding.ASCII, which turns every byte above 127 into a literal '?'. That is
+        /// lossy and silent: "Em là Ta." reached the server as "Em l? Ta.", which then matches no
+        /// replay and so earns its owner no ELO. A profile found on this machine decodes as
+        /// 50-E1-6E-63-72-6F-6C: "Páncrol" in any single-byte codepage, "P?ncrol" in ASCII, and a
+        /// hard DecoderFallbackException under strict UTF-8 - which is what rules UTF-8 out.
+        ///
+        /// The right codepage is the MACHINE'S ANSI one, because that is what the game encoded
+        /// with, and the same machine writes and reads the file. That is 1252 on a Western
+        /// install and 1258 on a Vietnamese one, and the two disagree about exactly the bytes
+        /// Vietnamese names use - so guessing a fixed codepage would be wrong for one group or
+        /// the other.
+        ///
+        /// .NET Core ships none of these single-byte codepages until CodePagesEncodingProvider is
+        /// registered, hence the package reference. Latin1 is the last resort: it is built in and
+        /// agrees with 1252 over most of the range, so a name is at worst imperfect rather than
+        /// destroyed.
+        /// </summary>
+        private static readonly Encoding ProfileEncoding = ResolveProfileEncoding();
+
+        private static Encoding ResolveProfileEncoding()
+        {
+            try
+            {
+                Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+                int codepage = (int)GetACP();
+                Encoding encoding = Encoding.GetEncoding(codepage);
+                DebugLogger.Info($"GameProfileNameReader: decoding profile names as ANSI codepage " +
+                                 $"{codepage} ({encoding.WebName}).");
+                return encoding;
+            }
+            catch (Exception ex)
+            {
+                DebugLogger.Warn($"GameProfileNameReader: cannot use the system ANSI codepage " +
+                                 $"({ex.Message}); falling back to 1252.");
+            }
+
+            try { return Encoding.GetEncoding(1252); }
+            catch (Exception ex)
+            {
+                DebugLogger.Warn($"GameProfileNameReader: codepage 1252 unavailable ({ex.Message}); " +
+                                 "falling back to Latin1.");
+                return Encoding.Latin1;
+            }
+        }
+
+        [DllImport("kernel32.dll")]
+        private static extern uint GetACP();
 
         /// <summary>
         /// Returns the in-game profile name from the Voobly "Game Data" folder under
@@ -149,7 +201,7 @@ namespace TadaPlay.Utils
                 int limit = start + GameProfileNameWriter.NameBufferSize;
                 while (end < limit && decompressed[end] != 0) end++;
 
-                return Encoding.ASCII.GetString(decompressed, start, end - start).Trim();
+                return ProfileEncoding.GetString(decompressed, start, end - start).Trim();
             }
             catch (Exception ex)
             {
