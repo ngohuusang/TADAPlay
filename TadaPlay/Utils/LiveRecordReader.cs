@@ -207,6 +207,56 @@ namespace TadaPlay.Utils
         }
 
         /// <summary>
+        /// How far into the match the replay has actually PLAYED, in game ms, given the game's
+        /// current file-read position.
+        ///
+        /// This is the viewer's own clock, and it is what makes "have I caught up to the host?"
+        /// answerable directly instead of by inference. The alternative - scaling the byte
+        /// position against the file size - is not usable: operation density varies several-fold
+        /// between quiet and busy stretches of a match, so a playhead 50% through the bytes is
+        /// nowhere near 50% through the time.
+        ///
+        /// Only the prefix up to the playhead is read, and the walk stops wherever it runs out,
+        /// so a partially-streamed file costs no more than the part that has arrived.
+        /// </summary>
+        public static bool TryGetPlaybackDurationMs(string path, long position, out long durationMs)
+        {
+            durationMs = 0;
+            if (string.IsNullOrEmpty(path) || position <= 16) return false;
+            try
+            {
+                using var stream = new FileStream(path, FileMode.Open, FileAccess.Read,
+                                                  FileShare.ReadWrite | FileShare.Delete);
+                long want = Math.Min(position, stream.Length);
+                if (want <= 16) return false;
+
+                var data = new byte[want];
+                int total = 0;
+                while (total < data.Length)
+                {
+                    int read = stream.Read(data, total, data.Length - total);
+                    if (read <= 0) break;
+                    total += read;
+                }
+                if (total != data.Length) Array.Resize(ref data, total);
+                if (data.Length <= 16) return false;
+
+                int declared = BitConverter.ToInt32(data, 0);
+                bool healthy = declared > 8 && declared < data.Length && LooksLikeBodyStart(data, declared);
+                int headerLength = healthy ? declared : DiscoverHeaderLength(path, data);
+                if (headerLength <= 0 || headerLength >= data.Length) return false;
+
+                WalkBody(data, headerLength, out _, out durationMs);
+                return durationMs > 0;
+            }
+            catch (Exception ex)
+            {
+                DebugLogger.Warn($"LiveRecordReader: cannot measure playback time in '{path}': {ex.Message}");
+                return false;
+            }
+        }
+
+        /// <summary>
         /// Repairs a record the game left behind without patching its header length.
         ///
         /// The game writes that dword as zero for the whole match and only fills it in

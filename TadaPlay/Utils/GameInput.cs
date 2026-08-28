@@ -57,7 +57,31 @@ namespace TadaPlay.Utils
         /// direction, since a paused replay can be resumed while one that has run off the end
         /// cannot.
         /// </summary>
-        public static void SetReplaySpeedNormal()
+        public static void SetReplaySpeedNormal() => FloorThenRaise(RaisePresses, "50 (bình thường)");
+
+        /// <summary>
+        /// Stops a replay dead, from ANY current speed - the viewer's half of "the host paused".
+        ///
+        /// This is the SAME floor the speed control uses, simply without the two steps back up:
+        /// speed 0 is a full stop, and it is reached with the hardcoded Ctrl+Left viewer control
+        /// that is already known to land. It is deliberately NOT the game's "Pause Game" key.
+        /// That is an .hki binding, and .hki bindings are exactly what was measured NOT to affect
+        /// a replay - the "Slow Down Game" attempt that started this whole mechanism did nothing
+        /// for that reason. It is also user-rebindable and a TOGGLE, so nothing here could know
+        /// whether a press paused or resumed, and one dropped press would invert the state.
+        ///
+        /// Flooring has neither problem: extra presses at 0 are no-ops, so the result is the same
+        /// whether five presses land or fifty, and <see cref="SetReplaySpeedNormal"/> resumes from
+        /// it deterministically.
+        /// </summary>
+        public static void PauseReplay() => FloorThenRaise(0, "0 (tạm dừng)");
+
+        /// <summary>
+        /// Floors the playback speed to 0 with Ctrl+Left, then steps it back up
+        /// <paramref name="raisePresses"/> times with Ctrl+Right. Two presses land on normal
+        /// speed; zero presses leave the replay stopped.
+        /// </summary>
+        private static void FloorThenRaise(int raisePresses, string target)
         {
             bool ctrlDown = false;
             try
@@ -83,16 +107,17 @@ namespace TadaPlay.Utils
                     TapArrow(VkLeft, ScanLeft);   // -> 0
                 }
                 Thread.Sleep(150);
-                for (int i = 0; i < RaisePresses; i++)
+                for (int i = 0; i < raisePresses; i++)
                 {
                     if (!IsGameForeground()) return;
                     TapArrow(VkRight, ScanRight); // 0 -> 25 -> 50
                 }
                 Thread.Sleep(120);
+                DebugLogger.Info($"GameInput: replay speed set to {target}.");
             }
             catch (Exception ex)
             {
-                DebugLogger.Warn($"GameInput: SetReplaySpeedNormal failed: {ex.Message}");
+                DebugLogger.Warn($"GameInput: setting replay speed to {target} failed: {ex.Message}");
             }
             finally
             {

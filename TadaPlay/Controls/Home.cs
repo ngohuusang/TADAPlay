@@ -1678,9 +1678,16 @@ namespace TadaPlay.Controls
             ShowOverlay(hostIp, hostLabel);
 
             // Stop fast-forward from running the replay off its end: as the playhead nears the
-            // last byte, this floors the game speed back to normal (see PlayheadGovernor).
+            // last byte, this floors the game speed back to normal (see PlayheadGovernor). It is
+            // also given the host's broadcast status, which is what lets it stop the replay when
+            // the host pauses and release it when they carry on. That is a lookup in the lobby's
+            // existing online-user list - no extra traffic to the host, which matters because the
+            // governor asks for it every 600ms.
             _playheadGovernor?.Dispose();
-            _playheadGovernor = new PlayheadGovernor(fetch.Path, msg => printLog(msg, Color.RoyalBlue));
+            _playheadGovernor = new PlayheadGovernor(
+                fetch.Path,
+                msg => printLog(msg, Color.RoyalBlue),
+                () => LiveShareClient.FromBroadcast(LookupOnlineUser(hostLabel)));
             _playheadGovernor.Start();
         }
 
