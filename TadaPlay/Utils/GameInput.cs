@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Runtime.InteropServices;
 using TadaPlay.Logger;
 
@@ -35,18 +35,6 @@ namespace TadaPlay.Utils
         private const ushort ScanRight = 0x4D;
 
         /// <summary>
-        /// Presses Ctrl+Left ONCE - one step slower in a replay.
-        ///
-        /// Deliberately a single step rather than a "floor to 0 then come back up to 50" run.
-        /// The playback steps are 0 · 25 · 50 · 75 · 99 · 100 and injected keys are only
-        /// intermittently picked up by the game, so a floor-then-raise sequence turns dropped
-        /// taps into a speed INCREASE: if two of six Lefts land (100 -> 99 -> 75) and both
-        /// Rights land, the result is 100 again - measured as exactly this flapping in the log.
-        /// One step per call can only ever slow down, so <see cref="PlayheadGovernor"/> can keep
-        /// calling it until the playhead is back to real time and then simply stop, which also
-        /// removes any need to know the current speed.
-        /// </summary>
-        /// <summary>
         /// Sets a replay to exactly normal speed (50) from ANY current speed.
         ///
         /// The playback speeds step 0 - 25 - 50 - 75 - 99 - 100, and nothing here can read which
@@ -61,25 +49,60 @@ namespace TadaPlay.Utils
         ///
         /// Ctrl is held down across the whole sequence, and every press is held long enough for
         /// the game's per-frame DirectInput poll to see it.
+        ///
+        /// Abandoning the sequence part-way (the viewer alt-tabbed) leaves the replay at an
+        /// unknown speed - possibly paused, if the Lefts landed but the Rights did not. That is
+        /// acceptable precisely because this call is deterministic from ANY starting speed,
+        /// including 0: the governor's next attempt puts it back on 50. It also errs in the safe
+        /// direction, since a paused replay can be resumed while one that has run off the end
+        /// cannot.
         /// </summary>
         public static void SetReplaySpeedNormal()
         {
+            bool ctrlDown = false;
             try
             {
                 // Activate the window first, as WScript.Shell AppActivate does before SendKeys.
                 BringGameToForeground();
                 Thread.Sleep(120);
+
+                // Re-checked before every press, not once at the start. SendInput is GLOBAL - it
+                // goes to whatever has focus, not to a window we name - and this sequence takes
+                // about 2.4 seconds end to end (seven taps at 260ms plus the settling sleeps).
+                // Alt-tabbing inside that window would otherwise deliver the remaining Ctrl+arrow
+                // presses into whatever the viewer switched to.
+                if (!IsGameForeground()) return;
+
                 if (!Send(MakeKey(VkControl, ScanControl, keyUp: false, extended: false))) return;
+                ctrlDown = true;
                 Thread.Sleep(200);
-                for (int i = 0; i < FloorPresses; i++) TapArrow(VkLeft, ScanLeft);   // -> 0
+
+                for (int i = 0; i < FloorPresses; i++)
+                {
+                    if (!IsGameForeground()) return;
+                    TapArrow(VkLeft, ScanLeft);   // -> 0
+                }
                 Thread.Sleep(150);
-                for (int i = 0; i < RaisePresses; i++) TapArrow(VkRight, ScanRight); // 0 -> 25 -> 50
+                for (int i = 0; i < RaisePresses; i++)
+                {
+                    if (!IsGameForeground()) return;
+                    TapArrow(VkRight, ScanRight); // 0 -> 25 -> 50
+                }
                 Thread.Sleep(120);
-                Send(MakeKey(VkControl, ScanControl, keyUp: true, extended: false));
             }
             catch (Exception ex)
             {
                 DebugLogger.Warn($"GameInput: SetReplaySpeedNormal failed: {ex.Message}");
+            }
+            finally
+            {
+                // Ctrl comes back up on every path, including an abort. A stuck modifier would
+                // turn every later keystroke - in the game or in whatever the viewer alt-tabbed
+                // to - into a Ctrl chord, which is far worse than the speed being wrong.
+                if (ctrlDown)
+                {
+                    Send(MakeKey(VkControl, ScanControl, keyUp: true, extended: false));
+                }
             }
         }
 

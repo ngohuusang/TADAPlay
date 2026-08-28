@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Threading;
 using TadaPlay.Logger;
@@ -12,14 +12,15 @@ namespace TadaPlay.Utils
     /// playhead to the last byte, where AoE2 ends the replay even though the host is still
     /// playing. Nothing can make the game wait at end-of-file, so instead this watches how close
     /// the playhead is to the end and, while it is inside a safety window AND still outrunning
-    /// real time, injects the viewer's Ctrl+Left "slower" control one step per tick until the
-    /// replay is back to normal speed (50).
+    /// real time, sets the replay back to normal speed (50) via
+    /// <see cref="GameInput.SetReplaySpeedNormal"/>.
     ///
-    /// It is a closed loop on purpose. Injected keys reach the game only intermittently, so a
-    /// one-shot "set the speed to 50" run (floor to 0, then two steps back up) turned dropped
-    /// taps into a speed INCREASE and measurably flapped between 50 and 100. Stepping down once
-    /// per tick can only ever slow the replay, needs no knowledge of the current speed, and stops
-    /// by itself as soon as the playhead is back to ~1x - so it never runs on down into pause.
+    /// That call is deterministic from any starting speed - it floors to 0, which is a hard
+    /// stop, then steps up twice to 50 - so this does not need to know the current speed and has
+    /// nothing to converge on. An earlier design stepped down one notch per tick and re-measured
+    /// instead; it could not stop cleanly, because the measurement lags the change, so it kept
+    /// pressing after the replay had already slowed and walked 75 - 50 - 25 - 0, leaving the
+    /// replay paused. The rate average is reset after each attempt for the same reason.
     ///
     /// The trigger is "how many REAL seconds before the playhead would catch the live edge",
     /// which needs two measurements rather than one: how fast the playhead consumes the record,
@@ -31,8 +32,10 @@ namespace TadaPlay.Utils
     /// The playhead is read from the game's file-read position, which runs a little ahead of what
     /// is on screen, so it triggers slightly early rather than too late.
     ///
-    /// Keys are only injected while the GAME is the foreground window, so a press never lands in
-    /// TadaPlay or anywhere else if the viewer has alt-tabbed away.
+    /// Keys are only injected while the GAME is the foreground window, and that is re-checked
+    /// before every individual press rather than once per attempt - SendInput is global, and the
+    /// full sequence takes around 2.4 seconds, which is ample time to alt-tab into the middle of
+    /// it.
     /// </summary>
     public sealed class PlayheadGovernor : IDisposable
     {
