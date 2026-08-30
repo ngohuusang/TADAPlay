@@ -1736,8 +1736,10 @@ namespace TadaPlay.Controls
                 printLog($"[Xem] {message}",
                          status == GameLauncher.LaunchStatus.Success ? Color.DarkGreen : Color.Red);
 
-                // Remember exactly which game this is, so closing it later cannot reach any
-                // other copy - see AutoCloseSpectatorGameAsync.
+                // Remember exactly which game this is, so the exit watchdog can tell it
+                // apart from any other copy the player has open. Nothing closes it - that is
+                // the viewer's to do - but knowing when THEY closed it is what stops the
+                // download.
                 _spectatorGamePid = pid;
                 _spectatorGameStartedUtc = startedUtc;
                 if (pid == null)
@@ -1808,10 +1810,20 @@ namespace TadaPlay.Controls
                     // Nothing left to fast-forward into once the stream is done.
                     _playheadGovernor?.Dispose();
                     _playheadGovernor = null;
-                    // Spectating is over (match ended, all data received - a clean finish, not a
-                    // connection problem), so close the game that was opened just to watch it,
-                    // instead of leaving the viewer to alt-tab and quit the replay by hand.
-                    if (!isProblem) _ = AutoCloseSpectatorGameAsync();
+                    // The match is over. TadaPlay does NOT close the game - the viewer
+                    // does, when they are ready.
+                    //
+                    // It used to, eight seconds after the last byte arrived. Even aimed at the
+                    // right process that is the wrong behaviour: it takes a window away from
+                    // someone who may still be reading the score screen, and it cannot know
+                    // whether they are done. Aimed at the wrong process - which is what
+                    // happened, see the release notes for 3.33.3 - it ended people's own games.
+                    // Nothing here should be killing a process the player is looking at.
+                    if (!isProblem)
+                    {
+                        printLog("[Xem] Trận đã kết thúc - bạn có thể đóng game khi xem xong.",
+                                 Color.RoyalBlue);
+                    }
                 }
             });
             _liveStream.Start();
@@ -1839,51 +1851,11 @@ namespace TadaPlay.Controls
         }
 
         /// <summary>
-        /// Closes the game opened for spectating once the watched match is over. A short grace
-        /// period first, so the viewer sees the final moments / score screen rather than the
-        /// game vanishing the instant the last byte arrives - and if they have meanwhile picked
-        /// a new match to watch, that new game is left alone.
-        /// </summary>
-        private async System.Threading.Tasks.Task AutoCloseSpectatorGameAsync()
-        {
-            try { await System.Threading.Tasks.Task.Delay(TimeSpan.FromSeconds(8)); }
-            catch { /* app closing */ }
-
-            // A new watch started during the grace period owns the game now - leave it running.
-            if (_liveStream is { IsRunning: true }) return;
-
-            try
-            {
-                // ONLY the game this app opened to watch with.
-                //
-                // This used to call LiveRecordReader.FindGameProcess(), which returns the first
-                // process matching a game exe NAME - any copy of AoE2 that happened to be
-                // running. A player who finished watching, quit the replay and started their own
-                // game inside the grace period had that game killed out from under them: the
-                // spectator game was gone, so the scan found the only one left, which was
-                // theirs. "The game suddenly closed" was this.
-                var game = FindSpectatorGame();
-                if (game == null) return;
-                int pid = game.Id;
-                try { if (!game.HasExited) { game.Kill(); game.WaitForExit(3000); } }
-                finally { game.Dispose(); }
-                _spectatorGamePid = null;
-                _spectatorGameStartedUtc = null;
-                DebugLogger.Info($"Home: auto-closed spectator game (PID {pid}) after the match ended.");
-                printLog("[Xem] Trận đã kết thúc - đã tự động đóng game.", Color.RoyalBlue);
-            }
-            catch (Exception ex)
-            {
-                DebugLogger.Warn($"Home: could not auto-close spectator game: {ex.Message}");
-            }
-        }
-
-        /// <summary>
         /// The game this app opened for spectating, or null when it is gone, was never
         /// identified, or the process id now belongs to something else.
         ///
-        /// Returning null is always the safe answer: the caller then leaves every process
-        /// alone, which is what should happen when we cannot prove which one is ours.
+        /// Used only to notice that the viewer has closed the game, which is how the
+        /// download knows to stop. Nothing acts on the process itself.
         /// </summary>
         private System.Diagnostics.Process FindSpectatorGame()
         {
@@ -2043,8 +2015,6 @@ namespace TadaPlay.Controls
 
         private void StopLiveStream()
         {
-            // Not cleared here: AutoCloseSpectatorGameAsync runs AFTER the stream reports it is
-            // finished, and still needs to know which game to close. It clears it once it has.
             StopWatchExitWatchdog();
             LiveStreamSession session = _liveStream;
             _liveStream = null;
