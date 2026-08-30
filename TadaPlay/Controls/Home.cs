@@ -1459,7 +1459,7 @@ namespace TadaPlay.Controls
             // others watch them, was both pointless and untrue.
 
             string exePath = GameExecutablePreparer.PrepareAndGetExePath(appContext.GetGameFolder(), appContext.GetGameLaunchMode());
-            var (status, message) = GameLauncher.Launch(exePath);
+            var (status, message, _, _) = GameLauncher.Launch(exePath);
             Color color = status switch
             {
                 GameLauncher.LaunchStatus.Success => Color.DarkGreen,
@@ -1732,9 +1732,19 @@ namespace TadaPlay.Controls
 
                 string exePath = GameExecutablePreparer.PrepareAndGetExePath(
                     gameFolder, appContext.GetGameLaunchMode());
-                var (status, message) = GameLauncher.Launch(exePath, fetch.Path);
+                var (status, message, pid, startedUtc) = GameLauncher.Launch(exePath, fetch.Path);
                 printLog($"[Xem] {message}",
                          status == GameLauncher.LaunchStatus.Success ? Color.DarkGreen : Color.Red);
+
+                // Remember exactly which game this is, so closing it later cannot reach any
+                // other copy - see AutoCloseSpectatorGameAsync.
+                _spectatorGamePid = pid;
+                _spectatorGameStartedUtc = startedUtc;
+                if (pid == null)
+                {
+                    DebugLogger.Warn("Home: the spectator game could not be identified; it will " +
+                                     "not be closed automatically.");
+                }
 
                 if (status != GameLauncher.LaunchStatus.Success)
                 {
@@ -1778,6 +1788,12 @@ namespace TadaPlay.Controls
         private const int WatchExitPollMs = 3000;
         private SpectatorOverlay _overlay;
         private ReplayFollower _playheadGovernor;
+
+        // Which game THIS app opened for spectating. Start time as well as PID, because
+        // Windows reuses process ids and killing the wrong game is the whole failure being
+        // guarded against here.
+        private int? _spectatorGamePid;
+        private DateTime? _spectatorGameStartedUtc;
 
         private void StartLiveStream(string hostIp, string hostLabel, LiveShareClient.FetchResult fetch)
         {
@@ -1838,17 +1854,68 @@ namespace TadaPlay.Controls
 
             try
             {
-                var game = LiveRecordReader.FindGameProcess();
+                // ONLY the game this app opened to watch with.
+                //
+                // This used to call LiveRecordReader.FindGameProcess(), which returns the first
+                // process matching a game exe NAME - any copy of AoE2 that happened to be
+                // running. A player who finished watching, quit the replay and started their own
+                // game inside the grace period had that game killed out from under them: the
+                // spectator game was gone, so the scan found the only one left, which was
+                // theirs. "The game suddenly closed" was this.
+                var game = FindSpectatorGame();
                 if (game == null) return;
                 int pid = game.Id;
                 try { if (!game.HasExited) { game.Kill(); game.WaitForExit(3000); } }
                 finally { game.Dispose(); }
+                _spectatorGamePid = null;
+                _spectatorGameStartedUtc = null;
                 DebugLogger.Info($"Home: auto-closed spectator game (PID {pid}) after the match ended.");
                 printLog("[Xem] Trận đã kết thúc - đã tự động đóng game.", Color.RoyalBlue);
             }
             catch (Exception ex)
             {
                 DebugLogger.Warn($"Home: could not auto-close spectator game: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// The game this app opened for spectating, or null when it is gone, was never
+        /// identified, or the process id now belongs to something else.
+        ///
+        /// Returning null is always the safe answer: the caller then leaves every process
+        /// alone, which is what should happen when we cannot prove which one is ours.
+        /// </summary>
+        private System.Diagnostics.Process FindSpectatorGame()
+        {
+            if (_spectatorGamePid == null) return null;
+
+            System.Diagnostics.Process game = null;
+            try
+            {
+                game = System.Diagnostics.Process.GetProcessById(_spectatorGamePid.Value);
+
+                // The id can have been recycled onto an unrelated process since launch. Start
+                // time settles it - two processes cannot share an id at the same instant.
+                if (_spectatorGameStartedUtc != null
+                    && game.StartTime.ToUniversalTime() != _spectatorGameStartedUtc.Value)
+                {
+                    DebugLogger.Info($"Home: PID {_spectatorGamePid} now belongs to a different " +
+                                     "process - leaving it alone.");
+                    game.Dispose();
+                    return null;
+                }
+
+                return game;
+            }
+            catch (ArgumentException)
+            {
+                return null;   // already exited - nothing to close
+            }
+            catch (Exception ex)
+            {
+                DebugLogger.Warn($"Home: cannot check the spectator game: {ex.Message}");
+                game?.Dispose();
+                return null;
             }
         }
 
@@ -1929,8 +1996,17 @@ namespace TadaPlay.Controls
                     return;
                 }
 
+                // Prefer the game we actually opened. Falling back to the name scan only
+                // when it was never identified: that scan cannot tell the spectator game from
+                // the player's own, so on its own it would keep the stream running after the
+                // viewer quit, just because some other copy of the game was open.
                 System.Diagnostics.Process game = null;
-                try { game = LiveRecordReader.FindGameProcess(); }
+                try
+                {
+                    game = _spectatorGamePid != null
+                        ? FindSpectatorGame()
+                        : LiveRecordReader.FindGameProcess();
+                }
                 catch (Exception ex) { DebugLogger.Warn($"Home: watch watchdog probe failed: {ex.Message}"); }
 
                 try
@@ -1967,6 +2043,8 @@ namespace TadaPlay.Controls
 
         private void StopLiveStream()
         {
+            // Not cleared here: AutoCloseSpectatorGameAsync runs AFTER the stream reports it is
+            // finished, and still needs to know which game to close. It clears it once it has.
             StopWatchExitWatchdog();
             LiveStreamSession session = _liveStream;
             _liveStream = null;

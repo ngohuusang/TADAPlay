@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Diagnostics;
 using System.IO;
 using TadaPlay.Logger;
@@ -23,17 +23,18 @@ namespace TadaPlay.Utils
         /// GameExecutablePreparer right before this call, never a permanent user-owned file - so
         /// once the game process exits, the copy is deleted again automatically.
         /// </summary>
-        public static (LaunchStatus Status, string Message) Launch(string exePath, string recordFilePath = null)
+        public static (LaunchStatus Status, string Message, int? Pid, DateTime? StartedUtc)
+            Launch(string exePath, string recordFilePath = null)
         {
             if (string.IsNullOrWhiteSpace(exePath))
             {
                 return (LaunchStatus.NotConfigured,
                     "Không tìm thấy file khởi chạy game. Kiểm tra lại thư mục game trong Cài đặt " +
-                    "(phải chứa thư mục con age2_x1).");
+                    "(phải chứa thư mục con age2_x1).", null, null);
             }
             if (!File.Exists(exePath))
             {
-                return (LaunchStatus.FileMissing, $"Không tìm thấy file khởi chạy game: {exePath}");
+                return (LaunchStatus.FileMissing, $"Không tìm thấy file khởi chạy game: {exePath}", null, null);
             }
 
             try
@@ -48,6 +49,21 @@ namespace TadaPlay.Utils
                     startInfo.Arguments = $"\"{recordFilePath}\"";
                 }
                 Process process = Process.Start(startInfo);
+
+                // Identity of what we just started, so a caller that later wants to close THIS
+                // game can tell it apart from any other copy the player has open. PID alone is
+                // not enough - Windows hands numbers back out - so the start time comes too.
+                int? pid = null;
+                DateTime? startedUtc = null;
+                if (process != null)
+                {
+                    try { pid = process.Id; startedUtc = process.StartTime.ToUniversalTime(); }
+                    catch (Exception ex)
+                    {
+                        DebugLogger.Warn($"GameLauncher: cannot identify the launched game: {ex.Message}");
+                    }
+                }
+
                 if (process != null)
                 {
                     process.EnableRaisingEvents = true;
@@ -64,12 +80,12 @@ namespace TadaPlay.Utils
                 string message = string.IsNullOrWhiteSpace(recordFilePath)
                     ? $"Đã mở '{Path.GetFileName(exePath)}'."
                     : $"Đã mở '{Path.GetFileName(exePath)}' để phát lại '{Path.GetFileName(recordFilePath)}'.";
-                return (LaunchStatus.Success, message);
+                return (LaunchStatus.Success, message, pid, startedUtc);
             }
             catch (Exception ex)
             {
                 DebugLogger.Error($"GameLauncher: failed to launch '{exePath}': {ex.Message}");
-                return (LaunchStatus.LaunchFailed, $"Không thể mở game: {ex.Message}");
+                return (LaunchStatus.LaunchFailed, $"Không thể mở game: {ex.Message}", null, null);
             }
         }
 

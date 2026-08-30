@@ -557,7 +557,7 @@ namespace TadaPlay.Controls
                 // ThreadPool-scheduled, and this synchronous blocking I/O (copying the ~3MB
                 // launcher exe, antivirus scanning it, ShellExecute reputation checks) was
                 // starving it long enough to spike reported ping.
-                var (status, launchMessage) = await System.Threading.Tasks.Task.Factory.StartNew(() =>
+                var (status, launchMessage, _, _) = await System.Threading.Tasks.Task.Factory.StartNew(() =>
                 {
                     string exePath = GameExecutablePreparer.PrepareAndGetExePath(_appContext.GetGameFolder(), _appContext.GetGameLaunchMode());
                     return GameLauncher.Launch(exePath, destPath);
