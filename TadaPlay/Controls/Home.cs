@@ -121,6 +121,26 @@ namespace TadaPlay.Controls
                 DebugLogger.Info($"Home: Online users list updated by AppContext. Count: {appContext.AllOnlineUsers.Count}");
             }, "HOME_ONLINE_USERS");
         }
+
+        /// <summary>
+        /// Notes arrivals in the log panel.
+        ///
+        /// This used to be a tray balloon with a sound alert, which is the wrong weight for the
+        /// event: people come and go all evening, every one of them interrupted whatever the
+        /// player was doing, and in a busy lobby the alert fired over and over. A log line says
+        /// the same thing, stays readable as history, and costs no attention - the online list
+        /// beside it is still the live picture.
+        /// </summary>
+        private void AppContext_OnUserCameOnline(object sender, IReadOnlyList<User> newlyOnlineUsers)
+        {
+            if (newlyOnlineUsers == null || newlyOnlineUsers.Count == 0) return;
+
+            string names = string.Join(", ", newlyOnlineUsers.Select(u => u.FullName ?? u.Username));
+            printLog(newlyOnlineUsers.Count == 1
+                        ? $"[Online] {names} vừa online."
+                        : $"[Online] {newlyOnlineUsers.Count} người vừa online: {names}",
+                     Color.DarkGreen);
+        }
         #endregion
 
         private void Home_Load(object sender, EventArgs e)
@@ -131,6 +151,7 @@ namespace TadaPlay.Controls
 
             appContext.OnCurrentUserUpdated += AppContext_OnCurrentUserUpdated;
             appContext.OnOnlineUsersUpdated += AppContext_OnOnlineUsersUpdated;
+            appContext.OnUserCameOnline += AppContext_OnUserCameOnline;
 
             wireGuardVpnService.OnConnected += WireGuardVpnService_OnConnected;
             wireGuardVpnService.OnDisconnected += WireGuardVpnService_OnDisconnected;

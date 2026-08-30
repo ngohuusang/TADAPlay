@@ -84,9 +84,6 @@
     <EmbeddedResource Include="Resources\WK-wide.exe">
       <LogicalName>TadaPlay.Resources.WK-wide.exe</LogicalName>
     </EmbeddedResource>
-    <EmbeddedResource Include="Resources\yahoo_knock.mp3">
-      <LogicalName>TadaPlay.Resources.yahoo_knock.mp3</LogicalName>
-    </EmbeddedResource>
     <EmbeddedResource Include="Resources\player.nfz.template">
       <LogicalName>TadaPlay.Resources.player.nfz.template</LogicalName>
     </EmbeddedResource>
