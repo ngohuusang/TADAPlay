@@ -38,6 +38,7 @@ namespace TadaPlay
             // no IAppContext to ask yet. Off unless the player turned it on in Cài đặt.
             DebugLogger.SetFileLogging(Contexts.AppContext.IsDebugLogEnabled());
             DebugLogger.CleanLog();
+            InstallCrashGuard();
             DebugLogger.Info("Project start: " + Application.ProductVersion);
 
             // One copy only. A second instance would start its own VPN adapter, record watcher
@@ -71,6 +72,48 @@ namespace TadaPlay
             };
 
             Application.Run(ServiceProvider.GetRequiredService<MainForm>());
+        }
+
+        /// <summary>
+        /// Keeps a UI-thread exception from killing the app.
+        ///
+        /// Without this, WinForms shows the raw .NET crash dialog - a wall of stack trace and
+        /// loaded assemblies, in English, with a "JIT Debugging" footer - and the app is gone.
+        /// That is a terrible outcome for a player mid-evening, and it does not even leave
+        /// anything behind to diagnose with unless they photograph the dialog.
+        ///
+        /// What prompted it: AntdUI 2.0.9 races its own scrollbar hover animation. Moving the
+        /// mouse off the online-user list can land in
+        ///
+        ///   AntdUI.Chat.MsgList.OnMouseLeave -> ScrollBar.Leave -> set_HoverY
+        ///     -> ITask.Dispose -> CancellationTokenSource.Cancel  (already disposed)
+        ///
+        /// which throws ObjectDisposedException on the UI thread. It is inside the library, in
+        /// a code path nothing here calls directly, and it needs a list long enough to have a
+        /// scrollbar - so it shows up on a busy lobby night and not in testing. There is no fix
+        /// available from this side beyond not letting it be fatal.
+        ///
+        /// CatchException means WinForms raises ThreadException instead of tearing down, and
+        /// returning from the handler lets the message loop carry on. That is the right trade
+        /// for a painting or animation fault, which is what reaches here in practice: the app
+        /// keeps running and the fault is logged rather than shown.
+        ///
+        /// The AppDomain handler cannot stop the process - a background-thread exception is
+        /// still fatal - but it makes sure the reason is written down before it goes.
+        /// </summary>
+        private static void InstallCrashGuard()
+        {
+            Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
+
+            Application.ThreadException += (sender, e) =>
+            {
+                DebugLogger.Error($"Unhandled UI exception (app kept running): {e.Exception}");
+            };
+
+            AppDomain.CurrentDomain.UnhandledException += (sender, e) =>
+            {
+                DebugLogger.Fatal($"Unhandled exception, terminating={e.IsTerminating}: {e.ExceptionObject}");
+            };
         }
 
         private static void ConfigureServices()
