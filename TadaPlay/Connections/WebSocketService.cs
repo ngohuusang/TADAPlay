@@ -218,8 +218,8 @@ namespace TadaPlay.Websockets
         {
             if (!IsConnected)
             {
-                DebugLogger.Warn("WebSocketService: Attempted to send message, but not connected."); // Changed to DebugLogger.Warn
-                OnErrorOccurred?.Invoke(this, "WebSocket not connected for sending message.");
+                // Logged, but NOT raised as an error: see the note on SendRawAsync's guard.
+                DebugLogger.Warn("WebSocketService: Attempted to send message, but not connected.");
                 return false;
             }
             try
@@ -243,8 +243,19 @@ namespace TadaPlay.Websockets
         {
             if (!IsConnected)
             {
-                DebugLogger.Warn("WebSocketService: Attempted to send raw message, but not connected."); // Changed to DebugLogger.Warn
-                OnErrorOccurred?.Invoke(this, "WebSocket not connected for sending raw message.");
+                // Not an error, so it does not raise one. "Not connected" is a STATE, not a
+                // failure: the socket connects a moment after login and reconnects on its own
+                // after a drop, and OnDisconnected already tells the UI about both.
+                //
+                // Raising it here put a red "Lỗi kết nối" toast in front of the player every
+                // time a routine periodic send happened to land while the socket was down. At
+                // login that is guaranteed: MatchStatusPublisher's first publish runs about half
+                // a second BEFORE the socket starts connecting, so everyone saw the popup on
+                // every single login. During a real outage it was worse - one toast per publish,
+                // every few seconds, for as long as the drop lasted.
+                //
+                // The caller gets false and can decide; nothing is hidden, it is still logged.
+                DebugLogger.Warn("WebSocketService: Attempted to send raw message, but not connected.");
                 return false;
             }
             try
