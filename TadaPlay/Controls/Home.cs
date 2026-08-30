@@ -283,14 +283,13 @@ namespace TadaPlay.Controls
         // record, and whether anyone is watching.
         //
         // The first capture waits 90 seconds so the match has real content behind it; that is
-        // also the countdown a viewer is shown. After that the cadence follows demand - 10
-        // seconds while someone is watching, so the replay keeps moving instead of arriving in
-        // 90-second lumps, and back to 90 when nobody is, so an unwatched game is not paying
-        // for shadow copies nobody reads.
+        // also the countdown a viewer is shown. After that a capture happens only while
+        // somebody is actually watching, every 30 seconds - an unwatched match takes exactly
+        // one snapshot, not one every 90 seconds for the length of the game.
         //
-        // 10 seconds is a floor, not a promise: a shadow copy takes a couple of seconds, and
+        // 30 seconds is a floor, not a promise: a shadow copy takes a couple of seconds, and
         // while one is running the next tick is skipped rather than queued, so the real gap is
-        // 10 seconds plus however long the capture took. The capture duration is logged.
+        // 30 seconds plus however long the capture took. The capture duration is logged.
         //
         // Either way a capture only happens if the record has GROWN since the last one. A
         // shadow copy costs a couple of seconds and briefly quiesces volume writes, and taking
@@ -303,8 +302,14 @@ namespace TadaPlay.Controls
         // decides not to capture costs a file-length check, so it is cheap to run often.
         private const int LiveShareTickMs = 2 * 1000;              // how often the decision is made
         private const int FirstCaptureDelayMs = 90 * 1000;         // before a match is watchable
-        private const int WatchedCaptureIntervalMs = 10 * 1000;    // somebody is watching
-        private const int IdleCaptureIntervalMs = 90 * 1000;       // nobody is
+        // Somebody is watching. Was 10s, which is the cadence players reported the game
+        // stuttering at: a shadow copy quiesces writes across the whole volume for a moment,
+        // and doing that six times a minute is felt in a game that is streaming its own assets
+        // off the same disk. A viewer is watching a replay from the start and is held behind
+        // the host anyway (see ReplayFollower), so arriving in 30s steps costs them nothing
+        // they can perceive - and this path only runs at all when the game is NOT serving its
+        // own real-time stream, which is the preferred source and needs no snapshot.
+        private const int WatchedCaptureIntervalMs = 30 * 1000;
         private bool _liveCaptureBusy;
         private string _liveCaptureMatch;   // record the current live captures belong to
         private int _liveCaptureCount;      // captures of the current match, for the log
@@ -479,6 +484,17 @@ namespace TadaPlay.Controls
             // and produce a file byte-identical to the one already being served.
             if (_liveCaptureCount > 0 && length <= _liveCaptureSourceLength) return false;
 
+            // Once the match is watchable, capture only while somebody is actually watching.
+            //
+            // It used to keep taking one every 90s regardless, so a shared match nobody opened
+            // still paid a shadow copy - and its volume-write freeze - roughly forty times over
+            // a long game, to produce snapshots that were never read. The first capture is what
+            // makes the match watchable; after that there is nothing to serve until there is
+            // someone to serve it to. A viewer arriving later gets that first snapshot at once
+            // and a fresh one within WatchedCaptureIntervalMs, which is the same experience
+            // they had before.
+            if (_liveCaptureCount > 0 && LiveShareServer.CurrentWatchers().Count == 0) return false;
+
             return (DateTime.UtcNow - _lastCaptureUtc).TotalMilliseconds >= NextCaptureIntervalMs();
         }
 
@@ -492,11 +508,7 @@ namespace TadaPlay.Controls
         /// seconds on top.
         /// </summary>
         private int NextCaptureIntervalMs() =>
-            _liveCaptureCount == 0
-                ? FirstCaptureDelayMs
-                : (LiveShareServer.CurrentWatchers().Count > 0
-                    ? WatchedCaptureIntervalMs
-                    : IdleCaptureIntervalMs);
+            _liveCaptureCount == 0 ? FirstCaptureDelayMs : WatchedCaptureIntervalMs;
 
         /// <summary>Announces viewers coming and going, so the player knows they are watched.</summary>
         private void LiveShare_WatcherChanged(LiveShareServer.Watcher watcher, bool started)
@@ -1425,32 +1437,43 @@ namespace TadaPlay.Controls
 
             if (_watchedRecordPath == null)
             {
-                string latest = RecordedGameFinder.FindLatestRecord(gameFolder, _watchCutoffUtc);
-                if (latest == null) return; // nothing new yet - keep waiting indefinitely
+                // Off the UI thread. FindLatestRecord walks the whole game folder recursively,
+                // twice (once per record extension), and stats every match to find the newest.
+                // On a plain install that is tens of milliseconds; on a big Voobly tree, a slow
+                // disk, or with antivirus inspecting every open, it is a great deal more - and
+                // running it on a Windows.Forms.Timer meant all of it blocked the message pump
+                // every 5 seconds. This app has been bitten by synchronous I/O on a shared
+                // thread before: see the note in startGameButton_Click about it starving the
+                // WebSocket ping timer and spiking reported ping.
+                //
+                // Only reached while no match is being tracked. Once a record is found the tick
+                // costs a single FileInfo on a known path, which is why this scan is not what
+                // players feel during a game.
+                if (_recordScanBusy) return;
+                _recordScanBusy = true;
+                DateTime cutoff = _watchCutoffUtc;
+                _ = System.Threading.Tasks.Task.Run(() =>
+                {
+                    try
+                    {
+                        string found = RecordedGameFinder.FindLatestRecord(gameFolder, cutoff);
+                        if (found == null) return; // nothing new yet - keep waiting indefinitely
 
-                _watchedRecordPath = latest;
-                _watchedRecordStartedUtc = DateTime.UtcNow;
-                var fi = new FileInfo(latest);
-                _lastKnownLength = fi.Length;
-                _lastKnownWriteTimeUtc = fi.LastWriteTimeUtc;
-                _stableTicks = 0;
-                printLog($"[Theo dõi] Đã phát hiện file record mới: {fi.Name}", Color.DarkGreen);
-
-                // From here others can see a match is running, and how long until it becomes
-                // watchable - a countdown rather than "nothing to watch". The capture state is
-                // per match, and the first-capture delay is measured from this moment.
-                _liveCaptureCount = 0;
-                _liveCaptureBytes = 0;
-                _liveCaptureSourceLength = 0;
-                _lastCaptureUtc = DateTime.UtcNow;
-                // Back to the first-capture wait before announcing the match: the previous
-                // match left this at its own last cadence, which for a watched game is 10s -
-                // and the countdown viewers see here is the 90s one.
-                MatchShareState.CaptureInterval = TimeSpan.FromMilliseconds(FirstCaptureDelayMs);
-                MatchShareState.MatchStarted(latest);
-                MatchStatusPublisher.Publish(webSocketService, appContext.GetAllowSpectateSetting());
-                printLog($"[Xem] Đã bắt đầu game - chờ {MatchShareState.WaitSeconds} giây để " +
-                         "người khác có thể xem.", Color.RoyalBlue);
+                        UiUtils.InvokeOnUiThread(this, () =>
+                        {
+                            // A scan started before the last one landed could double-report.
+                            if (_watchedRecordPath == null) OnNewRecordDetected(found);
+                        }, "HOME_RECORD_FOUND");
+                    }
+                    catch (Exception ex)
+                    {
+                        DebugLogger.Warn($"Home: record scan failed: {ex.Message}");
+                    }
+                    finally
+                    {
+                        _recordScanBusy = false;
+                    }
+                });
                 return;
             }
 
@@ -1461,6 +1484,50 @@ namespace TadaPlay.Controls
                 return;
             }
 
+            RecordWatchTick(current);
+        }
+
+        // Set on the UI thread, cleared on the scan's thread - volatile so the tick actually
+        // sees the clear rather than a cached true and never scanning again.
+        private volatile bool _recordScanBusy;
+
+        /// <summary>
+        /// A new recorded game has appeared: start tracking it and tell the lobby a match has
+        /// begun. Always on the UI thread - the scan that finds it is not.
+        /// </summary>
+        private void OnNewRecordDetected(string latest)
+        {
+            _watchedRecordPath = latest;
+            _watchedRecordStartedUtc = DateTime.UtcNow;
+            var fi = new FileInfo(latest);
+            _lastKnownLength = fi.Length;
+            _lastKnownWriteTimeUtc = fi.LastWriteTimeUtc;
+            _stableTicks = 0;
+            printLog($"[Theo dõi] Đã phát hiện file record mới: {fi.Name}", Color.DarkGreen);
+
+            // From here others can see a match is running, and how long until it becomes
+            // watchable - a countdown rather than "nothing to watch". The capture state is
+            // per match, and the first-capture delay is measured from this moment.
+            _liveCaptureCount = 0;
+            _liveCaptureBytes = 0;
+            _liveCaptureSourceLength = 0;
+            _lastCaptureUtc = DateTime.UtcNow;
+            // Back to the first-capture wait before announcing the match: the previous
+            // match left this at its own last cadence, which for a watched game is 30s -
+            // and the countdown viewers see here is the 90s one.
+            MatchShareState.CaptureInterval = TimeSpan.FromMilliseconds(FirstCaptureDelayMs);
+            MatchShareState.MatchStarted(latest);
+            MatchStatusPublisher.Publish(webSocketService, appContext.GetAllowSpectateSetting());
+            printLog($"[Xem] Đã bắt đầu game - chờ {MatchShareState.WaitSeconds} giây để " +
+                     "người khác có thể xem.", Color.RoyalBlue);
+        }
+
+        /// <summary>
+        /// The cheap per-tick path once a match is being tracked: has the record stopped
+        /// growing, and has the game let go of it yet.
+        /// </summary>
+        private void RecordWatchTick(FileInfo current)
+        {
             TimeSpan elapsed = DateTime.UtcNow - (_watchedRecordStartedUtc ?? DateTime.UtcNow);
             if (elapsed.TotalMinutes >= GiveUpWatchingFileAfterMinutes)
             {
