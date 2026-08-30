@@ -23,6 +23,10 @@ public interface IAppContext
 
     bool GetAllowSpectateSetting();
 
+    void SetDebugLogSetting(bool enabled);
+
+    bool GetDebugLogSetting();
+
     public void SetGameFolder(string folderPath);
 
     public string GetGameFolder();

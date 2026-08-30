@@ -34,6 +34,9 @@ namespace TadaPlay
             Application.SetCompatibleTextRenderingDefault(false);
 
             DebugLogger.InitLog4Net();
+            // Read straight from the registry: this runs before ConfigureServices, so there is
+            // no IAppContext to ask yet. Off unless the player turned it on in Cài đặt.
+            DebugLogger.SetFileLogging(Contexts.AppContext.IsDebugLogEnabled());
             DebugLogger.CleanLog();
             DebugLogger.Info("Project start: " + Application.ProductVersion);
 
