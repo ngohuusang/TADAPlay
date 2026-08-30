@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <Version>3.33.3</Version>
+    <Version>3.33.4</Version>
     <!-- net6.0-windows, not net8: .NET 8 dropped Windows 7/8.1 support (needs Win10+), and
          some players/hosts run Windows 7. .NET 6 is the last runtime that still runs on
          Windows 7 SP1. LangVersion latest keeps the newer C# syntax the code was written in. -->
