@@ -19,7 +19,6 @@ namespace TadaPlay.Controls
         // before anything is laid out.
         private const int DisplayCardHeight = 180;
         private const int FolderCardHeight = 272;
-        private const int ProfileCardHeight = 412;
         private const int CardGap = 14;
 
         Form form;
@@ -48,14 +47,10 @@ namespace TadaPlay.Controls
 
             int totalHeight = Padding.Vertical;
 
-            // Dock=Top stacks in REVERSE add order, so these go in bottom-up: the account card is
-            // added first and ends up last. Game setup reads before account details.
-            if (_appContext != null && _accountService != null)
-            {
-                Controls.Add(BuildProfileSection());
-                totalHeight += ProfileCardHeight + CardGap;
-            }
-
+            // Dock=Top stacks in REVERSE add order, so the last card added is the one on top.
+            // Account details are no longer here - they were about the person rather than this
+            // machine's game setup, and sat below two cards nobody had to read to reach them.
+            // See AccountInfo, opened from the name above the user list.
             if (_appContext != null)
             {
                 Controls.Add(BuildDisplayModeSection());
@@ -193,111 +188,6 @@ namespace TadaPlay.Controls
             content.Controls.Add(browseButton);
             content.Controls.Add(UiTheme.Gap(10));
             content.Controls.Add(pathBox);
-            return card;
-        }
-
-        // Profile editor: full name and optional password change, via the existing update-user
-        // endpoint. The in-game display name is no longer a separate editable field - it's
-        // always the account's username (see Home.startGameButton_Click / ProfileEnforceTimer_Tick).
-        // The server always requires the current password to confirm any change, even if only
-        // the name is being updated.
-        private Control BuildProfileSection()
-        {
-            var currentUser = _appContext.GetCurrentUser();
-
-            var card = UiTheme.Card(UiTheme.IconAccount, "Thông tin tài khoản",
-                                         currentUser?.Username ?? string.Empty,
-                                         UiTheme.AccentAccount, ProfileCardHeight,
-                                         out System.Windows.Forms.Panel content);
-
-            var fullNameBox = UiTheme.Field("Họ tên của bạn", UiTheme.IconAccount);
-            fullNameBox.Text = currentUser?.FullName ?? string.Empty;
-
-            var currentPasswordBox = UiTheme.Field("Bắt buộc để xác nhận thay đổi", password: true);
-            var newPasswordBox = UiTheme.Field("Để trống nếu không đổi", password: true);
-            var confirmPasswordBox = UiTheme.Field("Nhập lại mật khẩu mới", password: true);
-
-            var saveButton = UiTheme.Primary("Lưu thông tin", UiTheme.AccentAccountStrong);
-            saveButton.Click += async (s, e) =>
-            {
-                string fullName = fullNameBox.Text.Trim();
-                string currentPassword = currentPasswordBox.Text;
-                string newPassword = newPasswordBox.Text;
-                string confirmPassword = confirmPasswordBox.Text;
-
-                if (string.IsNullOrEmpty(fullName))
-                {
-                    AntdUI.Modal.open(new AntdUI.Modal.Config(form, "Lỗi", "Họ tên không được để trống.", AntdUI.TType.Warn)
-                    { CancelText = null, OkText = "Đóng" });
-                    return;
-                }
-                if (string.IsNullOrEmpty(currentPassword))
-                {
-                    AntdUI.Modal.open(new AntdUI.Modal.Config(form, "Lỗi", "Vui lòng nhập mật khẩu hiện tại để xác nhận thay đổi.", AntdUI.TType.Warn)
-                    { CancelText = null, OkText = "Đóng" });
-                    return;
-                }
-                if (newPassword != confirmPassword)
-                {
-                    AntdUI.Modal.open(new AntdUI.Modal.Config(form, "Lỗi", "Mật khẩu mới và xác nhận mật khẩu không khớp.", AntdUI.TType.Warn)
-                    { CancelText = null, OkText = "Đóng" });
-                    return;
-                }
-                if (newPassword.Length > 0 && newPassword.Length < 6)
-                {
-                    AntdUI.Modal.open(new AntdUI.Modal.Config(form, "Lỗi", "Mật khẩu mới phải có ít nhất 6 ký tự.", AntdUI.TType.Warn)
-                    { CancelText = null, OkText = "Đóng" });
-                    return;
-                }
-
-                try
-                {
-                    // The button carries the wait, so a slow request looks like it is working
-                    // rather than like a click that did nothing.
-                    saveButton.Loading = true;
-                    // The in-game display name always mirrors the account's username now (no
-                    // separate nickname field), so keep sending it through as nick_name for the
-                    // server's existing update-user contract.
-                    bool success = await _accountService.UpdateUserInfo(fullName, currentUser?.Username ?? string.Empty, currentPassword, newPassword);
-                    if (success)
-                    {
-                        if (currentUser != null)
-                        {
-                            currentUser.FullName = fullName;
-                            currentUser.NickName = currentUser.Username;
-                            _appContext.SetCurrentUser(currentUser);
-                        }
-                        currentPasswordBox.Text = string.Empty;
-                        newPasswordBox.Text = string.Empty;
-                        confirmPasswordBox.Text = string.Empty;
-                        AntdUI.Modal.open(new AntdUI.Modal.Config(form, "Thành công", "Thông tin tài khoản đã được cập nhật.", AntdUI.TType.Success)
-                        { CancelText = null, OkText = "Đóng" });
-                    }
-                }
-                catch (Exception ex)
-                {
-                    AntdUI.Modal.open(new AntdUI.Modal.Config(form, "Lỗi", ex.InnerException?.Message ?? ex.Message, AntdUI.TType.Error)
-                    { CancelText = null, OkText = "Đóng" });
-                }
-                finally
-                {
-                    // The dialog can be closed while the request is still out, so this can run
-                    // against a control that has already gone.
-                    if (!saveButton.IsDisposed) saveButton.Loading = false;
-                }
-            };
-
-            // Dock=Top stacks in reverse add order: add bottom-most control first.
-            content.Controls.Add(saveButton);
-            content.Controls.Add(UiTheme.Gap(10));
-            content.Controls.Add(confirmPasswordBox);
-            content.Controls.Add(UiTheme.Caption("Xác nhận mật khẩu mới"));
-            content.Controls.Add(newPasswordBox);
-            content.Controls.Add(UiTheme.Caption("Mật khẩu mới"));
-            content.Controls.Add(currentPasswordBox);
-            content.Controls.Add(UiTheme.Caption("Mật khẩu hiện tại (bắt buộc)"));
-            content.Controls.Add(fullNameBox);
-            content.Controls.Add(UiTheme.Caption("Họ tên"));
             return card;
         }
     }

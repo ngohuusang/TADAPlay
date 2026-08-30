@@ -29,6 +29,11 @@ namespace TadaPlay.Controls
         private readonly IWireGuardVpnService wireGuardVpnService;
         private readonly IAccountService accountService;
 
+        // Hover colour for the clickable name above the user list, and the tooltip both it and
+        // the avatar share. One ToolTip instance serves every control it is attached to.
+        private static readonly Color AccountLinkHover = Color.FromArgb(0x15, 0x77, 0xD4);
+        private readonly ToolTip _accountLinkTip = new ToolTip();
+
         private bool _uploadInProgress = false;
 
         // Set when an external WireGuard tunnel (e.g. the official WireGuard app) is already
@@ -81,6 +86,13 @@ namespace TadaPlay.Controls
             accountService = _accountService;
 
             userList.ItemSelected += userList_ItemSelected;
+
+            // The account editor opens from the identity block above the user list rather than
+            // from three cards down in Cài đặt. A label is not obviously clickable, so both the
+            // avatar and the name get a hand cursor, a hover colour and a tooltip - without
+            // those this is a feature only someone who already knew about it would find.
+            MakeAccountLink(userAvatar);
+            MakeAccountLink(usernameLabel);
             StyleUserList();
 
             // BẮT ĐẦU sat visibly inset from the log box below it. Measured against a window
@@ -104,6 +116,9 @@ namespace TadaPlay.Controls
                 StopLiveStream();
                 _spectatorStream?.Dispose();
                 _liveShareServer?.Dispose();
+                // A ToolTip is a Component, not a child control, so it is not disposed along
+                // with the control it decorates.
+                _accountLinkTip.Dispose();
             };
         }
 
@@ -1328,6 +1343,31 @@ namespace TadaPlay.Controls
                 DebugLogger.Error($"Home: update failed: {ex.Message}");
                 printLog($"[Cập nhật] Lỗi khi cập nhật: {ex.Message}", Color.Red);
             }
+        }
+
+        /// <summary>
+        /// Turns a control in the identity block into a way into <see cref="AccountInfo"/>.
+        /// </summary>
+        private void MakeAccountLink(Control control)
+        {
+            control.Cursor = Cursors.Hand;
+            _accountLinkTip.SetToolTip(control, "Xem và sửa thông tin tài khoản");
+            control.Click += (s, e) => OpenAccountInfo();
+
+            // Only the name changes colour: the avatar draws itself, so recolouring its
+            // ForeColor would do nothing visible.
+            if (control is Label label)
+            {
+                Color resting = label.ForeColor;
+                label.MouseEnter += (s, e) => label.ForeColor = AccountLinkHover;
+                label.MouseLeave += (s, e) => label.ForeColor = resting;
+            }
+        }
+
+        private void OpenAccountInfo()
+        {
+            var account = new AccountInfo(mainForm, appContext, accountService);
+            AntdUI.Modal.open(mainForm, "Thông tin tài khoản", account);
         }
 
         private void UpdateUiBasedOnLobbyState()
