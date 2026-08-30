@@ -293,9 +293,16 @@ namespace TadaPlay.Connections
         private static string CurrentShareable()
         {
             string inProgress = MatchShareState.CurrentRecordPath;
-            return inProgress != null
-                ? LiveRecordSnapshotStore.FindFor(inProgress)
-                : LiveRecordSnapshotStore.Current();
+            if (inProgress == null) return LiveRecordSnapshotStore.Current();
+
+            // The running match is not handed out until enough of it has been played - see
+            // MatchShareState.SpectateAfterGameMs. Enforced here rather than only in what the
+            // lobby is told, because this is the one place both /live/status and /live/record
+            // resolve what to serve: a client that ignored has_match would otherwise still be
+            // able to ask for the bytes and get them.
+            if (!MatchShareState.WatchableNow) return null;
+
+            return LiveRecordSnapshotStore.FindFor(inProgress);
         }
 
         /// <summary>

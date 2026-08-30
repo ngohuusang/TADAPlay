@@ -464,7 +464,8 @@ namespace TadaPlay.Controls
                 MatchShareState.CaptureInterval = TimeSpan.FromSeconds(3);
                 MatchShareState.Captured();
                 printLog("[Xem] Nguồn xem: luồng trực tiếp từ game (real-time) - người khác có " +
-                         "thể xem trận của bạn ngay.", Color.DarkGreen);
+                         $"thể xem trận của bạn sau {MatchShareState.SpectateAfterGameMs / 1000} giây " +
+                         "đầu trận.", Color.DarkGreen);
                 return true;
             }
 

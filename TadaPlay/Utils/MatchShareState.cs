@@ -49,6 +49,32 @@ namespace TadaPlay.Utils
         /// </summary>
         public static TimeSpan CaptureInterval { get; set; } = TimeSpan.FromSeconds(90);
 
+        /// <summary>
+        /// How much of the match must actually have been PLAYED before anyone may watch it.
+        ///
+        /// Measured in game time, not wall-clock: a host who pauses at 0:30 has not played any
+        /// more of the game, and a gate on elapsed real time would open while the match is still
+        /// thirty seconds old.
+        ///
+        /// There used to be a 90 second wait, but only on the shadow-copy path - it was the
+        /// delay before the first capture existed. The live-stream source writes its snapshot
+        /// from the moment it connects, so on the path that is actually preferred a match became
+        /// watchable within seconds of starting. This makes the rule the same whatever the
+        /// source, and puts it where it is enforced rather than merely announced.
+        /// </summary>
+        public const long SpectateAfterGameMs = 90 * 1000;
+
+        /// <summary>
+        /// Safety net for a match whose clock never advances.
+        ///
+        /// game_ms comes from summing the record's sync increments, and that has been seen to
+        /// stay at 0 for an entire match on a real host (which is why Home has a periodic
+        /// clock-only refresh at all). Gating purely on it would make such a host permanently
+        /// unwatchable, which is a worse failure than letting them be watched early - so after
+        /// this much real time the gate opens regardless.
+        /// </summary>
+        private static readonly TimeSpan ClockStuckFallback = TimeSpan.FromMinutes(3);
+
         /// <summary>True while a match is being played on this machine.</summary>
         public static bool InGame
         {
@@ -71,11 +97,58 @@ namespace TadaPlay.Utils
             {
                 lock (Gate)
                 {
-                    if (!_inGame || _nextCaptureUtc == null) return 0;
-                    double seconds = (_nextCaptureUtc.Value - DateTime.UtcNow).TotalSeconds;
+                    if (!_inGame) return 0;
+
+                    DateTime now = DateTime.UtcNow;
+                    // While the match is too young to watch, THAT is what a viewer is waiting
+                    // for - counting down to the next capture instead would promise something
+                    // that will not be handed over when it arrives.
+                    int gate = SecondsUntilWatchable(now);
+                    if (gate > 0) return gate;
+
+                    if (_nextCaptureUtc == null) return 0;
+                    double seconds = (_nextCaptureUtc.Value - now).TotalSeconds;
                     return seconds <= 0 ? 0 : (int)Math.Ceiling(seconds);
                 }
             }
+        }
+
+        /// <summary>
+        /// Whether the running match may be handed to a viewer yet.
+        ///
+        /// True when no match is running: a finished match published earlier is not gated - it
+        /// is over, so there is nothing left to give away by watching it.
+        /// </summary>
+        public static bool WatchableNow
+        {
+            get { lock (Gate) return IsWatchable(DateTime.UtcNow); }
+        }
+
+        private static bool IsWatchable(DateTime now)
+        {
+            if (!_inGame) return true;
+            if (_durationMs >= SpectateAfterGameMs) return true;
+            if (_startedUtc != null && now - _startedUtc.Value >= ClockStuckFallback) return true;
+            return false;
+        }
+
+        /// <summary>
+        /// Seconds until <see cref="IsWatchable"/> turns true, by whichever of the two rules
+        /// gets there first. The game-time estimate assumes the clock advances at about real
+        /// time, which is what it does at normal speed - it is a countdown for a human, not a
+        /// promise.
+        /// </summary>
+        private static int SecondsUntilWatchable(DateTime now)
+        {
+            if (IsWatchable(now)) return 0;
+
+            double byGame = (SpectateAfterGameMs - _durationMs) / 1000.0;
+            double byWall = _startedUtc == null
+                ? byGame
+                : (ClockStuckFallback - (now - _startedUtc.Value)).TotalSeconds;
+
+            double remaining = Math.Min(byGame, byWall);
+            return remaining <= 0 ? 0 : (int)Math.Ceiling(remaining);
         }
 
         /// <summary>

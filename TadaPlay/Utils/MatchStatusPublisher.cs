@@ -36,8 +36,10 @@ namespace TadaPlay.Utils
 
             bool inGame = MatchShareState.InGame;
             string currentMatch = MatchShareState.CurrentRecordPath;
+            // WatchableNow first: while the running match is still too young, other players
+            // are shown the countdown rather than a spectate button that would be refused.
             bool hasMatch = currentMatch != null
-                ? LiveRecordSnapshotStore.FindFor(currentMatch) != null
+                ? MatchShareState.WatchableNow && LiveRecordSnapshotStore.FindFor(currentMatch) != null
                 : LiveRecordSnapshotStore.Current() != null;
             long gameMs = MatchShareState.DurationMs;
             bool paused = MatchShareState.Paused;
