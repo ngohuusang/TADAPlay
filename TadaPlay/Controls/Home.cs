@@ -29,6 +29,11 @@ namespace TadaPlay.Controls
         private readonly IWireGuardVpnService wireGuardVpnService;
         private readonly IAccountService accountService;
 
+        // Hover colour for the clickable name above the user list, and the tooltip both it and
+        // the avatar share. One ToolTip instance serves every control it is attached to.
+        private static readonly Color AccountLinkHover = Color.FromArgb(0x15, 0x77, 0xD4);
+        private readonly ToolTip _accountLinkTip = new ToolTip();
+
         private bool _uploadInProgress = false;
 
         // Set when an external WireGuard tunnel (e.g. the official WireGuard app) is already
@@ -81,6 +86,13 @@ namespace TadaPlay.Controls
             accountService = _accountService;
 
             userList.ItemSelected += userList_ItemSelected;
+
+            // The account editor opens from the identity block above the user list rather than
+            // from three cards down in Cài đặt. A label is not obviously clickable, so both the
+            // avatar and the name get a hand cursor, a hover colour and a tooltip - without
+            // those this is a feature only someone who already knew about it would find.
+            MakeAccountLink(userAvatar);
+            MakeAccountLink(usernameLabel);
             StyleUserList();
 
             // BẮT ĐẦU sat visibly inset from the log box below it. Measured against a window
@@ -104,6 +116,9 @@ namespace TadaPlay.Controls
                 StopLiveStream();
                 _spectatorStream?.Dispose();
                 _liveShareServer?.Dispose();
+                // A ToolTip is a Component, not a child control, so it is not disposed along
+                // with the control it decorates.
+                _accountLinkTip.Dispose();
             };
         }
 
@@ -121,6 +136,26 @@ namespace TadaPlay.Controls
                 DebugLogger.Info($"Home: Online users list updated by AppContext. Count: {appContext.AllOnlineUsers.Count}");
             }, "HOME_ONLINE_USERS");
         }
+
+        /// <summary>
+        /// Notes arrivals in the log panel.
+        ///
+        /// This used to be a tray balloon with a sound alert, which is the wrong weight for the
+        /// event: people come and go all evening, every one of them interrupted whatever the
+        /// player was doing, and in a busy lobby the alert fired over and over. A log line says
+        /// the same thing, stays readable as history, and costs no attention - the online list
+        /// beside it is still the live picture.
+        /// </summary>
+        private void AppContext_OnUserCameOnline(object sender, IReadOnlyList<User> newlyOnlineUsers)
+        {
+            if (newlyOnlineUsers == null || newlyOnlineUsers.Count == 0) return;
+
+            string names = string.Join(", ", newlyOnlineUsers.Select(u => u.FullName ?? u.Username));
+            printLog(newlyOnlineUsers.Count == 1
+                        ? $"[Online] {names} vừa online."
+                        : $"[Online] {newlyOnlineUsers.Count} người vừa online: {names}",
+                     Color.DarkGreen);
+        }
         #endregion
 
         private void Home_Load(object sender, EventArgs e)
@@ -131,6 +166,7 @@ namespace TadaPlay.Controls
 
             appContext.OnCurrentUserUpdated += AppContext_OnCurrentUserUpdated;
             appContext.OnOnlineUsersUpdated += AppContext_OnOnlineUsersUpdated;
+            appContext.OnUserCameOnline += AppContext_OnUserCameOnline;
 
             wireGuardVpnService.OnConnected += WireGuardVpnService_OnConnected;
             wireGuardVpnService.OnDisconnected += WireGuardVpnService_OnDisconnected;
@@ -262,14 +298,13 @@ namespace TadaPlay.Controls
         // record, and whether anyone is watching.
         //
         // The first capture waits 90 seconds so the match has real content behind it; that is
-        // also the countdown a viewer is shown. After that the cadence follows demand - 10
-        // seconds while someone is watching, so the replay keeps moving instead of arriving in
-        // 90-second lumps, and back to 90 when nobody is, so an unwatched game is not paying
-        // for shadow copies nobody reads.
+        // also the countdown a viewer is shown. After that a capture happens only while
+        // somebody is actually watching, every 30 seconds - an unwatched match takes exactly
+        // one snapshot, not one every 90 seconds for the length of the game.
         //
-        // 10 seconds is a floor, not a promise: a shadow copy takes a couple of seconds, and
+        // 30 seconds is a floor, not a promise: a shadow copy takes a couple of seconds, and
         // while one is running the next tick is skipped rather than queued, so the real gap is
-        // 10 seconds plus however long the capture took. The capture duration is logged.
+        // 30 seconds plus however long the capture took. The capture duration is logged.
         //
         // Either way a capture only happens if the record has GROWN since the last one. A
         // shadow copy costs a couple of seconds and briefly quiesces volume writes, and taking
@@ -282,8 +317,14 @@ namespace TadaPlay.Controls
         // decides not to capture costs a file-length check, so it is cheap to run often.
         private const int LiveShareTickMs = 2 * 1000;              // how often the decision is made
         private const int FirstCaptureDelayMs = 90 * 1000;         // before a match is watchable
-        private const int WatchedCaptureIntervalMs = 10 * 1000;    // somebody is watching
-        private const int IdleCaptureIntervalMs = 90 * 1000;       // nobody is
+        // Somebody is watching. Was 10s, which is the cadence players reported the game
+        // stuttering at: a shadow copy quiesces writes across the whole volume for a moment,
+        // and doing that six times a minute is felt in a game that is streaming its own assets
+        // off the same disk. A viewer is watching a replay from the start and is held behind
+        // the host anyway (see ReplayFollower), so arriving in 30s steps costs them nothing
+        // they can perceive - and this path only runs at all when the game is NOT serving its
+        // own real-time stream, which is the preferred source and needs no snapshot.
+        private const int WatchedCaptureIntervalMs = 30 * 1000;
         private bool _liveCaptureBusy;
         private string _liveCaptureMatch;   // record the current live captures belong to
         private int _liveCaptureCount;      // captures of the current match, for the log
@@ -423,7 +464,8 @@ namespace TadaPlay.Controls
                 MatchShareState.CaptureInterval = TimeSpan.FromSeconds(3);
                 MatchShareState.Captured();
                 printLog("[Xem] Nguồn xem: luồng trực tiếp từ game (real-time) - người khác có " +
-                         "thể xem trận của bạn ngay.", Color.DarkGreen);
+                         $"thể xem trận của bạn sau {MatchShareState.SpectateAfterGameMs / 1000} giây " +
+                         "đầu trận.", Color.DarkGreen);
                 return true;
             }
 
@@ -458,6 +500,17 @@ namespace TadaPlay.Controls
             // and produce a file byte-identical to the one already being served.
             if (_liveCaptureCount > 0 && length <= _liveCaptureSourceLength) return false;
 
+            // Once the match is watchable, capture only while somebody is actually watching.
+            //
+            // It used to keep taking one every 90s regardless, so a shared match nobody opened
+            // still paid a shadow copy - and its volume-write freeze - roughly forty times over
+            // a long game, to produce snapshots that were never read. The first capture is what
+            // makes the match watchable; after that there is nothing to serve until there is
+            // someone to serve it to. A viewer arriving later gets that first snapshot at once
+            // and a fresh one within WatchedCaptureIntervalMs, which is the same experience
+            // they had before.
+            if (_liveCaptureCount > 0 && LiveShareServer.CurrentWatchers().Count == 0) return false;
+
             return (DateTime.UtcNow - _lastCaptureUtc).TotalMilliseconds >= NextCaptureIntervalMs();
         }
 
@@ -471,11 +524,7 @@ namespace TadaPlay.Controls
         /// seconds on top.
         /// </summary>
         private int NextCaptureIntervalMs() =>
-            _liveCaptureCount == 0
-                ? FirstCaptureDelayMs
-                : (LiveShareServer.CurrentWatchers().Count > 0
-                    ? WatchedCaptureIntervalMs
-                    : IdleCaptureIntervalMs);
+            _liveCaptureCount == 0 ? FirstCaptureDelayMs : WatchedCaptureIntervalMs;
 
         /// <summary>Announces viewers coming and going, so the player knows they are watched.</summary>
         private void LiveShare_WatcherChanged(LiveShareServer.Watcher watcher, bool started)
@@ -1297,6 +1346,31 @@ namespace TadaPlay.Controls
             }
         }
 
+        /// <summary>
+        /// Turns a control in the identity block into a way into <see cref="AccountInfo"/>.
+        /// </summary>
+        private void MakeAccountLink(Control control)
+        {
+            control.Cursor = Cursors.Hand;
+            _accountLinkTip.SetToolTip(control, "Xem và sửa thông tin tài khoản");
+            control.Click += (s, e) => OpenAccountInfo();
+
+            // Only the name changes colour: the avatar draws itself, so recolouring its
+            // ForeColor would do nothing visible.
+            if (control is Label label)
+            {
+                Color resting = label.ForeColor;
+                label.MouseEnter += (s, e) => label.ForeColor = AccountLinkHover;
+                label.MouseLeave += (s, e) => label.ForeColor = resting;
+            }
+        }
+
+        private void OpenAccountInfo()
+        {
+            var account = new AccountInfo(mainForm, appContext, accountService);
+            AntdUI.Modal.open(mainForm, "Thông tin tài khoản", account);
+        }
+
         private void UpdateUiBasedOnLobbyState()
         {
             userAvatar.Badge = "A+";
@@ -1385,7 +1459,7 @@ namespace TadaPlay.Controls
             // others watch them, was both pointless and untrue.
 
             string exePath = GameExecutablePreparer.PrepareAndGetExePath(appContext.GetGameFolder(), appContext.GetGameLaunchMode());
-            var (status, message) = GameLauncher.Launch(exePath);
+            var (status, message, _, _) = GameLauncher.Launch(exePath);
             Color color = status switch
             {
                 GameLauncher.LaunchStatus.Success => Color.DarkGreen,
@@ -1404,32 +1478,43 @@ namespace TadaPlay.Controls
 
             if (_watchedRecordPath == null)
             {
-                string latest = RecordedGameFinder.FindLatestRecord(gameFolder, _watchCutoffUtc);
-                if (latest == null) return; // nothing new yet - keep waiting indefinitely
+                // Off the UI thread. FindLatestRecord walks the whole game folder recursively,
+                // twice (once per record extension), and stats every match to find the newest.
+                // On a plain install that is tens of milliseconds; on a big Voobly tree, a slow
+                // disk, or with antivirus inspecting every open, it is a great deal more - and
+                // running it on a Windows.Forms.Timer meant all of it blocked the message pump
+                // every 5 seconds. This app has been bitten by synchronous I/O on a shared
+                // thread before: see the note in startGameButton_Click about it starving the
+                // WebSocket ping timer and spiking reported ping.
+                //
+                // Only reached while no match is being tracked. Once a record is found the tick
+                // costs a single FileInfo on a known path, which is why this scan is not what
+                // players feel during a game.
+                if (_recordScanBusy) return;
+                _recordScanBusy = true;
+                DateTime cutoff = _watchCutoffUtc;
+                _ = System.Threading.Tasks.Task.Run(() =>
+                {
+                    try
+                    {
+                        string found = RecordedGameFinder.FindLatestRecord(gameFolder, cutoff);
+                        if (found == null) return; // nothing new yet - keep waiting indefinitely
 
-                _watchedRecordPath = latest;
-                _watchedRecordStartedUtc = DateTime.UtcNow;
-                var fi = new FileInfo(latest);
-                _lastKnownLength = fi.Length;
-                _lastKnownWriteTimeUtc = fi.LastWriteTimeUtc;
-                _stableTicks = 0;
-                printLog($"[Theo dõi] Đã phát hiện file record mới: {fi.Name}", Color.DarkGreen);
-
-                // From here others can see a match is running, and how long until it becomes
-                // watchable - a countdown rather than "nothing to watch". The capture state is
-                // per match, and the first-capture delay is measured from this moment.
-                _liveCaptureCount = 0;
-                _liveCaptureBytes = 0;
-                _liveCaptureSourceLength = 0;
-                _lastCaptureUtc = DateTime.UtcNow;
-                // Back to the first-capture wait before announcing the match: the previous
-                // match left this at its own last cadence, which for a watched game is 10s -
-                // and the countdown viewers see here is the 90s one.
-                MatchShareState.CaptureInterval = TimeSpan.FromMilliseconds(FirstCaptureDelayMs);
-                MatchShareState.MatchStarted(latest);
-                MatchStatusPublisher.Publish(webSocketService, appContext.GetAllowSpectateSetting());
-                printLog($"[Xem] Đã bắt đầu game - chờ {MatchShareState.WaitSeconds} giây để " +
-                         "người khác có thể xem.", Color.RoyalBlue);
+                        UiUtils.InvokeOnUiThread(this, () =>
+                        {
+                            // A scan started before the last one landed could double-report.
+                            if (_watchedRecordPath == null) OnNewRecordDetected(found);
+                        }, "HOME_RECORD_FOUND");
+                    }
+                    catch (Exception ex)
+                    {
+                        DebugLogger.Warn($"Home: record scan failed: {ex.Message}");
+                    }
+                    finally
+                    {
+                        _recordScanBusy = false;
+                    }
+                });
                 return;
             }
 
@@ -1440,6 +1525,50 @@ namespace TadaPlay.Controls
                 return;
             }
 
+            RecordWatchTick(current);
+        }
+
+        // Set on the UI thread, cleared on the scan's thread - volatile so the tick actually
+        // sees the clear rather than a cached true and never scanning again.
+        private volatile bool _recordScanBusy;
+
+        /// <summary>
+        /// A new recorded game has appeared: start tracking it and tell the lobby a match has
+        /// begun. Always on the UI thread - the scan that finds it is not.
+        /// </summary>
+        private void OnNewRecordDetected(string latest)
+        {
+            _watchedRecordPath = latest;
+            _watchedRecordStartedUtc = DateTime.UtcNow;
+            var fi = new FileInfo(latest);
+            _lastKnownLength = fi.Length;
+            _lastKnownWriteTimeUtc = fi.LastWriteTimeUtc;
+            _stableTicks = 0;
+            printLog($"[Theo dõi] Đã phát hiện file record mới: {fi.Name}", Color.DarkGreen);
+
+            // From here others can see a match is running, and how long until it becomes
+            // watchable - a countdown rather than "nothing to watch". The capture state is
+            // per match, and the first-capture delay is measured from this moment.
+            _liveCaptureCount = 0;
+            _liveCaptureBytes = 0;
+            _liveCaptureSourceLength = 0;
+            _lastCaptureUtc = DateTime.UtcNow;
+            // Back to the first-capture wait before announcing the match: the previous
+            // match left this at its own last cadence, which for a watched game is 30s -
+            // and the countdown viewers see here is the 90s one.
+            MatchShareState.CaptureInterval = TimeSpan.FromMilliseconds(FirstCaptureDelayMs);
+            MatchShareState.MatchStarted(latest);
+            MatchStatusPublisher.Publish(webSocketService, appContext.GetAllowSpectateSetting());
+            printLog($"[Xem] Đã bắt đầu game - chờ {MatchShareState.WaitSeconds} giây để " +
+                     "người khác có thể xem.", Color.RoyalBlue);
+        }
+
+        /// <summary>
+        /// The cheap per-tick path once a match is being tracked: has the record stopped
+        /// growing, and has the game let go of it yet.
+        /// </summary>
+        private void RecordWatchTick(FileInfo current)
+        {
             TimeSpan elapsed = DateTime.UtcNow - (_watchedRecordStartedUtc ?? DateTime.UtcNow);
             if (elapsed.TotalMinutes >= GiveUpWatchingFileAfterMinutes)
             {
@@ -1603,9 +1732,21 @@ namespace TadaPlay.Controls
 
                 string exePath = GameExecutablePreparer.PrepareAndGetExePath(
                     gameFolder, appContext.GetGameLaunchMode());
-                var (status, message) = GameLauncher.Launch(exePath, fetch.Path);
+                var (status, message, pid, startedUtc) = GameLauncher.Launch(exePath, fetch.Path);
                 printLog($"[Xem] {message}",
                          status == GameLauncher.LaunchStatus.Success ? Color.DarkGreen : Color.Red);
+
+                // Remember exactly which game this is, so the exit watchdog can tell it
+                // apart from any other copy the player has open. Nothing closes it - that is
+                // the viewer's to do - but knowing when THEY closed it is what stops the
+                // download.
+                _spectatorGamePid = pid;
+                _spectatorGameStartedUtc = startedUtc;
+                if (pid == null)
+                {
+                    DebugLogger.Warn("Home: the spectator game could not be identified; it will " +
+                                     "not be closed automatically.");
+                }
 
                 if (status != GameLauncher.LaunchStatus.Success)
                 {
@@ -1650,6 +1791,12 @@ namespace TadaPlay.Controls
         private SpectatorOverlay _overlay;
         private ReplayFollower _playheadGovernor;
 
+        // Which game THIS app opened for spectating. Start time as well as PID, because
+        // Windows reuses process ids and killing the wrong game is the whole failure being
+        // guarded against here.
+        private int? _spectatorGamePid;
+        private DateTime? _spectatorGameStartedUtc;
+
         private void StartLiveStream(string hostIp, string hostLabel, LiveShareClient.FetchResult fetch)
         {
             _liveStream = new LiveStreamSession(hostIp, hostLabel, fetch, (message, isProblem) =>
@@ -1663,10 +1810,20 @@ namespace TadaPlay.Controls
                     // Nothing left to fast-forward into once the stream is done.
                     _playheadGovernor?.Dispose();
                     _playheadGovernor = null;
-                    // Spectating is over (match ended, all data received - a clean finish, not a
-                    // connection problem), so close the game that was opened just to watch it,
-                    // instead of leaving the viewer to alt-tab and quit the replay by hand.
-                    if (!isProblem) _ = AutoCloseSpectatorGameAsync();
+                    // The match is over. TadaPlay does NOT close the game - the viewer
+                    // does, when they are ready.
+                    //
+                    // It used to, eight seconds after the last byte arrived. Even aimed at the
+                    // right process that is the wrong behaviour: it takes a window away from
+                    // someone who may still be reading the score screen, and it cannot know
+                    // whether they are done. Aimed at the wrong process - which is what
+                    // happened, see the release notes for 3.33.3 - it ended people's own games.
+                    // Nothing here should be killing a process the player is looking at.
+                    if (!isProblem)
+                    {
+                        printLog("[Xem] Trận đã kết thúc - bạn có thể đóng game khi xem xong.",
+                                 Color.RoyalBlue);
+                    }
                 }
             });
             _liveStream.Start();
@@ -1694,32 +1851,43 @@ namespace TadaPlay.Controls
         }
 
         /// <summary>
-        /// Closes the game opened for spectating once the watched match is over. A short grace
-        /// period first, so the viewer sees the final moments / score screen rather than the
-        /// game vanishing the instant the last byte arrives - and if they have meanwhile picked
-        /// a new match to watch, that new game is left alone.
+        /// The game this app opened for spectating, or null when it is gone, was never
+        /// identified, or the process id now belongs to something else.
+        ///
+        /// Used only to notice that the viewer has closed the game, which is how the
+        /// download knows to stop. Nothing acts on the process itself.
         /// </summary>
-        private async System.Threading.Tasks.Task AutoCloseSpectatorGameAsync()
+        private System.Diagnostics.Process FindSpectatorGame()
         {
-            try { await System.Threading.Tasks.Task.Delay(TimeSpan.FromSeconds(8)); }
-            catch { /* app closing */ }
+            if (_spectatorGamePid == null) return null;
 
-            // A new watch started during the grace period owns the game now - leave it running.
-            if (_liveStream is { IsRunning: true }) return;
-
+            System.Diagnostics.Process game = null;
             try
             {
-                var game = LiveRecordReader.FindGameProcess();
-                if (game == null) return;
-                int pid = game.Id;
-                try { if (!game.HasExited) { game.Kill(); game.WaitForExit(3000); } }
-                finally { game.Dispose(); }
-                DebugLogger.Info($"Home: auto-closed spectator game (PID {pid}) after the match ended.");
-                printLog("[Xem] Trận đã kết thúc - đã tự động đóng game.", Color.RoyalBlue);
+                game = System.Diagnostics.Process.GetProcessById(_spectatorGamePid.Value);
+
+                // The id can have been recycled onto an unrelated process since launch. Start
+                // time settles it - two processes cannot share an id at the same instant.
+                if (_spectatorGameStartedUtc != null
+                    && game.StartTime.ToUniversalTime() != _spectatorGameStartedUtc.Value)
+                {
+                    DebugLogger.Info($"Home: PID {_spectatorGamePid} now belongs to a different " +
+                                     "process - leaving it alone.");
+                    game.Dispose();
+                    return null;
+                }
+
+                return game;
+            }
+            catch (ArgumentException)
+            {
+                return null;   // already exited - nothing to close
             }
             catch (Exception ex)
             {
-                DebugLogger.Warn($"Home: could not auto-close spectator game: {ex.Message}");
+                DebugLogger.Warn($"Home: cannot check the spectator game: {ex.Message}");
+                game?.Dispose();
+                return null;
             }
         }
 
@@ -1800,8 +1968,17 @@ namespace TadaPlay.Controls
                     return;
                 }
 
+                // Prefer the game we actually opened. Falling back to the name scan only
+                // when it was never identified: that scan cannot tell the spectator game from
+                // the player's own, so on its own it would keep the stream running after the
+                // viewer quit, just because some other copy of the game was open.
                 System.Diagnostics.Process game = null;
-                try { game = LiveRecordReader.FindGameProcess(); }
+                try
+                {
+                    game = _spectatorGamePid != null
+                        ? FindSpectatorGame()
+                        : LiveRecordReader.FindGameProcess();
+                }
                 catch (Exception ex) { DebugLogger.Warn($"Home: watch watchdog probe failed: {ex.Message}"); }
 
                 try

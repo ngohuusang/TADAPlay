@@ -179,6 +179,33 @@ public class AppContext : IAppContext
                || string.Equals(value.ToString(), "true", StringComparison.OrdinalIgnoreCase);
     }
 
+    /// <summary>
+    /// Whether to write a debug log file. Off unless the player turned it on in Cài đặt.
+    ///
+    /// Opt-in because the log is only ever useful when something has gone wrong and someone is
+    /// going to read it. Writing it by default cost every player a file that grew all session,
+    /// on every machine, to be read by nobody.
+    /// </summary>
+    public void SetDebugLogSetting(bool enabled)
+    {
+        SetRegistryValue("DebugLog", enabled ? 1 : 0);
+    }
+
+    public bool GetDebugLogSetting() => IsDebugLogEnabled();
+
+    /// <summary>
+    /// The same value, readable without an instance: Program has to configure logging before
+    /// the DI container that would hand it an IAppContext exists.
+    /// </summary>
+    public static bool IsDebugLogEnabled()
+    {
+        object value = GetRegistryValue("DebugLog");
+        // Absent means never chosen, which must read as off - the whole point of the default.
+        if (value == null) return false;
+        return value.ToString() == "1"
+               || string.Equals(value.ToString(), "true", StringComparison.OrdinalIgnoreCase);
+    }
+
     public void SetGameLaunchMode(string mode)
     {
         SetRegistryValue("GameLaunchMode", mode);

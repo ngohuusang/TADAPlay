@@ -40,7 +40,6 @@ namespace TadaPlay
             wireGuardVpnService = _wireGuardVpnService;
 
             appContext.OnVpnProfileUpdated += AppContext_OnVpnProfileUpdated;
-            appContext.OnUserCameOnline += AppContext_OnUserCameOnline;
 
             // Always run with Windows, starting hidden in the tray - no user-facing toggle for this.
             appContext.SetRunOnStartupSetting(true);
@@ -131,25 +130,6 @@ namespace TadaPlay
                     }
                 });
             }, "MAINFORM_VPN_PROFILE");
-        }
-
-        private void AppContext_OnUserCameOnline(object sender, IReadOnlyList<User> newlyOnlineUsers)
-        {
-            UiUtils.InvokeOnUiThread(this, () =>
-            {
-                if (!trayIcon.Visible || newlyOnlineUsers.Count == 0) return;
-
-                string names = string.Join(", ", newlyOnlineUsers.Select(u => u.FullName ?? u.Username));
-                string message = newlyOnlineUsers.Count == 1
-                    ? $"{names} vừa online."
-                    : $"{newlyOnlineUsers.Count} người vừa online: {names}";
-
-                // ToolTipIcon.None, not .Info: Windows plays its own system sound for an Info
-                // balloon, and with our own alert underneath it that lands as two overlapping
-                // noises for one event. Losing the small info glyph is the cheaper trade.
-                trayIcon.ShowBalloonTip(3000, "TADA Play", message, ToolTipIcon.None);
-                NotificationSound.PlayUserOnline();
-            }, "MAINFORM_USER_ONLINE");
         }
 
         private void btn_setting_Click(object sender, EventArgs e)
