@@ -786,6 +786,28 @@ namespace TadaPlay.Controls
                 return;
             }
 
+            // Ask the game to serve its own spectator stream, because the alternative is
+            // brutal. When the stream is unavailable the only way to read a record the game
+            // holds open is a volume shadow copy, and one of those costs - measured on a
+            // developer machine with an SSD, so this is a floor and not a typical case:
+            //
+            //   VSS Create (volume writes quiesced) ~2600 ms
+            //   two powershell.exe cold starts      ~2100 ms
+            //   snapshot delete                     ~70 ms
+            //
+            // about 4.7 seconds, repeated every 30 seconds for as long as somebody is watching.
+            // The quiesce stalls writes across the whole volume, which an asset-streaming game
+            // feels as a hitch. Players reported exactly that: the game running worse with
+            // TadaPlay than without, and not in a way that looked like the network.
+            //
+            // With the stream serving, LiveShareTimer_Tick returns before it ever reaches the
+            // capture, so the cost is not reduced - it is not paid at all.
+            //
+            // Only done when the player has opted into being watched: it ticks Allow Spectators
+            // in their game, and that is not a setting to change for somebody who has said no.
+            // Idempotent - it writes only values that differ.
+            GameSpectator.EnsureSpectatorStreamDefaults();
+
             LiveRecordSnapshotStore.Prune();
 
             // The countdown a viewer is shown is the wait for the FIRST capture; after that a

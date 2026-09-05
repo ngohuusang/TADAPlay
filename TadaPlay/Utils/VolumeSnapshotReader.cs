@@ -1,8 +1,9 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Management;
 using System.Text;
 using TadaPlay.Logger;
 
@@ -82,27 +83,44 @@ namespace TadaPlay.Utils
             device = null;
             error = null;
 
-            // Shelled out rather than taking a System.Management dependency for two calls.
-            string script =
-                "$c=[WMICLASS]\"root\\cimv2:Win32_ShadowCopy\"; " +
-                $"$r=$c.Create(\"{root.Replace("\\", "\\\\")}\",\"ClientAccessible\"); " +
-                "if ($r.ReturnValue -ne 0) { \"ERR $($r.ReturnValue)\" } else { " +
-                "$s=Get-CimInstance Win32_ShadowCopy | Where-Object { $_.ID -eq $r.ShadowID }; " +
-                "\"$($r.ShadowID)`n$($s.DeviceObject)\" }";
-
-            string output = RunPowerShell(script);
-            string[] lines = (output ?? "").Split('\n', StringSplitOptions.RemoveEmptyEntries);
-            if (lines.Length < 2 || lines[0].StartsWith("ERR", StringComparison.Ordinal))
+            // In-process WMI rather than shelling out to powershell.exe.
+            //
+            // This used to run a script through powershell.exe, and a second one to delete the
+            // snapshot afterwards. Two cold starts measured about 2.1 seconds - roughly 44% of
+            // the whole capture, spent starting a shell rather than doing the work. That was a
+            // deliberate trade to avoid a System.Management dependency "for two calls"; with a
+            // number on it, the dependency is plainly the cheaper side.
+            try
             {
-                // Common causes: VSS service disabled, or no space for the diff area.
-                error = $"Không tạo được bản chụp ổ đĩa (VSS){(lines.Length > 0 ? ": " + lines[0].Trim() : "")}.";
-                DebugLogger.Warn($"VolumeSnapshotReader: snapshot of {root} failed: {output}");
+                using var shadowClass = new ManagementClass("root\\cimv2", "Win32_ShadowCopy", null);
+                using ManagementBaseObject args = shadowClass.GetMethodParameters("Create");
+                args["Volume"] = root;
+                args["Context"] = "ClientAccessible";
+
+                using ManagementBaseObject result = shadowClass.InvokeMethod("Create", args, null);
+                uint rc = Convert.ToUInt32(result["ReturnValue"]);
+                if (rc != 0)
+                {
+                    // Common causes: VSS service disabled, or no space for the diff area.
+                    error = $"Không tạo được bản chụp ổ đĩa (VSS): {rc}.";
+                    DebugLogger.Warn($"VolumeSnapshotReader: snapshot of {root} failed, rc={rc}.");
+                    return false;
+                }
+
+                shadowId = (string)result["ShadowID"];
+
+                using var snapshot = new ManagementObject($"Win32_ShadowCopy.ID='{shadowId}'");
+                snapshot.Get();
+                device = (string)snapshot["DeviceObject"];
+
+                return !string.IsNullOrEmpty(device);
+            }
+            catch (Exception ex)
+            {
+                error = "Không tạo được bản chụp ổ đĩa (VSS).";
+                DebugLogger.Warn($"VolumeSnapshotReader: snapshot of {root} failed: {ex.Message}");
                 return false;
             }
-
-            shadowId = lines[0].Trim();
-            device = lines[1].Trim();
-            return true;
         }
 
         private static void DeleteSnapshot(string shadowId)
@@ -110,8 +128,10 @@ namespace TadaPlay.Utils
             if (string.IsNullOrWhiteSpace(shadowId)) return;
             try
             {
-                RunPowerShell("Get-CimInstance Win32_ShadowCopy | " +
-                              $"Where-Object {{ $_.ID -eq \"{shadowId}\" }} | Remove-CimInstance");
+                // In-process, for the same reason as Create: a powershell.exe cold start
+                // measured ~1s, which is a lot of wall-clock to spend deleting one object.
+                using var snapshot = new ManagementObject($"Win32_ShadowCopy.ID='{shadowId}'");
+                snapshot.Delete();
             }
             catch (Exception ex)
             {
@@ -173,36 +193,6 @@ namespace TadaPlay.Utils
             {
                 CloseHandle(handle);
             }
-        }
-
-        private static string RunPowerShell(string script)
-        {
-            var startInfo = new ProcessStartInfo("powershell")
-            {
-                Arguments = "-NoProfile -NonInteractive -Command -",
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                RedirectStandardInput = true,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                StandardOutputEncoding = Encoding.UTF8
-            };
-
-            using Process process = Process.Start(startInfo);
-            if (process == null) return null;
-
-            // Passed on stdin so quoting in the script cannot be mangled by the command line.
-            process.StandardInput.Write(script);
-            process.StandardInput.Close();
-
-            string output = process.StandardOutput.ReadToEnd();
-            process.StandardError.ReadToEnd();
-            if (!process.WaitForExit((int)PowerShellTimeout.TotalMilliseconds))
-            {
-                try { process.Kill(entireProcessTree: true); } catch (Exception) { /* already gone */ }
-                return null;
-            }
-            return output;
         }
 
         [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]

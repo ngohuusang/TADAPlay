@@ -35,6 +35,9 @@
     <!-- .NET Core dropped the built-in single-byte codepages. AoE2 writes profile names in the
          machine's ANSI codepage, so decoding them needs 1252/1258 back. -->
     <PackageReference Include="System.Text.Encoding.CodePages" Version="6.0.0" />
+    <!-- Win32_ShadowCopy in-process. Shelling out to powershell.exe for it cost ~1s per
+         spawn, twice per live capture - see VolumeSnapshotReader. -->
+    <PackageReference Include="System.Management" Version="6.0.2" />
   </ItemGroup>
 
   <ItemGroup>
