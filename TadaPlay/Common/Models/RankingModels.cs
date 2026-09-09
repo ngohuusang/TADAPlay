@@ -124,6 +124,16 @@ namespace TadaPlay.Common.Models
 
         [JsonProperty("opponents")]
         public List<string> Opponents { get; set; }
+
+        /// <summary>
+        /// Whether the replay file is actually on the server. Checked there rather than assumed,
+        /// so a row never offers a button that cannot work.
+        /// </summary>
+        [JsonProperty("can_replay")]
+        public bool CanReplay { get; set; }
+
+        [JsonProperty("file_name")]
+        public string FileName { get; set; }
     }
 
     /// <summary>Response from api.php?action=matches.</summary>

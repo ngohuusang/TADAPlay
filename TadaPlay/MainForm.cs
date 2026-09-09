@@ -93,7 +93,7 @@ namespace TadaPlay
 
         private Ranking CreateRankingControl()
         {
-            var control = new Ranking(accountService);
+            var control = new Ranking(accountService, appContext);
             control.BackRequested += (s, e) => ShowControl(_homeControl, "Trang chủ", false, true);
             return control;
         }

@@ -3,7 +3,9 @@ using System.Drawing;
 using System.Windows.Forms;
 using AntdUI;
 using TadaPlay.Common.Models;
+using TadaPlay.Contexts.Interfaces;
 using TadaPlay.Services.Interface;
+using TadaPlay.Utils;
 
 namespace TadaPlay.Controls
 {
@@ -25,9 +27,17 @@ namespace TadaPlay.Controls
 
         private readonly AntdUI.Label _formerNames = new AntdUI.Label();
         private AntdUI.Table _matches;
+        private readonly AntdUI.Label _replayStatus = new AntdUI.Label();
+        private bool _replaying;
 
-        public RankingDetailDialog(RankingEntry player, IAccountService accounts)
+        private IAccountService _accounts;
+        private IAppContext _appContext;
+        private System.Collections.Generic.List<PlayerMatch> _loaded;
+
+        public RankingDetailDialog(RankingEntry player, IAccountService accounts, IAppContext appContext = null)
         {
+            _accounts = accounts;
+            _appContext = appContext;
             if (player == null) throw new ArgumentNullException(nameof(player));
 
             Text = "Thông tin người chơi";
@@ -127,7 +137,7 @@ namespace TadaPlay.Controls
 
             var matchesCaption = new AntdUI.Label
             {
-                Text = "Các trận đã đấu",
+                Text = "Các trận đã đấu  ·  bấm vào một trận để xem lại",
                 Location = new Point(16, 318),
                 Size = new Size(300, 22),
                 ForeColor = UiTheme.Ink,
@@ -157,6 +167,15 @@ namespace TadaPlay.Controls
                 },
             };
 
+            // Click the row to watch it. A button column was the alternative, but the row is
+            // already the match - and a column of identical buttons down a table reads as
+            // decoration long before anybody works out it is the action.
+            _matches.CellClick += async (s2, e2) =>
+            {
+                if (_loaded == null || e2 == null || e2.RowIndex < 0 || e2.RowIndex >= _loaded.Count) return;
+                await ReplayAsync(_loaded[e2.RowIndex]);
+            };
+
             var close = new AntdUI.Button
             {
                 Text = "Đóng",
@@ -167,7 +186,16 @@ namespace TadaPlay.Controls
             close.Click += (s, e) => Close();
             CancelButton = close;
 
+            _replayStatus.Location = new Point(16, 616);
+            _replayStatus.Size = new Size(460, 32);
+            _replayStatus.ForeColor = UiTheme.Muted;
+            _replayStatus.Font = new Font("Segoe UI", 9F);
+            _replayStatus.TextMultiLine = true;
+            _replayStatus.BackColor = Color.Transparent;
+            _replayStatus.Text = string.Empty;
+
             Controls.Add(card);
+            Controls.Add(_replayStatus);
             Controls.Add(matchesCaption);
             Controls.Add(_matches);
             Controls.Add(close);
@@ -252,11 +280,51 @@ namespace TadaPlay.Controls
                     });
                 }
 
+                _loaded = matches;
                 if (IsDisposed || _matches == null || _matches.IsDisposed) return;
                 if (InvokeRequired) BeginInvoke(new Action(() => { if (!_matches.IsDisposed) _matches.DataSource = rows; }));
                 else _matches.DataSource = rows;
             }
             catch { /* the table stays empty, which its EmptyText already explains */ }
+        }
+
+        /// <summary>
+        /// Downloads the chosen match and opens the game on it, through the same helper the
+        /// Matches screen uses.
+        ///
+        /// Guarded by _replaying because the download is tens of megabytes and the table stays
+        /// clickable throughout - without it, an impatient second click starts a second download
+        /// over the top of the first, into the same file.
+        /// </summary>
+        private async System.Threading.Tasks.Task ReplayAsync(PlayerMatch match)
+        {
+            if (match == null || _replaying) return;
+
+            if (!match.CanReplay)
+            {
+                _replayStatus.ForeColor = UiTheme.Muted;
+                _replayStatus.Text = "Trận này không còn file record trên máy chủ.";
+                return;
+            }
+
+            _replaying = true;
+            try
+            {
+                _replayStatus.ForeColor = UiTheme.Muted;
+                var result = await ReplayLauncher.ReplayAsync(
+                    _accounts, _appContext, match.Id, match.FileName, this,
+                    msg => { if (!_replayStatus.IsDisposed) _replayStatus.Text = msg; });
+
+                if (IsDisposed || _replayStatus.IsDisposed) return;
+                _replayStatus.ForeColor = result.Launched ? UiTheme.AccentFolder : UiTheme.Muted;
+                _replayStatus.Text = result.Downloaded && !result.Launched
+                    ? result.Message + "  Mở game → Replays để xem lại."
+                    : result.Message;
+            }
+            finally
+            {
+                _replaying = false;
+            }
         }
 
         /// <summary>Server timestamps are UTC; shown local, because that is when the player played.</summary>

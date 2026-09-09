@@ -521,55 +521,25 @@ namespace TadaPlay.Controls
                 return;
             }
 
-            // The game can only browse/play records from its own SaveGame folder - a file
-            // dropped elsewhere won't show up even when launched directly. Prefix the file name
-            // so the auto-upload watcher (Home.RecordWatchTimer_Tick) can recognize and skip
-            // this download instead of treating it as a new match to upload.
-            string saveDir = RecordedGameFinder.FindSaveGameDirectory(_appContext.GetGameFolder());
-            if (string.IsNullOrEmpty(saveDir))
-            {
-                using var picker = new FolderBrowserDialog
-                {
-                    Description = "Không tìm thấy thư mục SaveGame của game. Chọn nơi lưu file record để phát lại."
-                };
-                if (picker.ShowDialog(this) != DialogResult.OK) return;
-                saveDir = picker.SelectedPath;
-            }
-
-            string baseFileName = string.IsNullOrWhiteSpace(match.FileName)
-                ? $"match_{match.Id}.mgz"
-                : Path.GetFileName(match.FileName);
-            string fileName = RecordedGameFinder.ReplayPrefix + baseFileName;
-            string destPath = Path.Combine(saveDir, fileName);
-
             _replayButton.Enabled = false;
             _statusLabel.ForeColor = Color.Gray;
-            _statusLabel.Text = $"Đang tải record của trận #{match.Id}...";
             try
             {
-                await _accountService.DownloadRecordAsync(match.Id, destPath);
+                // Shared with the ranking detail's per-match replay - see Utils.ReplayLauncher
+                // for why the folder fallback, the file-name prefix and the launcher thread are
+                // each the way they are.
+                var result = await ReplayLauncher.ReplayAsync(
+                    _accountService, _appContext, match.Id, match.FileName, this,
+                    msg => { _statusLabel.Text = msg; });
 
-                // Launch the game via the WK launcher matching the display mode configured in
-                // Settings, passing the downloaded record as its argument (same as double-clicking
-                // a .mgz/.mgx file) so it opens straight into the replay - no folder window, no
-                // extra dialog. Use a dedicated LongRunning thread rather than Task.Run/the
-                // shared ThreadPool - the WebSocket ping timer's callback is also
-                // ThreadPool-scheduled, and this synchronous blocking I/O (copying the ~3MB
-                // launcher exe, antivirus scanning it, ShellExecute reputation checks) was
-                // starving it long enough to spike reported ping.
-                var (status, launchMessage, _, _) = await System.Threading.Tasks.Task.Factory.StartNew(() =>
-                {
-                    string exePath = GameExecutablePreparer.PrepareAndGetExePath(_appContext.GetGameFolder(), _appContext.GetGameLaunchMode());
-                    return GameLauncher.Launch(exePath, destPath);
-                }, System.Threading.CancellationToken.None, System.Threading.Tasks.TaskCreationOptions.LongRunning, System.Threading.Tasks.TaskScheduler.Default);
-                _statusLabel.ForeColor = status == GameLauncher.LaunchStatus.Success ? Color.DarkGreen : Color.DarkOrange;
-                _statusLabel.Text = launchMessage;
+                _statusLabel.ForeColor = result.Launched ? Color.DarkGreen : Color.DarkOrange;
+                _statusLabel.Text = result.Message;
 
-                if (status != GameLauncher.LaunchStatus.Success)
+                if (result.Downloaded && !result.Launched)
                 {
                     MessageBox.Show(
-                        $"Đã tải record vào thư mục lưu của AoE2 DE, nhưng không thể tự mở game ({launchMessage})\n\n" +
-                        "Mở Age of Empires II: DE → mục \"Replays\" (Xem lại) để phát lại trận đấu.",
+                        $"Đã tải record vào thư mục lưu của AoE2, nhưng không thể tự mở game ({result.Message})\n\n" +
+                        "Mở Age of Empires II → mục \"Replays\" (Xem lại) để phát lại trận đấu.",
                         "Phát lại", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 }
             }

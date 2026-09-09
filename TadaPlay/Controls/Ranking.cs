@@ -27,12 +27,17 @@ namespace TadaPlay.Controls
         public event EventHandler BackRequested;
 
         private readonly IAccountService _accountService;
+        // Only needed to hand on to the detail dialog, which needs the game folder to
+        // put a downloaded replay somewhere the game will actually list it.
+        private readonly TadaPlay.Contexts.Interfaces.IAppContext _appContext;
         private readonly AntdUI.Table _table;
         private readonly AntdUI.Label _statusLabel;
         private readonly AntdUI.Button _refreshButton;
 
-        public Ranking(IAccountService accountService)
+        public Ranking(IAccountService accountService,
+                       TadaPlay.Contexts.Interfaces.IAppContext appContext = null)
         {
+            _appContext = appContext;
             _accountService = accountService;
             Dock = DockStyle.Fill;
             Font = new Font("Segoe UI", 9.75F);
@@ -105,7 +110,7 @@ namespace TadaPlay.Controls
             {
                 if (e?.Record is Row row && row.Source != null)
                 {
-                    using var detail = new RankingDetailDialog(row.Source, _accountService);
+                    using var detail = new RankingDetailDialog(row.Source, _accountService, _appContext);
                     detail.ShowDialog(FindForm());
                 }
             };
