@@ -1667,7 +1667,7 @@ namespace TadaPlay.Controls
 
             bool isSelf = string.Equals(user.Username, appContext.GetCurrentUser()?.Username,
                                         StringComparison.OrdinalIgnoreCase);
-            using var dialog = new UserStatusDialog(user, isSelf, LookupOnlineUser);
+            using var dialog = new UserStatusDialog(user, isSelf, LookupOnlineUser, accountService);
             if (dialog.ShowDialog(mainForm) != DialogResult.OK) return;
 
             if (!TryGetGameFolderForWatching(out string gameFolder)) return;

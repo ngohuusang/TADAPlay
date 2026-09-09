@@ -27,6 +27,12 @@ public interface IAccountService
 
     Task<List<RankingEntry>> GetLeaderboardAsync();
 
+    /// <summary>
+    /// Every in-game name an account has played under, newest first. Empty when the player has
+    /// never been seen under one - which is itself the answer, not a failure.
+    /// </summary>
+    Task<List<PlayerGameName>> GetPlayerNamesAsync(string username);
+
     Task<List<MatchSummary>> GetMatchesAsync();
     Task RenameMatchAsync(long matchId, string roomName);
 

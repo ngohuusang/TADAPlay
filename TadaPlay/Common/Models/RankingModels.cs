@@ -52,6 +52,32 @@ namespace TadaPlay.Common.Models
         public string VpnIp { get; set; }
     }
 
+    /// <summary>Response from api.php?action=player_names.</summary>
+    public class PlayerNamesResponse
+    {
+        [JsonProperty("success")]
+        public bool Success { get; set; }
+
+        [JsonProperty("username")]
+        public string Username { get; set; }
+
+        [JsonProperty("names")]
+        public List<PlayerGameName> Names { get; set; }
+    }
+
+    /// <summary>One in-game name an account has been seen playing under.</summary>
+    public class PlayerGameName
+    {
+        [JsonProperty("name")]
+        public string Name { get; set; }
+
+        [JsonProperty("first_seen")]
+        public string FirstSeen { get; set; }
+
+        [JsonProperty("last_seen")]
+        public string LastSeen { get; set; }
+    }
+
     /// <summary>Response from api.php?action=matches.</summary>
     public class MatchesResponse
     {

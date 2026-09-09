@@ -52,6 +52,7 @@ namespace TadaPlay
         /// </summary>
         private readonly Func<string, User> _lookup;
 
+        private readonly AntdUI.Label _formerNames = new();
         private readonly AntdUI.Tag _state = new();
         private readonly AntdUI.Label _detail = new();
         private readonly AntdUI.Button _watchButton = new();
@@ -66,7 +67,8 @@ namespace TadaPlay
         private readonly System.Windows.Forms.Timer _refresh = new() { Interval = RefreshMs };
         private bool _probing;
 
-        public UserStatusDialog(User user, bool isSelf, Func<string, User> lookup = null)
+        public UserStatusDialog(User user, bool isSelf, Func<string, User> lookup = null,
+                                TadaPlay.Services.Interface.IAccountService accounts = null)
         {
             _user = user;
             _isSelf = isSelf;
@@ -77,7 +79,7 @@ namespace TadaPlay
             StartPosition = FormStartPosition.CenterParent;
             MaximizeBox = false;
             MinimizeBox = false;
-            ClientSize = new Size(440, 332);
+            ClientSize = new Size(440, 354);
             Font = new Font("Segoe UI", 9.75F);
             BackColor = UiTheme.PageBg;
 
@@ -86,7 +88,7 @@ namespace TadaPlay
             var card = new AntdUI.Panel
             {
                 Location = new Point(14, 14),
-                Size = new Size(412, 198),
+                Size = new Size(412, 220),
                 Radius = 10,
                 Shadow = 8,
                 ShadowOpacity = 0.10F,
@@ -125,10 +127,21 @@ namespace TadaPlay
                 AutoEllipsis = true,
             };
 
+            // Every other name this account has played under, so a player who renames is
+            // still recognisable - there was no way to tell that "Deep.10" and "Deep.20" were
+            // the same person. Filled in asynchronously; blank when they have only ever used one.
+            _formerNames.Location = new Point(18, 68);
+            _formerNames.Size = new Size(376, 20);
+            _formerNames.ForeColor = UiTheme.Muted;
+            _formerNames.Font = new Font("Segoe UI", 9F);
+            _formerNames.BackColor = Color.Transparent;
+            _formerNames.AutoEllipsis = true;
+            _formerNames.Text = string.Empty;
+
             var address = new AntdUI.Label
             {
                 Text = string.IsNullOrWhiteSpace(user.IpAddress) ? "Chưa có địa chỉ VPN" : user.IpAddress,
-                Location = new Point(18, 68),
+                Location = new Point(18, 90),
                 Size = new Size(376, 22),
                 ForeColor = UiTheme.Muted,
                 Font = new Font("Segoe UI", 9.5F),
@@ -137,14 +150,14 @@ namespace TadaPlay
 
             // A tag, not a coloured line of shouty text: the state is a label on the player,
             // and antd already draws exactly that with the right fill for the colour.
-            _state.Location = new Point(18, 100);
+            _state.Location = new Point(18, 122);
             _state.AutoSizeMode = TAutoSize.Auto;
             _state.Size = new Size(200, 30);
             _state.Radius = 6;
             _state.Font = new Font("Segoe UI Semibold", 10.5F, FontStyle.Bold);
             _state.Text = "Đang kiểm tra...";
 
-            _detail.Location = new Point(18, 134);
+            _detail.Location = new Point(18, 156);
             _detail.Size = new Size(376, 50);
             _detail.ForeColor = UiTheme.Muted;
             _detail.Font = new Font("Segoe UI", 9.5F);
@@ -153,11 +166,12 @@ namespace TadaPlay
 
             card.Controls.Add(name);
             card.Controls.Add(inGameLabel);
+            card.Controls.Add(_formerNames);
             card.Controls.Add(address);
             card.Controls.Add(_state);
             card.Controls.Add(_detail);
 
-            _pingResult.Location = new Point(18, 218);
+            _pingResult.Location = new Point(18, 240);
             _pingResult.Size = new Size(408, 40);
             _pingResult.ForeColor = UiTheme.Muted;
             _pingResult.Font = new Font("Segoe UI", 9.5F);
@@ -166,7 +180,7 @@ namespace TadaPlay
             _pingResult.Text = "";
 
             _pingButton.Text = "Đo ping";
-            _pingButton.Location = new Point(14, 266);
+            _pingButton.Location = new Point(14, 288);
             _pingButton.Size = new Size(110, 44);
             _pingButton.Type = TTypeMini.Default;
             _pingButton.Shape = TShape.Round;
@@ -179,7 +193,7 @@ namespace TadaPlay
             };
 
             _watchButton.Text = "Xem trận";
-            _watchButton.Location = new Point(196, 266);
+            _watchButton.Location = new Point(196, 288);
             _watchButton.Size = new Size(110, 44);
             _watchButton.Type = TTypeMini.Primary;
             _watchButton.Shape = TShape.Round;
@@ -191,11 +205,15 @@ namespace TadaPlay
 
             var close = UiTheme.Quiet("Đóng", height: 44);
             close.Dock = DockStyle.None;
-            close.Location = new Point(316, 266);
+            close.Location = new Point(316, 288);
             close.Size = new Size(110, 44);
             close.DialogResult = DialogResult.Cancel;
 
             Controls.Add(card);
+
+            // The name history is a nicety on top of a dialog that already works, so it loads in
+            // the background and simply stays blank if it cannot be fetched.
+            _ = LoadFormerNamesAsync(accounts, user);
             Controls.Add(_pingResult);
             Controls.Add(_pingButton);
             Controls.Add(_watchButton);
@@ -226,6 +244,27 @@ namespace TadaPlay
         /// moment, not the average one. So the verdict is driven by jitter and loss, with the
         /// average reported alongside rather than on its own.
         /// </summary>
+        /// <summary>
+        /// Lists every other in-game name this account has played under.
+        ///
+        /// Reuses RankingDetailDialog.FormerNamesLine so the wording and the "leave out the name
+        /// already on screen" rule exist once rather than twice.
+        /// </summary>
+        private async System.Threading.Tasks.Task LoadFormerNamesAsync(
+            TadaPlay.Services.Interface.IAccountService accounts, User user)
+        {
+            if (accounts == null || user == null) return;
+            try
+            {
+                var names = await accounts.GetPlayerNamesAsync(user.Username);
+                string line = TadaPlay.Controls.RankingDetailDialog.FormerNamesLine(names, user.InGameName);
+                if (line == null || IsDisposed || _formerNames.IsDisposed) return;
+                if (InvokeRequired) BeginInvoke(new Action(() => { if (!_formerNames.IsDisposed) _formerNames.Text = line; }));
+                else _formerNames.Text = line;
+            }
+            catch { /* the line stays blank */ }
+        }
+
         private async void MeasurePing()
         {
             string ip = (_lookup?.Invoke(_user.Username)?.IpAddress ?? _user.IpAddress ?? string.Empty).Trim();

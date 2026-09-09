@@ -3,6 +3,7 @@ using System.Drawing;
 using System.Windows.Forms;
 using AntdUI;
 using TadaPlay.Common.Models;
+using TadaPlay.Services.Interface;
 
 namespace TadaPlay.Controls
 {
@@ -22,7 +23,9 @@ namespace TadaPlay.Controls
     {
         private const int Pad = 18;
 
-        public RankingDetailDialog(RankingEntry player)
+        private readonly AntdUI.Label _formerNames = new AntdUI.Label();
+
+        public RankingDetailDialog(RankingEntry player, IAccountService accounts)
         {
             if (player == null) throw new ArgumentNullException(nameof(player));
 
@@ -32,14 +35,14 @@ namespace TadaPlay.Controls
             MaximizeBox = false;
             MinimizeBox = false;
             ShowInTaskbar = false;
-            ClientSize = new Size(420, 340);
+            ClientSize = new Size(420, 380);
             Font = new Font("Segoe UI", 9.75F);
             BackColor = UiTheme.PageBg;
 
             var card = new AntdUI.Panel
             {
                 Location = new Point(14, 14),
-                Size = new Size(392, 262),
+                Size = new Size(392, 300),
                 Radius = 10,
                 Shadow = 8,
                 ShadowOpacity = 0.10F,
@@ -107,10 +110,24 @@ namespace TadaPlay.Controls
             }
             foreach (Control c in new[] { rank, elo, games, wl, rate, vpn }) card.Controls.Add(c);
 
+            // Filled in once the history arrives. Left blank when this player has only ever used
+            // one name, which is most of them - an empty line reads as spacing, whereas
+            // "Ten da dung: (khong co)" reads as a fault.
+            _formerNames.Location = new Point(Pad, statsTop + 132);
+            _formerNames.Size = new Size(356, 40);
+            _formerNames.ForeColor = UiTheme.Muted;
+            _formerNames.Font = new Font("Segoe UI", 9F);
+            _formerNames.TextMultiLine = true;
+            _formerNames.BackColor = Color.Transparent;
+            _formerNames.Text = string.Empty;
+            card.Controls.Add(_formerNames);
+
+            _ = LoadFormerNamesAsync(accounts, player);
+
             var close = new AntdUI.Button
             {
                 Text = "Đóng",
-                Location = new Point(296, 288),
+                Location = new Point(296, 326),
                 Size = new Size(110, 40),
                 Type = TTypeMini.Default,
             };
@@ -119,6 +136,52 @@ namespace TadaPlay.Controls
 
             Controls.Add(card);
             Controls.Add(close);
+        }
+
+        /// <summary>
+        /// Fetches the name history in the background. The dialog is usable without it, so a
+        /// failure here leaves the line blank rather than showing an error the reader cannot act
+        /// on - GetPlayerNamesAsync already logs the reason.
+        /// </summary>
+        private async System.Threading.Tasks.Task LoadFormerNamesAsync(IAccountService accounts, RankingEntry player)
+        {
+            if (accounts == null) return;
+            try
+            {
+                var names = await accounts.GetPlayerNamesAsync(player.Username);
+                string line = FormerNamesLine(names, player.InGameName);
+                if (line == null) return;
+                if (IsDisposed || _formerNames.IsDisposed) return;
+                if (InvokeRequired) { BeginInvoke(new Action(() => { if (!_formerNames.IsDisposed) _formerNames.Text = line; })); }
+                else _formerNames.Text = line;
+            }
+            catch { /* the line stays blank */ }
+        }
+
+
+        /// <summary>
+        /// "Previously known as ..." from the full name history, with the name already on
+        /// display removed. Returns null when there is nothing to add, so callers can leave the
+        /// line blank rather than print an empty label.
+        ///
+        /// Newest first, because the interesting question is "who were they last week", not
+        /// "who were they in July".
+        /// </summary>
+        internal static string FormerNamesLine(System.Collections.Generic.IEnumerable<PlayerGameName> all,
+                                               string current)
+        {
+            if (all == null) return null;
+            var others = new System.Collections.Generic.List<string>();
+            foreach (var entry in all)
+            {
+                string name = (entry?.Name ?? string.Empty).Trim();
+                if (name.Length == 0) continue;
+                if (!string.IsNullOrWhiteSpace(current)
+                    && string.Equals(name, current.Trim(), System.StringComparison.OrdinalIgnoreCase)) continue;
+                if (others.Contains(name)) continue;
+                others.Add(name);
+            }
+            return others.Count == 0 ? null : "Tên đã dùng: " + string.Join("  ·  ", others);
         }
 
         /// <summary>A caption above a value, which is the whole layout of this dialog.</summary>

@@ -433,6 +433,39 @@ public class AccountService : IAccountService
         return result;
     }
 
+    /// <summary>
+    /// Every in-game name this account has been seen playing under.
+    ///
+    /// Fetched when a player's detail is opened rather than carried on the lobby broadcast: the
+    /// broadcast repeats every few seconds for every user, so a per-user list would be paid for
+    /// constantly and read almost never.
+    ///
+    /// Never throws. A detail dialog that cannot list previous names is still a useful dialog,
+    /// and failing the whole thing over the least important line in it would be the wrong trade.
+    /// </summary>
+    public async Task<List<PlayerGameName>> GetPlayerNamesAsync(string username)
+    {
+        if (string.IsNullOrWhiteSpace(username)) return new List<PlayerGameName>();
+
+        try
+        {
+            _httpClient.DefaultRequestHeaders.Authorization =
+                new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _appContext.GetJwtTokenSetting());
+            var response = await _httpClient.GetAsync(
+                BASE_URL + "?action=player_names&username=" + Uri.EscapeDataString(username));
+            response.EnsureSuccessStatusCode();
+
+            var body = await response.Content.ReadAsStringAsync();
+            var result = JsonConvert.DeserializeObject<PlayerNamesResponse>(body);
+            return result?.Names ?? new List<PlayerGameName>();
+        }
+        catch (Exception ex)
+        {
+            DebugLogger.Warn($"AccountService: cannot list in-game names for '{username}': {ex.Message}");
+            return new List<PlayerGameName>();
+        }
+    }
+
     public async Task<List<RankingEntry>> GetLeaderboardAsync()
     {
         _httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _appContext.GetJwtTokenSetting());

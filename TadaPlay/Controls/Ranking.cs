@@ -105,7 +105,7 @@ namespace TadaPlay.Controls
             {
                 if (e?.Record is Row row && row.Source != null)
                 {
-                    using var detail = new RankingDetailDialog(row.Source);
+                    using var detail = new RankingDetailDialog(row.Source, _accountService);
                     detail.ShowDialog(FindForm());
                 }
             };
