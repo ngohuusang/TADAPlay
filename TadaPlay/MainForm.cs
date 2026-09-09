@@ -213,10 +213,13 @@ namespace TadaPlay
                 control.Top = (this.ClientSize.Height - control.Height) / 2;
             }
 
-            if (WindowState == FormWindowState.Minimized)
-            {
-                MinimizeToTray();
-            }
+            // Minimising deliberately does NOT go to the tray any more. The two gestures
+            // mean different things and used to do the same thing: minimise says "out of my way
+            // for a moment", close says "I am done with the window". Sending a minimise to the
+            // tray took the taskbar button away too, so the ordinary way back - clicking it -
+            // was gone, and the app could only be recovered from the notification area.
+            //
+            // Closing still hides to the tray; see MainForm_FormClosing.
         }
 
         private void MainForm_FormClosing(object sender, FormClosingEventArgs e)
@@ -226,11 +229,15 @@ namespace TadaPlay
             if (!_isExiting && e.CloseReason == CloseReason.UserClosing)
             {
                 e.Cancel = true;
-                MinimizeToTray();
+                HideToTray();
             }
         }
 
-        private void MinimizeToTray()
+        /// <summary>
+        /// Hides the window to the notification area. Reached only by closing the window - a
+        /// minimise is left alone so the app keeps its taskbar button.
+        /// </summary>
+        private void HideToTray()
         {
             // Hide() alone removes the taskbar entry - deliberately not touching ShowInTaskbar
             // here: toggling it while the handle already exists forces WinForms to recreate the
@@ -266,7 +273,14 @@ namespace TadaPlay
         private void RestoreFromTray()
         {
             Show();
-            WindowState = FormWindowState.Normal;
+            // Only un-minimise if it actually is minimised: a window hidden by closing is still
+            // WindowState.Normal, and assigning Normal to it unconditionally is harmless but
+            // assigning it to a MAXIMISED window would quietly un-maximise a window the player
+            // had deliberately maximised before they closed it.
+            if (WindowState == FormWindowState.Minimized)
+            {
+                WindowState = FormWindowState.Normal;
+            }
             Activate();
         }
 
