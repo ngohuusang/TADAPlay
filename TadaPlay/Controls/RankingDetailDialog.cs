@@ -28,6 +28,7 @@ namespace TadaPlay.Controls
         private readonly AntdUI.Label _formerNames = new AntdUI.Label();
         private AntdUI.Table _matches;
         private readonly AntdUI.Label _replayStatus = new AntdUI.Label();
+        private readonly AntdUI.Button _replayButton = new AntdUI.Button();
         private bool _replaying;
 
         private IAccountService _accounts;
@@ -137,7 +138,7 @@ namespace TadaPlay.Controls
 
             var matchesCaption = new AntdUI.Label
             {
-                Text = "Các trận đã đấu  ·  bấm vào một trận để xem lại",
+                Text = "Các trận đã đấu  ·  chọn một trận rồi bấm Xem lại",
                 Location = new Point(16, 318),
                 Size = new Size(300, 22),
                 ForeColor = UiTheme.Ink,
@@ -167,14 +168,13 @@ namespace TadaPlay.Controls
                 },
             };
 
-            // Click the row to watch it. A button column was the alternative, but the row is
-            // already the match - and a column of identical buttons down a table reads as
-            // decoration long before anybody works out it is the action.
-            _matches.CellClick += async (s2, e2) =>
-            {
-                if (_loaded == null || e2 == null || e2.RowIndex < 0 || e2.RowIndex >= _loaded.Count) return;
-                await ReplayAsync(_loaded[e2.RowIndex]);
-            };
+            // Selecting a row arms the button; it does not start anything by itself.
+            //
+            // Clicking the row WAS the action, and that is the wrong shape for this: downloading
+            // a match is megabytes and ends with the game taking over the screen, so it should
+            // not be one stray click away while somebody is reading down the table. It also now
+            // matches the Matches screen, where a replay has always been select-then-press.
+            _matches.SelectIndexChanged += (s2, e2) => UpdateReplayButton();
 
             var close = new AntdUI.Button
             {
@@ -186,8 +186,15 @@ namespace TadaPlay.Controls
             close.Click += (s, e) => Close();
             CancelButton = close;
 
-            _replayStatus.Location = new Point(16, 616);
-            _replayStatus.Size = new Size(460, 32);
+            _replayButton.Text = "Xem lại trận";
+            _replayButton.Location = new Point(14, 612);
+            _replayButton.Size = new Size(150, 40);
+            _replayButton.Type = TTypeMini.Primary;
+            _replayButton.Enabled = false;
+            _replayButton.Click += async (s2, e2) => await ReplaySelectedAsync();
+
+            _replayStatus.Location = new Point(176, 618);
+            _replayStatus.Size = new Size(310, 30);
             _replayStatus.ForeColor = UiTheme.Muted;
             _replayStatus.Font = new Font("Segoe UI", 9F);
             _replayStatus.TextMultiLine = true;
@@ -195,6 +202,7 @@ namespace TadaPlay.Controls
             _replayStatus.Text = string.Empty;
 
             Controls.Add(card);
+            Controls.Add(_replayButton);
             Controls.Add(_replayStatus);
             Controls.Add(matchesCaption);
             Controls.Add(_matches);
@@ -284,30 +292,65 @@ namespace TadaPlay.Controls
                 if (IsDisposed || _matches == null || _matches.IsDisposed) return;
                 if (InvokeRequired) BeginInvoke(new Action(() => { if (!_matches.IsDisposed) _matches.DataSource = rows; }));
                 else _matches.DataSource = rows;
+                UpdateReplayButton();
             }
             catch { /* the table stays empty, which its EmptyText already explains */ }
+        }
+
+        /// <summary>
+        /// The match the table currently has selected, or null when nothing is.
+        /// </summary>
+        private PlayerMatch Selected()
+        {
+            if (_loaded == null || _matches == null || _matches.IsDisposed) return null;
+            int i = _matches.SelectedIndex;
+            return i >= 0 && i < _loaded.Count ? _loaded[i] : null;
+        }
+
+        /// <summary>
+        /// Enables the button only for a row that can actually be replayed, and says why when it
+        /// cannot - a disabled button with no explanation just looks broken.
+        /// </summary>
+        private void UpdateReplayButton()
+        {
+            if (_replayButton.IsDisposed) return;
+            PlayerMatch match = Selected();
+
+            _replayButton.Enabled = !_replaying && match != null && match.CanReplay;
+
+            if (_replayStatus.IsDisposed) return;
+            if (match != null && !match.CanReplay)
+            {
+                _replayStatus.ForeColor = UiTheme.Muted;
+                _replayStatus.Text = "Trận này không còn file record trên máy chủ.";
+            }
+            else if (match != null && _replayStatus.Text == "Trận này không còn file record trên máy chủ.")
+            {
+                _replayStatus.Text = string.Empty;
+            }
+        }
+
+        private async System.Threading.Tasks.Task ReplaySelectedAsync()
+        {
+            await ReplayAsync(Selected());
         }
 
         /// <summary>
         /// Downloads the chosen match and opens the game on it, through the same helper the
         /// Matches screen uses.
         ///
-        /// Guarded by _replaying because the download is tens of megabytes and the table stays
-        /// clickable throughout - without it, an impatient second click starts a second download
-        /// over the top of the first, into the same file.
+        /// Guarded by _replaying as well as by disabling the button: the download is tens of
+        /// megabytes, and without the flag an impatient second press between the click and the
+        /// button actually disabling would start a second download into the same file.
         /// </summary>
         private async System.Threading.Tasks.Task ReplayAsync(PlayerMatch match)
         {
             if (match == null || _replaying) return;
 
-            if (!match.CanReplay)
-            {
-                _replayStatus.ForeColor = UiTheme.Muted;
-                _replayStatus.Text = "Trận này không còn file record trên máy chủ.";
-                return;
-            }
+            if (!match.CanReplay) return;   // the button is disabled for these; UpdateReplayButton says why
 
             _replaying = true;
+            UpdateReplayButton();
             try
             {
                 _replayStatus.ForeColor = UiTheme.Muted;
@@ -324,6 +367,7 @@ namespace TadaPlay.Controls
             finally
             {
                 _replaying = false;
+                UpdateReplayButton();
             }
         }
 
