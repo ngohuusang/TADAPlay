@@ -77,7 +77,7 @@ namespace TadaPlay
             StartPosition = FormStartPosition.CenterParent;
             MaximizeBox = false;
             MinimizeBox = false;
-            ClientSize = new Size(440, 306);
+            ClientSize = new Size(440, 332);
             Font = new Font("Segoe UI", 9.75F);
             BackColor = UiTheme.PageBg;
 
@@ -86,7 +86,7 @@ namespace TadaPlay
             var card = new AntdUI.Panel
             {
                 Location = new Point(14, 14),
-                Size = new Size(412, 172),
+                Size = new Size(412, 198),
                 Radius = 10,
                 Shadow = 8,
                 ShadowOpacity = 0.10F,
@@ -108,10 +108,27 @@ namespace TadaPlay
                 BackColor = Color.Transparent,
             };
 
+            // The name this player actually appears as inside the game, which is the one
+            // teammates recognise them by - the account username often is not. Shown even when
+            // it is not known, because "chưa rõ" is itself worth knowing: it means nothing this
+            // player does can be matched to their account yet, and so earns them no ELO.
+            string inGame = (user.InGameName ?? string.Empty).Trim();
+            var inGameLabel = new AntdUI.Label
+            {
+                Text = inGame.Length > 0 ? $"Tên trong game: \u201c{inGame}\u201d"
+                                         : "Tên trong game: chưa rõ",
+                Location = new Point(18, 46),
+                Size = new Size(376, 22),
+                ForeColor = inGame.Length > 0 ? UiTheme.Ink : UiTheme.Muted,
+                Font = new Font("Segoe UI", 9.5F),
+                BackColor = Color.Transparent,
+                AutoEllipsis = true,
+            };
+
             var address = new AntdUI.Label
             {
                 Text = string.IsNullOrWhiteSpace(user.IpAddress) ? "Chưa có địa chỉ VPN" : user.IpAddress,
-                Location = new Point(18, 46),
+                Location = new Point(18, 68),
                 Size = new Size(376, 22),
                 ForeColor = UiTheme.Muted,
                 Font = new Font("Segoe UI", 9.5F),
@@ -120,14 +137,14 @@ namespace TadaPlay
 
             // A tag, not a coloured line of shouty text: the state is a label on the player,
             // and antd already draws exactly that with the right fill for the colour.
-            _state.Location = new Point(18, 78);
+            _state.Location = new Point(18, 100);
             _state.AutoSizeMode = TAutoSize.Auto;
             _state.Size = new Size(200, 30);
             _state.Radius = 6;
             _state.Font = new Font("Segoe UI Semibold", 10.5F, FontStyle.Bold);
             _state.Text = "Đang kiểm tra...";
 
-            _detail.Location = new Point(18, 112);
+            _detail.Location = new Point(18, 134);
             _detail.Size = new Size(376, 50);
             _detail.ForeColor = UiTheme.Muted;
             _detail.Font = new Font("Segoe UI", 9.5F);
@@ -135,11 +152,12 @@ namespace TadaPlay
             _detail.BackColor = Color.Transparent;
 
             card.Controls.Add(name);
+            card.Controls.Add(inGameLabel);
             card.Controls.Add(address);
             card.Controls.Add(_state);
             card.Controls.Add(_detail);
 
-            _pingResult.Location = new Point(18, 192);
+            _pingResult.Location = new Point(18, 218);
             _pingResult.Size = new Size(408, 40);
             _pingResult.ForeColor = UiTheme.Muted;
             _pingResult.Font = new Font("Segoe UI", 9.5F);
@@ -148,7 +166,7 @@ namespace TadaPlay
             _pingResult.Text = "";
 
             _pingButton.Text = "Đo ping";
-            _pingButton.Location = new Point(14, 240);
+            _pingButton.Location = new Point(14, 266);
             _pingButton.Size = new Size(110, 44);
             _pingButton.Type = TTypeMini.Default;
             _pingButton.Shape = TShape.Round;
@@ -161,7 +179,7 @@ namespace TadaPlay
             };
 
             _watchButton.Text = "Xem trận";
-            _watchButton.Location = new Point(196, 240);
+            _watchButton.Location = new Point(196, 266);
             _watchButton.Size = new Size(110, 44);
             _watchButton.Type = TTypeMini.Primary;
             _watchButton.Shape = TShape.Round;
@@ -173,7 +191,7 @@ namespace TadaPlay
 
             var close = UiTheme.Quiet("Đóng", height: 44);
             close.Dock = DockStyle.None;
-            close.Location = new Point(316, 240);
+            close.Location = new Point(316, 266);
             close.Size = new Size(110, 44);
             close.DialogResult = DialogResult.Cancel;
 
