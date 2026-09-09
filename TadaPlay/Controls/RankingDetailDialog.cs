@@ -159,6 +159,10 @@ namespace TadaPlay.Controls
                 ColumnFont = new Font("Segoe UI Semibold", 9.5F, FontStyle.Bold),
                 RowHeight = 34,
                 EmptyText = "Chưa có trận nào.",
+                // Columns share out the full width instead of sizing to their contents. The
+                // default, Auto, sizes each column to what is in it and leaves the remainder as
+                // dead space down the right-hand side of the table.
+                AutoSizeColumnsMode = ColumnsMode.Fill,
                 Columns = new ColumnCollection
                 {
                     new Column(nameof(MatchRow.When), "Thời gian") { Width = "150" },

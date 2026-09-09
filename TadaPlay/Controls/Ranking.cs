@@ -91,6 +91,9 @@ namespace TadaPlay.Controls
                 Font = new Font("Segoe UI", 10F),
                 ColumnFont = new Font("Segoe UI Semibold", 10F, FontStyle.Bold),
                 RowHeight = 38,
+                // Same reason as the match table: Auto leaves whatever the columns do not use as
+                // empty space on the right, which on a wide window is most of the table.
+                AutoSizeColumnsMode = ColumnsMode.Fill,
                 Columns = new ColumnCollection
                 {
                     new Column(nameof(Row.Rank), "#", ColumnAlign.Center) { Width = "60" },
