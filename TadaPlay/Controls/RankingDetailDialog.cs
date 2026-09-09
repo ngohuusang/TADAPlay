@@ -24,6 +24,7 @@ namespace TadaPlay.Controls
         private const int Pad = 18;
 
         private readonly AntdUI.Label _formerNames = new AntdUI.Label();
+        private AntdUI.Table _matches;
 
         public RankingDetailDialog(RankingEntry player, IAccountService accounts)
         {
@@ -35,14 +36,14 @@ namespace TadaPlay.Controls
             MaximizeBox = false;
             MinimizeBox = false;
             ShowInTaskbar = false;
-            ClientSize = new Size(420, 380);
+            ClientSize = new Size(620, 660);
             Font = new Font("Segoe UI", 9.75F);
             BackColor = UiTheme.PageBg;
 
             var card = new AntdUI.Panel
             {
                 Location = new Point(14, 14),
-                Size = new Size(392, 300),
+                Size = new Size(592, 292),
                 Radius = 10,
                 Shadow = 8,
                 ShadowOpacity = 0.10F,
@@ -57,7 +58,7 @@ namespace TadaPlay.Controls
             {
                 Text = display ?? string.Empty,
                 Location = new Point(Pad, 14),
-                Size = new Size(356, 30),
+                Size = new Size(556, 30),
                 PrefixSvg = UiTheme.IconAccount,
                 PrefixColor = UiTheme.AccentDisplay,
                 IconGap = 10,
@@ -73,7 +74,7 @@ namespace TadaPlay.Controls
             {
                 Text = sameAsDisplay ? string.Empty : $"Tài khoản: {player.Username}",
                 Location = new Point(Pad, 46),
-                Size = new Size(356, 20),
+                Size = new Size(556, 20),
                 ForeColor = UiTheme.Muted,
                 Font = new Font("Segoe UI", 9.5F),
                 BackColor = Color.Transparent,
@@ -85,7 +86,7 @@ namespace TadaPlay.Controls
             {
                 Text = inGame.Length > 0 ? $"Tên trong game: “{inGame}”" : "Tên trong game: chưa rõ",
                 Location = new Point(Pad, sameAsDisplay ? 46 : 68),
-                Size = new Size(356, 22),
+                Size = new Size(556, 22),
                 ForeColor = inGame.Length > 0 ? UiTheme.Ink : UiTheme.Muted,
                 Font = new Font("Segoe UI", 10F),
                 BackColor = Color.Transparent,
@@ -114,7 +115,7 @@ namespace TadaPlay.Controls
             // one name, which is most of them - an empty line reads as spacing, whereas
             // "Ten da dung: (khong co)" reads as a fault.
             _formerNames.Location = new Point(Pad, statsTop + 132);
-            _formerNames.Size = new Size(356, 40);
+            _formerNames.Size = new Size(556, 36);
             _formerNames.ForeColor = UiTheme.Muted;
             _formerNames.Font = new Font("Segoe UI", 9F);
             _formerNames.TextMultiLine = true;
@@ -124,10 +125,42 @@ namespace TadaPlay.Controls
 
             _ = LoadFormerNamesAsync(accounts, player);
 
+            var matchesCaption = new AntdUI.Label
+            {
+                Text = "Các trận đã đấu",
+                Location = new Point(16, 318),
+                Size = new Size(300, 22),
+                ForeColor = UiTheme.Ink,
+                Font = new Font("Segoe UI Semibold", 10.5F, FontStyle.Bold),
+                BackColor = Color.Transparent,
+            };
+
+            // A table rather than a list of labels: the columns are what make a row scannable,
+            // and this is read by eye down the result column far more than it is read across.
+            _matches = new AntdUI.Table
+            {
+                Location = new Point(14, 344),
+                Size = new Size(592, 258),
+                Bordered = true,
+                BorderColor = UiTheme.CardBorder,
+                Radius = 8,
+                Font = new Font("Segoe UI", 9.5F),
+                ColumnFont = new Font("Segoe UI Semibold", 9.5F, FontStyle.Bold),
+                RowHeight = 34,
+                EmptyText = "Chưa có trận nào.",
+                Columns = new ColumnCollection
+                {
+                    new Column(nameof(MatchRow.When), "Thời gian") { Width = "150" },
+                    new Column(nameof(MatchRow.Result), "Kết quả", ColumnAlign.Center) { Width = "100" },
+                    new Column(nameof(MatchRow.Score), "Điểm", ColumnAlign.Right) { Width = "80" },
+                    new Column(nameof(MatchRow.Room), "Trận"),
+                },
+            };
+
             var close = new AntdUI.Button
             {
                 Text = "Đóng",
-                Location = new Point(296, 326),
+                Location = new Point(496, 612),
                 Size = new Size(110, 40),
                 Type = TTypeMini.Default,
             };
@@ -135,7 +168,11 @@ namespace TadaPlay.Controls
             CancelButton = close;
 
             Controls.Add(card);
+            Controls.Add(matchesCaption);
+            Controls.Add(_matches);
             Controls.Add(close);
+
+            _ = LoadMatchesAsync(accounts, player);
         }
 
         /// <summary>
@@ -182,6 +219,63 @@ namespace TadaPlay.Controls
                 others.Add(name);
             }
             return others.Count == 0 ? null : "Tên đã dùng: " + string.Join("  ·  ", others);
+        }
+
+        /// <summary>
+        /// Fills the match table in the background.
+        ///
+        /// Only matches whose teams were resolved can appear - an unresolved record does not know
+        /// who played in it - so a player with games_played greater than the number of rows here
+        /// is not a contradiction, it is the backlog still waiting on in-game names.
+        /// </summary>
+        private async System.Threading.Tasks.Task LoadMatchesAsync(IAccountService accounts, RankingEntry player)
+        {
+            if (accounts == null) return;
+            try
+            {
+                var matches = await accounts.GetPlayerMatchesAsync(player.Username, 40);
+                var rows = new System.Collections.Generic.List<MatchRow>(matches.Count);
+                foreach (var m in matches)
+                {
+                    // "Chưa rõ" rather than a loss: nobody has reported this one yet, and
+                    // showing it as a defeat would be inventing a result.
+                    var (text, tone) = m.Won == null
+                        ? ("Chưa rõ", TTypeMini.Default)
+                        : (m.Won.Value ? "Thắng" : "Thua", m.Won.Value ? TTypeMini.Success : TTypeMini.Error);
+
+                    rows.Add(new MatchRow
+                    {
+                        When = FormatWhen(m.FinishedAt),
+                        Result = new CellTag(text, tone),
+                        Score = m.Score?.ToString() ?? "—",
+                        Room = string.IsNullOrWhiteSpace(m.RoomName) ? $"#{m.Id}" : m.RoomName,
+                    });
+                }
+
+                if (IsDisposed || _matches == null || _matches.IsDisposed) return;
+                if (InvokeRequired) BeginInvoke(new Action(() => { if (!_matches.IsDisposed) _matches.DataSource = rows; }));
+                else _matches.DataSource = rows;
+            }
+            catch { /* the table stays empty, which its EmptyText already explains */ }
+        }
+
+        /// <summary>Server timestamps are UTC; shown local, because that is when the player played.</summary>
+        private static string FormatWhen(string raw)
+        {
+            if (string.IsNullOrWhiteSpace(raw)) return "—";
+            return DateTime.TryParse(raw, System.Globalization.CultureInfo.InvariantCulture,
+                                     System.Globalization.DateTimeStyles.AssumeUniversal
+                                     | System.Globalization.DateTimeStyles.AdjustToUniversal, out DateTime utc)
+                ? utc.ToLocalTime().ToString("dd/MM/yyyy HH:mm")
+                : raw;
+        }
+
+        private sealed class MatchRow
+        {
+            public object When { get; set; }
+            public object Result { get; set; }
+            public object Score { get; set; }
+            public object Room { get; set; }
         }
 
         /// <summary>A caption above a value, which is the whole layout of this dialog.</summary>

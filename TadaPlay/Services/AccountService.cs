@@ -466,6 +466,33 @@ public class AccountService : IAccountService
         }
     }
 
+    /// <summary>
+    /// The matches a player appeared in. Never throws - the detail dialog that shows this is
+    /// perfectly readable without it, so a failure leaves the list empty and is logged instead.
+    /// </summary>
+    public async Task<List<PlayerMatch>> GetPlayerMatchesAsync(string username, int limit = 30)
+    {
+        if (string.IsNullOrWhiteSpace(username)) return new List<PlayerMatch>();
+
+        try
+        {
+            _httpClient.DefaultRequestHeaders.Authorization =
+                new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _appContext.GetJwtTokenSetting());
+            var response = await _httpClient.GetAsync(
+                BASE_URL + "?action=player_matches&username=" + Uri.EscapeDataString(username) + "&limit=" + limit);
+            response.EnsureSuccessStatusCode();
+
+            var body = await response.Content.ReadAsStringAsync();
+            var result = JsonConvert.DeserializeObject<PlayerMatchesResponse>(body);
+            return result?.Matches ?? new List<PlayerMatch>();
+        }
+        catch (Exception ex)
+        {
+            DebugLogger.Warn($"AccountService: cannot list matches for '{username}': {ex.Message}");
+            return new List<PlayerMatch>();
+        }
+    }
+
     public async Task<List<RankingEntry>> GetLeaderboardAsync()
     {
         _httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _appContext.GetJwtTokenSetting());

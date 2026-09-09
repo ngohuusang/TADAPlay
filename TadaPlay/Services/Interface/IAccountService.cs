@@ -33,6 +33,12 @@ public interface IAccountService
     /// </summary>
     Task<List<PlayerGameName>> GetPlayerNamesAsync(string username);
 
+    /// <summary>
+    /// The matches a player appeared in, newest first. Only matches whose teams were resolved
+    /// can be listed - an unresolved one does not know who played in it.
+    /// </summary>
+    Task<List<PlayerMatch>> GetPlayerMatchesAsync(string username, int limit = 30);
+
     Task<List<MatchSummary>> GetMatchesAsync();
     Task RenameMatchAsync(long matchId, string roomName);
 

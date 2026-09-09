@@ -78,6 +78,54 @@ namespace TadaPlay.Common.Models
         public string LastSeen { get; set; }
     }
 
+    /// <summary>Response from api.php?action=player_matches.</summary>
+    public class PlayerMatchesResponse
+    {
+        [JsonProperty("success")]
+        public bool Success { get; set; }
+
+        [JsonProperty("matches")]
+        public List<PlayerMatch> Matches { get; set; }
+    }
+
+    /// <summary>One match a player appeared in, from their side of it.</summary>
+    public class PlayerMatch
+    {
+        [JsonProperty("id")]
+        public long Id { get; set; }
+
+        [JsonProperty("room_name")]
+        public string RoomName { get; set; }
+
+        [JsonProperty("finished_at")]
+        public string FinishedAt { get; set; }
+
+        /// <summary>"pending", "resolved" or "needs_review".</summary>
+        [JsonProperty("status")]
+        public string Status { get; set; }
+
+        [JsonProperty("team")]
+        public int? Team { get; set; }
+
+        [JsonProperty("score")]
+        public int? Score { get; set; }
+
+        /// <summary>
+        /// Null when nobody has reported a winner yet, which is a different thing from losing.
+        /// </summary>
+        [JsonProperty("won")]
+        public bool? Won { get; set; }
+
+        [JsonProperty("is_mvp")]
+        public bool IsMvp { get; set; }
+
+        [JsonProperty("team_mates")]
+        public List<string> TeamMates { get; set; }
+
+        [JsonProperty("opponents")]
+        public List<string> Opponents { get; set; }
+    }
+
     /// <summary>Response from api.php?action=matches.</summary>
     public class MatchesResponse
     {
