@@ -1,9 +1,10 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
 using System.Windows.Forms;
 using AntdUI;
+using TadaPlay.Common.Models;
 using TadaPlay.Logger;
 using TadaPlay.Services.Interface;
 using TadaPlay.Utils;
@@ -97,6 +98,18 @@ namespace TadaPlay.Controls
                 },
             };
 
+            // A row is a player, so it opens that player. The stats are already in the row;
+            // what the detail adds is the in-game name, which the table has no column for and
+            // which is how teammates actually know each other.
+            _table.CellClick += (s, e) =>
+            {
+                if (e?.Record is Row row && row.Source != null)
+                {
+                    using var detail = new RankingDetailDialog(row.Source);
+                    detail.ShowDialog(FindForm());
+                }
+            };
+
             var tableHost = new System.Windows.Forms.Panel { Dock = DockStyle.Fill, Padding = new Padding(14, 0, 14, 8), BackColor = Color.Transparent };
             tableHost.Controls.Add(_table);
 
@@ -134,6 +147,12 @@ namespace TadaPlay.Controls
             public int Wins { get; set; }
             public int Losses { get; set; }
             public object WinRate { get; set; }
+
+            /// <summary>
+            /// The entry this row was built from, so a click can open its detail without
+            /// having to turn rendered cell text back into a player.
+            /// </summary>
+            public RankingEntry Source { get; set; }
         }
 
         private async System.Threading.Tasks.Task LoadAsync()
@@ -170,6 +189,7 @@ namespace TadaPlay.Controls
                         // A tag rather than coloured text: it is a verdict on the player, and it
                         // is the one cell anybody scans the column for.
                         WinRate = new CellTag(p.WinRate + "%", winning ? TTypeMini.Success : TTypeMini.Default),
+                        Source = p,
                     });
                 }
 

@@ -38,6 +38,18 @@ namespace TadaPlay.Common.Models
 
         [JsonProperty("win_rate")]
         public int WinRate { get; set; }
+
+        /// <summary>
+        /// The name this player appears as inside the game. Null when nothing has been
+        /// recorded for them - which is itself worth showing, because it means their matches
+        /// cannot be tied back to this account.
+        /// </summary>
+        [JsonProperty("in_game_name")]
+        public string InGameName { get; set; }
+
+        /// <summary>The VPN address pinned to the account, or null.</summary>
+        [JsonProperty("vpn_ip")]
+        public string VpnIp { get; set; }
     }
 
     /// <summary>Response from api.php?action=matches.</summary>
