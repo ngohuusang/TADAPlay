@@ -104,6 +104,11 @@ namespace TadaPlay.Controls
             // edge. Set here rather than in the designer file, which Visual Studio regenerates.
             startGameButton.Padding = new Padding(0, 8, 0, 8);
 
+            // Raw SVG rather than one of AntdUI's built-in icon names, so it is set here instead
+            // of in the designer file - a 600-character path string in a generated file is not
+            // something anyone would want to open.
+            networkCheckButton.IconSvg = UiTheme.IconShield;
+
             // The live stream keeps appending to a file on a background loop; without this it
             // would outlive the control it reports to and go on writing to a replay nobody
             // has open. Hooked here rather than in Dispose(bool) because that lives in the
@@ -246,6 +251,30 @@ namespace TadaPlay.Controls
             // The game folder may have been set/changed in Settings - refresh the primary button
             // (it toggles between "Tải game" and "Bắt đầu").
             UpdateStartButtonState();
+        }
+
+        /// <summary>
+        /// "Kiểm tra mạng cho game": the four things that stop a match connecting even with the
+        /// tunnel up - Windows' UPnP services, the router's own UPnP, the firewall on the network
+        /// the game plays over, and the game's inbound ports. See NetworkReadiness.
+        ///
+        /// One press both checks and repairs; the dialog shows what it did. The verdict is
+        /// repeated into the log box afterwards, because the dialog is the only place it exists
+        /// and a player who closed it should not have to run the whole thing again to see it.
+        /// </summary>
+        private void networkCheckButton_Click(object sender, EventArgs e)
+        {
+            networkCheckButton.Enabled = false;
+            try
+            {
+                using var dialog = new NetworkCheckDialog(mainForm);
+                dialog.ShowDialog(mainForm);
+                printLog(dialog.ResultLine(), dialog.ResultColor());
+            }
+            finally
+            {
+                networkCheckButton.Enabled = true;
+            }
         }
 
         // Opens the game downloader; on completion the game folder is configured, so refresh the

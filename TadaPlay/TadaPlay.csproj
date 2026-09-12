@@ -38,6 +38,10 @@
     <!-- Win32_ShadowCopy in-process. Shelling out to powershell.exe for it cost ~1s per
          spawn, twice per live capture - see VolumeSnapshotReader. -->
     <PackageReference Include="System.Management" Version="6.0.2" />
+    <!-- Service state for the network check. .NET Core dropped ServiceController from the box.
+         The alternative was parsing sc.exe, whose output is in the machine's display language -
+         see the note on NetworkReadiness about why that is not an option here. -->
+    <PackageReference Include="System.ServiceProcess.ServiceController" Version="6.0.1" />
   </ItemGroup>
 
   <ItemGroup>
