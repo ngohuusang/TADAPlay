@@ -1270,18 +1270,44 @@ namespace TadaPlay.Controls
             homeGridPanel.Span = "42% 58%";
         }
 
+        /// <summary>
+        /// Brings the list up to date with a broadcast, reusing the rows already there.
+        ///
+        /// It used to Clear() and re-add every row, and Clear() puts MsgList's scroll back at
+        /// the top. Status broadcasts arrive every few seconds, so anyone scrolled down to find
+        /// a player was thrown back up before they could click. Measured against the control:
+        /// Clear() then re-adding resets the scroll to 0; changing the existing rows' properties,
+        /// or adding and removing rows at the end, leaves it where it was, and a list that
+        /// shrinks below the scroll position is clamped by the control itself.
+        /// </summary>
         private void UpdateOnlineUsersListView(IReadOnlyList<User> users)
         {
-            userList.Items.Clear();
             // Alphabetical within each group rather than the order the server happened to send:
-            // the list is rebuilt from scratch on every broadcast, so without a total order the
-            // rows shuffle under the cursor every few seconds.
+            // rows are matched to players by position, so without a total order the rows would
+            // shuffle under the cursor on every broadcast.
             var ordered = users.OrderBy(ActivityRank)
                                .ThenBy(u => u.Username ?? string.Empty, StringComparer.OrdinalIgnoreCase)
                                .ToList();
-            foreach (var user in ordered)
+
+            if (userList.Items.Count > ordered.Count)
             {
-                AntdUI.Chat.MsgItem userItem = new AntdUI.Chat.MsgItem();
+                userList.Items.RemoveRange(ordered.Count, userList.Items.Count - ordered.Count);
+            }
+
+            for (int i = 0; i < ordered.Count; i++)
+            {
+                User user = ordered[i];
+                bool reused = i < userList.Items.Count;
+                AntdUI.Chat.MsgItem userItem = reused ? userList.Items[i] : new AntdUI.Chat.MsgItem();
+
+                // A reused row may now belong to someone else. A highlight left on it would sit
+                // on a different player than the one who was selected.
+                if (reused && userItem.Tag is User previous &&
+                    !string.Equals(previous.Username, user.Username, StringComparison.OrdinalIgnoreCase))
+                {
+                    userItem.Select = false;
+                }
+
                 string status = user.Status ?? "";
                 (string name, string detail) = DescribeIdentity(user);
 
@@ -1301,8 +1327,11 @@ namespace TadaPlay.Controls
                 // it was built from - the label alone cannot be turned back into a VPN address.
                 userItem.Tag = user;
 
-                userList.Items.Add(userItem);
+                if (!reused) userList.Items.Add(userItem);
             }
+
+            // Property changes on an existing row are not guaranteed to repaint on their own.
+            userList.Invalidate();
         }
 
         // Asked once per run. A player who says no should not be nagged every time the lobby
