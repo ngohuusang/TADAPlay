@@ -15,6 +15,12 @@ public interface IAccountService
 
     Task<bool> DoLogoutAsync();
 
+    /// <summary>
+    /// Forgets the stored token, current user and VPN profile without calling the server - for
+    /// when the server has already ended this session (the account logged in on another PC).
+    /// </summary>
+    void ClearLocalSession();
+
     Task<bool> UpdateUserInfo(string full_name, string nick_name, string current_password, string new_password);
 
     Task<UpdateIpResponse> UpdateCurrentIPToServer(string currentIp);

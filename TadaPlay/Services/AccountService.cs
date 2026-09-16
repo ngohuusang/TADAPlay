@@ -114,7 +114,9 @@ public class AccountService : IAccountService
 
     public async Task<bool> DoAuthAsync()
     {
-        if (!_appContext.GetAutoLoginSetting())
+        // No stored token (e.g. the last session ended because the account logged in elsewhere):
+        // nothing to resume, so show the login form rather than an error.
+        if (!_appContext.GetAutoLoginSetting() || string.IsNullOrEmpty(_appContext.GetJwtTokenSetting()))
         {
             return false;
         }
@@ -124,9 +126,19 @@ public class AccountService : IAccountService
         // launch after the first. The version header is registered once in the constructor, so
         // this body-less GET already carries it.
         var response = await _httpClient.GetAsync(BASE_URL + "?action=auth");
+        var responseBody = await response.Content.ReadAsStringAsync();
+
+        // A token that is expired, or whose session a login on another PC replaced, can never
+        // succeed - drop it so the next launch does not retry it, and show the server's reason.
+        if (response.StatusCode == HttpStatusCode.Unauthorized)
+        {
+            string message = null;
+            try { message = JObject.Parse(responseBody)["message"]?.ToString(); } catch (Exception) { }
+            ClearLocalSession();
+            throw new LoginException(string.IsNullOrWhiteSpace(message) ? "Phiên đăng nhập đã hết hạn." : message);
+        }
         response.EnsureSuccessStatusCode();
 
-        var responseBody = await response.Content.ReadAsStringAsync();
         var apiResponse = JsonConvert.DeserializeObject<LoginResponse>(responseBody);
 
         ThrowIfUpdateRequired(apiResponse);
@@ -639,10 +651,26 @@ public class AccountService : IAccountService
 
     public async Task<bool> DoLogoutAsync()
     {
-        await ReleaseVpnProfileAsync();
+        // Best effort: the call is a no-op on the server now, and it fails outright when a login
+        // on another PC has already replaced this session (401). Neither is a reason to leave
+        // the player stuck logged in, so the local session is cleared regardless.
+        try
+        {
+            await ReleaseVpnProfileAsync();
+        }
+        catch (Exception ex)
+        {
+            DebugLogger.Warn("AccountService: release_vpn_profile failed during logout: " + ex.Message);
+        }
+
+        ClearLocalSession();
+        return true;
+    }
+
+    public void ClearLocalSession()
+    {
         _appContext.SetJwtTokenSetting(null);
         _appContext.SetCurrentUser(null);
-
-        return true;
+        _appContext.SetVpnProfile(null);
     }
 }

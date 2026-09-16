@@ -45,6 +45,7 @@ namespace TadaPlay.Websockets
         public event EventHandler<string> OnErrorOccurred; // For general errors and warnings
         public event EventHandler<PingUpdateEventArgs> OnPingUpdate; // For reporting ping latency
         public event EventHandler<string> OnConnectionStatusChanged; // For UI to display connection state
+        public event EventHandler<string> OnSessionReplaced; // Account logged in on another PC
 
         public bool IsConnected => _ws?.State == WebSocketState.Open;
 
@@ -395,6 +396,23 @@ namespace TadaPlay.Websockets
             try
             {
                 var data = JObject.Parse(json);
+
+                // Another PC logged in to this account. The server closes the socket right after
+                // this message, and reconnecting would only be refused again - so stop here,
+                // before the close frame arrives and HandleConnectionLoss schedules a retry.
+                if (data["type"]?.ToString() == "session_replaced")
+                {
+                    _isExplicitlyDisconnected = true;
+                    StopReconnectTimer();
+                    StopPing();
+                    string reason = data["message"]?.ToString();
+                    DebugLogger.Warn($"WebSocketService: Session replaced by a login elsewhere: {reason}");
+                    OnSessionReplaced?.Invoke(this, string.IsNullOrWhiteSpace(reason)
+                        ? "Tài khoản của bạn đã được đăng nhập trên máy khác."
+                        : reason);
+                    return;
+                }
+
                 if (data["pong"] != null && data["ts"] != null)
                 {
                     long tsSent = data["ts"].ToObject<long>();

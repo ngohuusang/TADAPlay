@@ -200,6 +200,25 @@ namespace TadaPlay.Controls
             // (see the server's set_in_game_name endpoint + matchPlayersToAccounts).
             StartProfileWatcher();
 
+            ConnectSession();
+
+            EnsureGameFolderConfigured();
+        }
+
+        /// <summary>
+        /// Called when the player logs in again after a logout in the same run of the app. Load
+        /// only fires the first time this control is shown, so without this the lobby and VPN
+        /// that the logout took down were never brought back up.
+        /// </summary>
+        public void ResumeAfterLogin()
+        {
+            ResetLogoutButtonState();
+            UpdateUiBasedOnLobbyState();
+            ConnectSession();
+        }
+
+        private void ConnectSession()
+        {
             webSocketService.Connect();
 
             // If a WireGuard tunnel is already up outside this app (e.g. the official
@@ -219,8 +238,6 @@ namespace TadaPlay.Controls
                 UpdateVpnUi();
                 _ = wireGuardVpnService.ConnectAsync();
             }
-
-            EnsureGameFolderConfigured();
         }
 
         // The game folder drives name-sync, record watching, and upload - without it none of

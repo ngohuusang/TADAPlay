@@ -40,6 +40,7 @@ namespace TadaPlay
             wireGuardVpnService = _wireGuardVpnService;
 
             appContext.OnVpnProfileUpdated += AppContext_OnVpnProfileUpdated;
+            webSocketService.OnSessionReplaced += WebSocketService_OnSessionReplaced;
 
             // Always run with Windows, starting hidden in the tray - no user-facing toggle for this.
             appContext.SetRunOnStartupSetting(true);
@@ -184,6 +185,12 @@ namespace TadaPlay
             _homeControl.LogoutRequested += Home_LogoutRequested;
             _loginControl.LoginSuccessful += (s, e) =>
             {
+                // Home has been shown before, so this is a login after a logout: its Load will not
+                // run again to reconnect the lobby and VPN, so ask it to.
+                if (_homeControl.Created)
+                {
+                    _homeControl.ResumeAfterLogin();
+                }
                 ShowControl(_homeControl, "Trang chủ", false, true);
                 settingButton.Visible = true;
                 rankingButton.Visible = true;
@@ -301,6 +308,67 @@ namespace TadaPlay
             Application.Exit();
         }
 
+        /// <summary>
+        /// Disconnects the lobby and the VPN tunnel and returns to the login screen. Shared by a
+        /// normal logout and by one forced by a login on another PC.
+        /// </summary>
+        private async Task EndSessionAsync()
+        {
+            webSocketService.Disconnect();
+            if (wireGuardVpnService.IsConnected)
+            {
+                await wireGuardVpnService.DisconnectAsync();
+            }
+
+            ShowControl(_loginControl, "Đăng nhập", false, false);
+
+            settingButton.Visible = false;
+            rankingButton.Visible = false;
+            matchesButton.Visible = false;
+        }
+
+        private bool _sessionReplacedHandling;
+
+        /// <summary>
+        /// This account just logged in on another PC. Both machines would otherwise run the
+        /// account's one VPN profile and break each other's tunnel, so this one steps aside:
+        /// logs out, takes its VPN down, and tells the player why.
+        /// </summary>
+        private void WebSocketService_OnSessionReplaced(object sender, string message)
+        {
+            UiUtils.InvokeOnUiThread(this, async () =>
+            {
+                if (_sessionReplacedHandling) return;
+                _sessionReplacedHandling = true;
+                try
+                {
+                    DebugLogger.Warn("Session replaced by a login on another PC. Logging out.");
+                    // The server has already ended this session, so there is nothing to tell it.
+                    accountService.ClearLocalSession();
+                    await EndSessionAsync();
+
+                    if (!Visible)
+                    {
+                        trayIcon.ShowBalloonTip(5000, "TADA Play", message, ToolTipIcon.Warning);
+                    }
+                    AntdUI.Modal.open(new AntdUI.Modal.Config(this, "Đã đăng xuất", message, AntdUI.TType.Warn)
+                    {
+                        CancelText = null,
+                        OkText = AntdUI.Localization.Get("CloseButton", "Đóng")
+                    });
+                }
+                catch (Exception ex)
+                {
+                    DebugLogger.Error($"Exception during forced logout: {ex.Message}");
+                }
+                finally
+                {
+                    _homeControl.ResetLogoutButtonState();
+                    _sessionReplacedHandling = false;
+                }
+            }, "MAINFORM_SESSION_REPLACED");
+        }
+
         private async void Home_LogoutRequested(object sender, EventArgs e)
         {
             DebugLogger.Info("Logout requested from Home control.");
@@ -316,21 +384,8 @@ namespace TadaPlay
 
                 if (loggedOut)
                 {
-                    // Disconnect WebSocket and tear down the VPN tunnel
-                    webSocketService.Disconnect();
-                    if (wireGuardVpnService.IsConnected)
-                    {
-                        await wireGuardVpnService.DisconnectAsync();
-                    }
-
+                    await EndSessionAsync();
                     DebugLogger.Info("User logged out successfully. Navigating back to login.");
-                    // Navigate back to login screen
-                    ShowControl(_loginControl, "Đăng nhập", false, false);
-
-                    // Hide global buttons
-                    settingButton.Visible = false;
-                    rankingButton.Visible = false;
-                    matchesButton.Visible = false;
                 }
                 else
                 {

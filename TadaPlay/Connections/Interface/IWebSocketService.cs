@@ -15,6 +15,11 @@ namespace TadaPlay.Websockets.Interface
         event EventHandler<string> OnErrorOccurred;
         event EventHandler<PingUpdateEventArgs> OnPingUpdate;
         event EventHandler<string> OnConnectionStatusChanged;
+        /// <summary>
+        /// The account logged in on another PC, which replaced this session. The service has
+        /// already stopped reconnecting; the argument is the server's message for the player.
+        /// </summary>
+        event EventHandler<string> OnSessionReplaced;
 
         bool IsConnected { get; }
 
