@@ -213,6 +213,32 @@ namespace TadaPlay.Controls
             };
         }
 
+        /// <summary>
+        /// Puts a button in a column of its own so several can sit side by side.
+        ///
+        /// The buttons above come docked to the top of whatever holds them, which quietly
+        /// overrides any Location set on them - two in one panel stack instead of sitting beside
+        /// each other, and only the first is visible. Filling a docked column of a known width is
+        /// what actually places them. The padding gives the button its height and its gap from
+        /// the next one.
+        /// </summary>
+        public static System.Windows.Forms.Panel ButtonColumn(AntdUI.Button button, DockStyle side,
+                                                              int width, int top = 6, int gap = 10)
+        {
+            var host = new System.Windows.Forms.Panel
+            {
+                Dock = side,
+                Width = width,
+                BackColor = Color.Transparent,
+                Padding = side == DockStyle.Right
+                    ? new Padding(gap, top, 0, top)
+                    : new Padding(0, top, gap, top),
+            };
+            button.Dock = DockStyle.Fill;
+            host.Controls.Add(button);
+            return host;
+        }
+
         /// <summary>An antd text field. Placeholder and prefix icon are optional.</summary>
         public static AntdUI.Input Field(string placeholder = null, string prefixSvg = null,
                                          bool password = false, int height = 40)

@@ -48,6 +48,11 @@ namespace TadaPlay
             rankingButton.Click += rankingButton_Click;
             matchesButton.Click += matchesButton_Click;
             settingButton.Click += btn_setting_Click;
+            modsButton.Click += modsButton_Click;
+            // Raw markup rather than one of AntdUI's built-in icon names: those are only as good
+            // as the set that ships with the version in use, and a name it does not know renders
+            // as an empty button. This is the same folder mark the mod dialog carries.
+            modsButton.IconSvg = UiTheme.IconFolder;
 
             ShowVersionInTitle();
         }
@@ -133,6 +138,16 @@ namespace TadaPlay
             }, "MAINFORM_VPN_PROFILE");
         }
 
+        /// <summary>
+        /// The mod installer. On the toolbar rather than inside Cài đặt: it is a job of its own
+        /// with its own list and outcomes, not a setting, and as a card in that dialog it pushed
+        /// the stack past what the window can show.
+        /// </summary>
+        private void modsButton_Click(object sender, EventArgs e)
+        {
+            AntdUI.Modal.open(this, "Mod cho game", new ModsDialog(this, appContext));
+        }
+
         private void btn_setting_Click(object sender, EventArgs e)
         {
             accountService.GetAllAsync();
@@ -195,6 +210,7 @@ namespace TadaPlay
                 settingButton.Visible = true;
                 rankingButton.Visible = true;
                 matchesButton.Visible = true;
+                modsButton.Visible = true;
             };
             _loginControl.Load += (s, e) =>
             {
@@ -325,6 +341,7 @@ namespace TadaPlay
             settingButton.Visible = false;
             rankingButton.Visible = false;
             matchesButton.Visible = false;
+            modsButton.Visible = false;
         }
 
         private bool _sessionReplacedHandling;
