@@ -42,8 +42,12 @@ namespace TadaPlay
             appContext.OnVpnProfileUpdated += AppContext_OnVpnProfileUpdated;
             webSocketService.OnSessionReplaced += WebSocketService_OnSessionReplaced;
 
-            // Always run with Windows, starting hidden in the tray - no user-facing toggle for this.
-            appContext.SetRunOnStartupSetting(true);
+            // Re-applied on every launch rather than set once: the scheduled task records the
+            // path this app was started from, so an update or a move would otherwise leave
+            // Windows launching an executable that is no longer there. Applying the player's
+            // own choice, not a fixed "on" - the installer creates the task as part of every
+            // install, so this is also what takes it back off for someone who wants it off.
+            appContext.SetStartWithWindowsSetting(appContext.GetStartWithWindowsSetting());
 
             rankingButton.Click += rankingButton_Click;
             matchesButton.Click += matchesButton_Click;

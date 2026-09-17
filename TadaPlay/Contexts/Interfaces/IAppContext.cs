@@ -17,6 +17,13 @@ public interface IAppContext
     public bool GetRunOnStartupSetting();
 
     /// <summary>
+    /// Whether the player wants the app launched when Windows starts. On unless they turn it off.
+    /// </summary>
+    void SetStartWithWindowsSetting(bool startWithWindows);
+
+    bool GetStartWithWindowsSetting();
+
+    /// <summary>
     /// Whether other players may watch this player's matches. Off unless turned on.
     /// </summary>
     void SetAllowSpectateSetting(bool allow);
