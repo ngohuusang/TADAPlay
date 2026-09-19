@@ -4,7 +4,7 @@
 ; Then compile this script with ISCC.exe (Inno Setup 6).
 
 #define MyAppName "TADA Play"
-#define MyAppVersion "3.37.0"
+#define MyAppVersion "3.37.1"
 #define MyAppExeName "TadaPlay.exe"
 #define MyPublishDir "..\publish\TadaPlay"
 
@@ -77,12 +77,130 @@ Filename: "{app}\{#MyAppExeName}"; Description: "Khởi chạy {#MyAppName}"; Fl
 ; as whatever elevated identity ran the installer rather than as the player.
 Filename: "{app}\{#MyAppExeName}"; Flags: nowait runasoriginaluser; Check: WantsRelaunch
 
+[InstallDelete]
+; The DirectPlay lobby helper from the Sep 2026 "join straight into the game" builds. Those
+; builds extracted it from an embedded resource into this folder at run time, so no installer
+; ever recorded it, and the feature has since been removed - but the 9 MB file is still sitting
+; on every PC that ran them. Removed on update so it does not linger forever.
+Type: files; Name: "{app}\TadaLobby.exe"
+
+[UninstallDelete]
+; Written by the app while it runs, so the uninstaller has no record of them and would leave the
+; folder behind - which looks exactly like an uninstall that failed.
+Type: filesandordirs; Name: "{app}\Log"
+Type: filesandordirs; Name: "{app}\Logs"
+; See [InstallDelete]: extracted at run time by older builds, so equally unknown to the uninstaller.
+; This was the one file keeping "C:\Program Files\TADA Play" alive after an uninstall.
+Type: files; Name: "{app}\TadaLobby.exe"
+; Last, and only if empty. This section runs as the final step of an uninstall - AFTER the
+; uninstaller has already tried to remove the folder and found it still holding the log. So the
+; entries above empty it too late for that attempt, and without this line an empty
+; "C:\Program Files\TADA Play" is left behind. dirifempty rather than a forced delete, so
+; anything a player put in there themselves is never taken with it.
+Type: dirifempty; Name: "{app}"
+
 [UninstallRun]
 Filename: "{sys}\schtasks.exe"; Parameters: "/Delete /TN ""TadaPlay"" /F"; Flags: runhidden; RunOnceId: "DeleteTadaPlayScheduledTask"
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""TadaPlay match sharing"""; Flags: runhidden; RunOnceId: "DeleteTadaPlayFirewallRule"
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""TadaPlay VPN ping"""; Flags: runhidden; RunOnceId: "DeleteTadaPlayPingRule"
 
 [Code]
+const
+  AppProcess = 'TadaPlay.exe';
+
+// Whether TADA Play is running. Asked of WMI rather than looked for as a window, because the app
+// normally has no visible window at all: it starts with Windows hidden in the tray, and closing
+// its window only hides it there. A failed query answers False - CloseRunningApp still sends the
+// kill regardless, so the only thing lost is the wait for it to finish.
+function IsAppRunning(): Boolean;
+var
+  Locator, Service, Found: Variant;
+begin
+  Result := False;
+  try
+    Locator := CreateOleObject('WbemScripting.SWbemLocator');
+    Service := Locator.ConnectServer('.', 'root\CIMV2');
+    Found := Service.ExecQuery('SELECT ProcessId FROM Win32_Process WHERE Name = ''' + AppProcess + '''');
+    Result := Found.Count > 0;
+  except
+    Result := False;
+  end;
+end;
+
+// Ends TADA Play so its files can be replaced or removed.
+//
+// Without this, installing or uninstalling while the app sat in the tray - which is most of the
+// time, since it starts with Windows - failed on the first DLL it loads ("DeleteFile failed;
+// code 5. Access is denied" on Accessibility.dll). The in-app updater had the same problem the
+// other way round: it starts this installer and then exits, and a silent install begins copying
+// at once, while the app is still taking its VPN and lobby connection down.
+//
+// Forced (/F), because asking does not work: a close request only hides the app to the tray, by
+// design. Deliberately NOT a tree kill (/T): the app starts the game as a child process, and
+// taking the tree down would end a player's running game with it.
+procedure CloseRunningApp();
+var
+  ResultCode, Waited: Integer;
+begin
+  Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM ' + AppProcess, '', SW_HIDE,
+       ewWaitUntilTerminated, ResultCode);
+  // The lobby helper older builds ran alongside the app (see [InstallDelete]). Current builds
+  // never start it, but a PC still on one of those builds may have it running, and a running exe
+  // cannot be deleted. It is our own helper, not the game, so ending it is safe.
+  Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM TadaLobby.exe', '', SW_HIDE,
+       ewWaitUntilTerminated, ResultCode);
+
+  // taskkill returns once the kill is requested, not once Windows has let go of the files.
+  Waited := 0;
+  while IsAppRunning() and (Waited < 10000) do
+  begin
+    Sleep(250);
+    Waited := Waited + 250;
+  end;
+end;
+
+// Runs before any file is copied, in the wizard and in a silent (updater) install alike.
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+begin
+  Result := '';
+
+  // Someone running the wizard by hand is told first: closing the app drops its VPN, which ends
+  // any online game in progress. The updater's silent install needs no warning - the player has
+  // just chosen to update, and the app is already on its way out.
+  if IsAppRunning() and not WizardSilent() then
+  begin
+    if MsgBox('TADA Play đang chạy và sẽ được đóng để cập nhật.' + #13#10 +
+              'Nếu đang trong trận đấu, trận sẽ bị ngắt kết nối.' + #13#10#13#10 +
+              'Tiếp tục?', mbConfirmation, MB_OKCANCEL) <> IDOK then
+    begin
+      Result := 'Hãy thoát TADA Play rồi chạy lại trình cài đặt.';
+      Exit;
+    end;
+  end;
+
+  CloseRunningApp();
+
+  if IsAppRunning() then
+    Result := 'Không đóng được TADA Play. Hãy thoát ứng dụng (chuột phải biểu tượng ở khay hệ thống, chọn Thoát) rồi thử lại.';
+end;
+
+function InitializeUninstall(): Boolean;
+begin
+  Result := True;
+
+  if IsAppRunning() and not UninstallSilent() then
+  begin
+    if MsgBox('TADA Play đang chạy và sẽ được đóng để gỡ cài đặt.' + #13#10#13#10 +
+              'Tiếp tục?', mbConfirmation, MB_OKCANCEL) <> IDOK then
+    begin
+      Result := False;
+      Exit;
+    end;
+  end;
+
+  CloseRunningApp();
+end;
+
 // True when the installer was started with /RELAUNCH, which only the in-app updater does.
 // Written as a plain command-line scan rather than {param:...} so it behaves the same however
 // the parameter is quoted.
