@@ -69,7 +69,11 @@ Filename: "{sys}\schtasks.exe"; Parameters: "/Create /TN ""TadaPlay"" /TR ""\""{
 ; already checks before adding, so it never contributed duplicates and needs no change.)
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""TadaPlay match sharing"""; Flags: runhidden
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall add rule name=""TadaPlay match sharing"" dir=in action=allow protocol=TCP localport=53755 profile=any"; Flags: runhidden; StatusMsg: "Đang mở cổng chia sẻ trận đấu..."
-Filename: "{app}\{#MyAppExeName}"; Description: "Khởi chạy {#MyAppName}"; Flags: nowait postinstall skipifsilent
+; No "launch now" step. Setup runs elevated, so anything it starts inherits that - which means
+; the app would run as whoever answered the UAC prompt rather than as the player. On a PC where
+; those are different accounts it comes up against the wrong registry hive: no saved login, no
+; game folder, and errors that look like missing permissions. The player starts it themselves
+; from the desktop icon, or it comes up at the next logon through the scheduled task above.
 ; The auto-updater runs this installer silently and then has to get the app back up, but the
 ; entry above is skipifsilent by design (a silent install triggered by anything else should not
 ; spawn a window). So the updater passes /RELAUNCH and gets exactly one relaunch from this line.
