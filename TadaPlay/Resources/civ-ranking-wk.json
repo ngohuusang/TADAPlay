@@ -1,0 +1,3609 @@
+{
+ "source": "Simplified Tech Tree for 1v1 Arabia - Survivalist",
+ "sourceUrl": "https://aoe2-de-tools.herokuapp.com/civ-ranking/",
+ "sourceVersion": "Age of Empires II: Definitive Edition, cập nhật 10/12/2024",
+ "rankConversion": {
+  "0": "F",
+  "0.5": "C-",
+  "1": "C",
+  "1.5": "C+",
+  "2": "B",
+  "2.5": "B+",
+  "3": "A",
+  "3.5": "A+",
+  "4": "S"
+ },
+ "civilizations": [
+  {
+   "key": "briton",
+   "name": "Britons",
+   "vi": "Anh",
+   "source": "Britons",
+   "note": null,
+   "ranks": {
+    "town center": {
+     "villager": [
+      3.5,
+      3,
+      3.5,
+      3
+     ]
+    },
+    "barracks": {
+     "champion": [
+      3,
+      3,
+      3,
+      3
+     ],
+     "halberdier": [
+      3,
+      3,
+      3
+     ]
+    },
+    "archery range": {
+     "arbalester": [
+      4,
+      4,
+      4
+     ],
+     "elite skirmisher": [
+      3,
+      3,
+      3.5
+     ],
+     "heavy cavalry archer": [
+      2,
+      1.5
+     ]
+    },
+    "stable": {
+     "light cavalry": [
+      2,
+      2.5,
+      2.5
+     ],
+     "cavalier": [
+      2.5,
+      2.5
+     ]
+    },
+    "siege workshop": {
+     "capped ram": [
+      3,
+      2.5
+     ],
+     "onager": [
+      3,
+      3
+     ],
+     "heavy scorpion": [
+      3,
+      3
+     ]
+    },
+    "monastery": {
+     "monk": [
+      2,
+      2.5
+     ]
+    },
+    "castle": {
+     "elite longbowman": [
+      2,
+      4
+     ],
+     "trebuchet": [
+      4
+     ]
+    },
+    "university": {
+     "keep": [
+      3,
+      3,
+      3.5
+     ],
+     "defenses": [
+      3,
+      3,
+      3,
+      3
+     ]
+    }
+   },
+   "description": {
+    "bonuses": [
+     "Nhà chính rẻ hơn 50% gỗ ở thời Lâu đài",
+     "Cung thủ bộ (trừ lính phóng lao) +1/+2 tầm bắn ở thời Lâu đài/Đế quốc",
+     "Dân làng chăn cừu làm việc nhanh hơn 25%"
+    ],
+    "unique": "Longbowman (cung thủ tầm xa)",
+    "castleTech": "Yeomen: cung thủ bộ và lính phóng lao +1 tầm bắn; tháp +2 sát thương",
+    "imperialTech": "Warwolf: máy bắn đá lớn (Trebuchet) gây sát thương lan bán kính 0,5 và bắn trúng 100%",
+    "team": "Trường bắn huấn luyện nhanh hơn 20%"
+   },
+   "descriptionEn": "• Town Centers cost -50% wood in Castle Age\n• Foot Archers (except Skirmishers) have +1/+2 range in Castle/Imperial Age\n• Shepherds work 25% faster\n\nUnique Unit: Longbowman (long-range Archer)\n\nCastle Age Tech: Yeomen (Foot Archers and Skirmishers +1 range; Towers +2 Attack); Imperial Age Tech: Warwolf (Trebuchets get 0.5 blast radius, 100% accuracy)\n\nTeam Bonus: Archery Ranges work 20% faster"
+  },
+  {
+   "key": "frankish",
+   "name": "Franks",
+   "vi": "Frank",
+   "source": "Franks",
+   "note": null,
+   "ranks": {
+    "town center": {
+     "villager": [
+      3.5,
+      3.5,
+      3.5,
+      3
+     ]
+    },
+    "barracks": {
+     "champion": [
+      3.5,
+      3.5,
+      3,
+      3
+     ],
+     "halberdier": [
+      3,
+      3,
+      3
+     ]
+    },
+    "archery range": {
+     "crossbowman": [
+      3,
+      2.5,
+      1
+     ],
+     "elite skirmisher": [
+      3,
+      3,
+      1.5
+     ],
+     "heavy cavalry archer": [
+      2,
+      1.5
+     ],
+     "hand cannoneer": [
+      3
+     ]
+    },
+    "stable": {
+     "light cavalry": [
+      3.5,
+      3,
+      3
+     ],
+     "paladin": [
+      3.5,
+      4
+     ]
+    },
+    "siege workshop": {
+     "capped ram": [
+      3,
+      2.5
+     ],
+     "onager": [
+      3,
+      3
+     ],
+     "heavy scorpion": [
+      3,
+      3
+     ],
+     "bombard cannon": [
+      3
+     ]
+    },
+    "monastery": {
+     "monk": [
+      2,
+      2.5
+     ]
+    },
+    "castle": {
+     "elite throwing axeman": [
+      2,
+      3
+     ],
+     "trebuchet": [
+      3
+     ]
+    },
+    "university": {
+     "guard tower": [
+      3,
+      3,
+      2
+     ],
+     "defenses": [
+      3,
+      3,
+      3.5,
+      4
+     ]
+    }
+   },
+   "description": {
+    "bonuses": [
+     "Dân làng hái quả làm việc nhanh hơn 25%",
+     "Lâu đài rẻ hơn 25%",
+     "Kỵ binh +20% máu",
+     "Các nâng cấp ruộng miễn phí (cần có Cối xay)"
+    ],
+    "unique": "Throwing Axeman (bộ binh đánh xa)",
+    "castleTech": "Chivalry: chuồng ngựa huấn luyện nhanh hơn 40%",
+    "imperialTech": "Bearded Axe: Throwing Axeman +1 tầm bắn",
+    "team": "Hiệp sĩ +2 tầm nhìn"
+   },
+   "descriptionEn": "• Foragers work 25% faster\n• Castles cost -25%\n• Cavalry +20% hit points\n• Farm upgrades free (require Mill)\n\nUnique Unit: Throwing Axeman (ranged Infantry)\n\nCastle Age Tech: Chivalry (Stables work 40% faster);\nImperial Age Tech: Bearded Axe (Throwing Axemen +1 range)\n\nTeam Bonus: Knights +2 line of sight"
+  },
+  {
+   "key": "gothic",
+   "name": "Goths",
+   "vi": "Goth",
+   "source": "Goths",
+   "note": null,
+   "ranks": {
+    "town center": {
+     "villager": [
+      3,
+      3,
+      3,
+      3
+     ]
+    },
+    "barracks": {
+     "champion": [
+      4,
+      4,
+      4,
+      4
+     ],
+     "halberdier": [
+      4,
+      4,
+      4
+     ]
+    },
+    "archery range": {
+     "crossbowman": [
+      3,
+      2.5,
+      2
+     ],
+     "elite skirmisher": [
+      3,
+      3,
+      3
+     ],
+     "heavy cavalry archer": [
+      2,
+      1.5
+     ],
+     "hand cannoneer": [
+      3
+     ]
+    },
+    "stable": {
+     "hussar": [
+      3,
+      3,
+      2.5
+     ],
+     "cavalier": [
+      3,
+      2
+     ]
+    },
+    "siege workshop": {
+     "capped ram": [
+      3,
+      2
+     ],
+     "onager": [
+      3,
+      2
+     ],
+     "heavy scorpion": [
+      3,
+      2
+     ],
+     "bombard cannon": [
+      2
+     ]
+    },
+    "monastery": {
+     "monk": [
+      2,
+      1.5
+     ]
+    },
+    "castle": {
+     "elite huskarl": [
+      3,
+      4
+     ],
+     "trebuchet": [
+      2.5
+     ]
+    },
+    "university": {
+     "watch tower": [
+      3,
+      2,
+      1
+     ],
+     "defenses": [
+      3,
+      2,
+      2,
+      1.5
+     ]
+    }
+   },
+   "description": {
+    "bonuses": [
+     "Bộ binh rẻ hơn 35% từ thời Phong kiến",
+     "Bộ binh +1 sát thương lên công trình",
+     "Dân làng +5 sát thương lên lợn rừng; thợ săn mang thêm 15 thịt",
+     "+10 dân số ở thời Đế quốc"
+    ],
+    "unique": "Huskarl (bộ binh khắc cung thủ)",
+    "castleTech": "Anarchy: huấn luyện Huskarl ở Nhà lính",
+    "imperialTech": "Perfusion: Nhà lính huấn luyện nhanh gấp đôi",
+    "team": "Nhà lính huấn luyện nhanh hơn 20%"
+   },
+   "descriptionEn": "• Infantry cost -35% starting in Feudal Age\n• Infantry +1 Attack vs. Buildings\n• Villagers +5 Attack vs. wild boar; hunters carry +15 meat\n• +10 population in Imperial Age\n\nUnique Unit: Huskarl (anti-Archer Infantry)\n\nCastle Age Tech: Anarchy (create Huskarls at Barracks);\nImperial Age Tech: Perfusion (Barracks work 2x faster)\n\nTeam Bonus: Barracks work 20% faster"
+  },
+  {
+   "key": "teutonic",
+   "name": "Teutons",
+   "vi": "Teuton",
+   "source": "Teutons",
+   "note": null,
+   "ranks": {
+    "town center": {
+     "villager": [
+      3,
+      3.5,
+      3.5,
+      3.5
+     ]
+    },
+    "barracks": {
+     "champion": [
+      3,
+      3,
+      3.5,
+      3.5
+     ],
+     "halberdier": [
+      3,
+      3.5,
+      3.5
+     ]
+    },
+    "archery range": {
+     "crossbowman": [
+      3,
+      2.5,
+      1
+     ],
+     "elite skirmisher": [
+      3,
+      3,
+      2.5
+     ],
+     "cavalry archer": [
+      1,
+      1
+     ],
+     "hand cannoneer": [
+      3
+     ]
+    },
+    "stable": {
+     "scout cavalry": [
+      3,
+      2.5,
+      2
+     ],
+     "paladin": [
+      3,
+      3.5
+     ]
+    },
+    "siege workshop": {
+     "capped ram": [
+      3,
+      3
+     ],
+     "siege onager": [
+      3,
+      4
+     ],
+     "heavy scorpion": [
+      3,
+      4
+     ],
+     "bombard cannon": [
+      4
+     ]
+    },
+    "monastery": {
+     "monk": [
+      3.5,
+      3.5
+     ]
+    },
+    "castle": {
+     "elite teutonic knight": [
+      2,
+      3
+     ],
+     "trebuchet": [
+      3.5
+     ]
+    },
+    "university": {
+     "keep": [
+      3.5,
+      3.5,
+      3
+     ],
+     "defenses": [
+      3,
+      3,
+      3,
+      3
+     ]
+    }
+   },
+   "description": {
+    "bonuses": [
+     "Tu sĩ hồi máu với tầm gấp đôi",
+     "Tháp chứa thêm 5 lính, nhà chính thêm 10; số mũi tên tối đa +4 (nhà chính +5)",
+     "Murder Holes miễn phí",
+     "Ruộng rẻ hơn 33%"
+    ],
+    "unique": "Teutonic Knight (bộ binh giáp cận chiến dày)",
+    "castleTech": "Ironclad: vũ khí công thành +4 giáp cận chiến",
+    "imperialTech": "Crenellations: lâu đài +3 tầm bắn; bộ binh đóng trong lâu đài cũng bắn tên",
+    "team": "Lính khó bị cải đạo hơn: thời gian cải đạo tối thiểu/tối đa +1/+2 giây, tỉ lệ cải đạo giảm một nửa"
+   },
+   "descriptionEn": "• Monks 2x healing range\n• Towers garrison +5, TCs +10 units, max. number of arrows +4 (TCs +5)\n• Murder Holes free\n• Farms cost -33%\n\nUnique Unit: Teutonic Knight (Infantry with heavy Melee Armor)\nCastle Age Tech: Ironclad (Siege Weapons +4 Melee Armor);\nImperial Age Tech: Crenellations (+3 range Castles; garrisoned Infantry fire arrows)\n\nTeam Bonus: Units resist conversion: min./max. conversion time +1s/+2s, conversion chance halved"
+  },
+  {
+   "key": "japanese",
+   "name": "Japanese",
+   "vi": "Nhật Bản",
+   "source": "Japanese",
+   "note": null,
+   "ranks": {
+    "town center": {
+     "villager": [
+      3,
+      3,
+      3,
+      3
+     ]
+    },
+    "barracks": {
+     "champion": [
+      3,
+      3.5,
+      3.5,
+      4
+     ],
+     "halberdier": [
+      4,
+      4,
+      4
+     ]
+    },
+    "archery range": {
+     "arbalester": [
+      3,
+      3,
+      3
+     ],
+     "elite skirmisher": [
+      3,
+      3,
+      3
+     ],
+     "heavy cavalry archer": [
+      3,
+      3
+     ],
+     "hand cannoneer": [
+      3
+     ]
+    },
+    "stable": {
+     "light cavalry": [
+      3,
+      3,
+      2
+     ],
+     "cavalier": [
+      3,
+      2
+     ]
+    },
+    "siege workshop": {
+     "capped ram": [
+      3,
+      2.5
+     ],
+     "onager": [
+      3,
+      3
+     ],
+     "heavy scorpion": [
+      3,
+      3
+     ]
+    },
+    "monastery": {
+     "monk": [
+      3,
+      3
+     ]
+    },
+    "castle": {
+     "elite samurai": [
+      2,
+      3
+     ],
+     "trebuchet": [
+      4
+     ]
+    },
+    "university": {
+     "keep": [
+      3,
+      3.5,
+      3.5
+     ],
+     "defenses": [
+      3,
+      3,
+      3,
+      2.5
+     ]
+    }
+   },
+   "description": {
+    "bonuses": [
+     "Thuyền đánh cá gấp đôi máu, +2 giáp tên, làm việc nhanh hơn 5/10/15/20% ở thời Bóng tối/Phong kiến/Lâu đài/Đế quốc",
+     "Cối xay, trại gỗ, trại mỏ rẻ hơn 50%",
+     "Bộ binh đánh nhanh hơn 33% từ thời Phong kiến"
+    ],
+    "unique": "Samurai (bộ binh khắc lính đặc biệt)",
+    "castleTech": "Yasama: tháp bắn thêm 2 mũi tên",
+    "imperialTech": "Kataparuto: Trebuchet bắn nhanh hơn 33% và thu/dựng nhanh gấp 4",
+    "team": "Thuyền Galley +50% tầm nhìn"
+   },
+   "descriptionEn": "• Fishing Ships 2x hit points; +2 Pierce Armor; work rate +5/10/15/20% in Dark/Feudal/Castle/Imperial Age\n• Mill, Lumber/Mining Camps cost -50%\n• Infantry attack 33% faster starting in Feudal Age\n\nUnique Unit: Samurai (Infantry with bonus against Unique Units)\n\nCastle Age Tech: Yasama (Towers fire 2 extra arrows);\nImperial Age Tech: Kataparuto (Trebuchets fire 33%/pack 4x faster)\n\nTeam Bonus: Galleys +50% line of sight"
+  },
+  {
+   "key": "chinese",
+   "name": "Chinese",
+   "vi": "Trung Quốc",
+   "source": "Chinese",
+   "note": null,
+   "ranks": {
+    "town center": {
+     "villager": [
+      3.5,
+      3,
+      3,
+      3
+     ]
+    },
+    "barracks": {
+     "champion": [
+      3,
+      3,
+      2.5,
+      2.5
+     ],
+     "halberdier": [
+      3,
+      3,
+      3
+     ]
+    },
+    "archery range": {
+     "arbalester": [
+      3,
+      3,
+      3
+     ],
+     "elite skirmisher": [
+      3,
+      3,
+      3
+     ],
+     "heavy cavalry archer": [
+      3,
+      2.5
+     ]
+    },
+    "stable": {
+     "light cavalry": [
+      3,
+      3,
+      2.5
+     ],
+     "cavalier": [
+      3,
+      3
+     ],
+     "heavy camel rider": [
+      3,
+      3
+     ]
+    },
+    "siege workshop": {
+     "siege ram": [
+      3,
+      3
+     ],
+     "onager": [
+      3,
+      2
+     ],
+     "heavy scorpion": [
+      3,
+      3.5
+     ]
+    },
+    "monastery": {
+     "monk": [
+      2,
+      2.5
+     ]
+    },
+    "castle": {
+     "elite chu ko nu": [
+      3,
+      4
+     ],
+     "trebuchet": [
+      2.5
+     ]
+    },
+    "university": {
+     "keep": [
+      3,
+      3.5,
+      3.5
+     ],
+     "defenses": [
+      3,
+      3,
+      3.5,
+      3
+     ]
+    }
+   },
+   "description": {
+    "bonuses": [
+     "Bắt đầu với thêm 3 dân làng nhưng ít hơn 50 gỗ và 200 thức ăn",
+     "Công nghệ rẻ hơn 10/15/20% ở thời Phong kiến/Lâu đài/Đế quốc",
+     "Nhà chính cung cấp 10 dân số",
+     "Nhà chính +5 tầm nhìn",
+     "Thuyền phá hủy (Demolition Ship) +50% máu"
+    ],
+    "unique": "Chu Ko Nu (cung thủ bắn liên thanh)",
+    "castleTech": "Great Wall: tường và tháp +30% máu",
+    "imperialTech": "Rocketry: Chu Ko Nu +2, Scorpion +4 sát thương xuyên giáp",
+    "team": "Ruộng cho thêm 45 thức ăn"
+   },
+   "descriptionEn": "• Start with +3 Villagers but -50 wood, -200 food\n• Technologies cost -10/15/20% in Feudal/Castle/Imperial Age\n• Town Centers support 10 population\n• Town Centers +5 Line of sight\n• Demolition Ships +50% hit points\n\nUnique Unit: Chu Ko Nu (fast-firing Archer)\n\nCastle Age Tech: Great Wall (Walls and Towers +30% HP);\nImperial Age Tech: Rocketry (Chu Ko Nus +2P, Scorpions +4P Attack)\n\nTeam Bonus: Farms +45 food"
+  },
+  {
+   "key": "byzantine",
+   "name": "Byzantines",
+   "vi": "Byzantine",
+   "source": "Byzantines",
+   "note": null,
+   "ranks": {
+    "town center": {
+     "villager": [
+      3,
+      3,
+      3,
+      3
+     ]
+    },
+    "barracks": {
+     "champion": [
+      3,
+      3,
+      3,
+      2.5
+     ],
+     "halberdier": [
+      4,
+      4,
+      3.5
+     ]
+    },
+    "archery range": {
+     "arbalester": [
+      3,
+      3,
+      3
+     ],
+     "elite skirmisher": [
+      4,
+      4,
+      4
+     ],
+     "heavy cavalry archer": [
+      2,
+      1.5
+     ],
+     "hand cannoneer": [
+      3
+     ]
+    },
+    "stable": {
+     "hussar": [
+      2,
+      2,
+      2
+     ],
+     "paladin": [
+      2.5,
+      2
+     ],
+     "heavy camel rider": [
+      3.5,
+      3
+     ]
+    },
+    "siege workshop": {
+     "siege ram": [
+      3,
+      3
+     ],
+     "onager": [
+      3,
+      2
+     ],
+     "scorpion": [
+      3,
+      1
+     ],
+     "bombard cannon": [
+      2
+     ]
+    },
+    "monastery": {
+     "monk": [
+      3,
+      3
+     ]
+    },
+    "castle": {
+     "elite cataphract": [
+      2,
+      3
+     ],
+     "trebuchet": [
+      2.5
+     ]
+    },
+    "university": {
+     "keep": [
+      3.5,
+      3.5,
+      3.5
+     ],
+     "defenses": [
+      3.5,
+      3.5,
+      3.5,
+      3.5
+     ]
+    }
+   },
+   "description": {
+    "bonuses": [
+     "Công trình +10/20/30/40% máu ở thời Bóng tối/Phong kiến/Lâu đài/Đế quốc",
+     "Lạc đà, lính phóng lao và dòng lính giáo rẻ hơn 25%",
+     "Thuyền lửa (Fire Ship) đánh nhanh hơn 20%",
+     "Town Watch miễn phí",
+     "Lên thời Đế quốc rẻ hơn 33%"
+    ],
+    "unique": "Cataphract (kỵ binh khắc bộ binh)",
+    "castleTech": "Greek Fire: thuyền lửa +1 tầm",
+    "imperialTech": "Logistica: Cataphract gây 5 sát thương lan (bán kính 0,5) và +6 sát thương lên bộ binh",
+    "team": "Tu sĩ hồi máu nhanh hơn 50%"
+   },
+   "descriptionEn": "• Buildings +10/20/30/40% HP in Dark/Feudal/Castle/Imperial Age\n• Camels, Skirmishers, Spear-line cost -25%\n• Fire Ships attack 20% faster\n• Town Watch is free\n• Advance to Imperial Age costs -33%\n\nUnique Unit: Cataphract (anti-Infantry Cavalry)\nCastle Age Tech: Greek Fire (Fire Ships +1 range);\nImperial Age Tech: Logistica (Cataphracts cause 5 blast dmg (0.5 radius) and get +6 extra Attack vs. Infantry)\n\nTeam Bonus: Monks +50% heal speed"
+  },
+  {
+   "key": "persian",
+   "name": "Persians",
+   "vi": "Ba Tư",
+   "source": "Persians",
+   "note": null,
+   "ranks": {
+    "town center": {
+     "villager": [
+      3,
+      3.5,
+      3.5,
+      3.5
+     ]
+    },
+    "barracks": {
+     "long swordsman": [
+      3,
+      3,
+      3,
+      1
+     ],
+     "halberdier": [
+      3,
+      3,
+      3
+     ]
+    },
+    "archery range": {
+     "crossbowman": [
+      3,
+      3,
+      3.5
+     ],
+     "elite skirmisher": [
+      3,
+      3,
+      3
+     ],
+     "heavy cavalry archer": [
+      3,
+      2
+     ],
+     "hand cannoneer": [
+      3
+     ]
+    },
+    "stable": {
+     "hussar": [
+      3,
+      3,
+      3
+     ],
+     "paladin": [
+      3.5,
+      3.5
+     ],
+     "heavy camel rider": [
+      3,
+      3
+     ]
+    },
+    "siege workshop": {
+     "siege ram": [
+      3,
+      3
+     ],
+     "onager": [
+      3,
+      2
+     ],
+     "heavy scorpion": [
+      3,
+      2.5
+     ],
+     "bombard cannon": [
+      2
+     ]
+    },
+    "monastery": {
+     "monk": [
+      1,
+      1.5
+     ]
+    },
+    "castle": {
+     "elite war elephant": [
+      1,
+      2
+     ],
+     "trebuchet": [
+      2.5
+     ]
+    },
+    "university": {
+     "guard tower": [
+      3,
+      3,
+      1
+     ],
+     "defenses": [
+      3,
+      3,
+      3,
+      3
+     ]
+    }
+   },
+   "description": {
+    "bonuses": [
+     "Bắt đầu với thêm 50 gỗ và 50 thức ăn",
+     "Nhà chính và bến cảng gấp đôi máu; làm việc nhanh hơn 10/15/20% ở thời Phong kiến/Lâu đài/Đế quốc"
+    ],
+    "unique": "War Elephant (kỵ binh voi chậm, rất trâu)",
+    "castleTech": "Boiling Oil: lâu đài +9 sát thương lên xe húc (chỉ mũi tên đầu tiên)",
+    "imperialTech": "Mahouts: War Elephant di chuyển nhanh hơn 30%",
+    "team": "Hiệp sĩ +2 sát thương lên cung thủ"
+   },
+   "descriptionEn": "• Start with +50 wood, food\n• Town Center, Dock 2x hit points;\nwork rate +10/15/20% in Feudal/Castle/Imperial Age\n\nUnique Unit: War Elephant (slow, heavy Cavalry)\n\nCastle Age Tech: Boiling Oil (Castles +9 Attack vs. Rams, Only affects the first arrow);\nImperial Age Tech: Mahouts (War Elephants move 30% faster)\n\nTeam Bonus: Knights +2 Attack vs. Archers"
+  },
+  {
+   "key": "saracen",
+   "name": "Saracens",
+   "vi": "Saracen",
+   "source": "Saracens",
+   "note": null,
+   "ranks": {
+    "town center": {
+     "villager": [
+      3,
+      3,
+      3,
+      3
+     ]
+    },
+    "barracks": {
+     "champion": [
+      3,
+      3,
+      3,
+      3
+     ],
+     "pikeman": [
+      3,
+      3,
+      2
+     ]
+    },
+    "archery range": {
+     "arbalester": [
+      3.5,
+      3.5,
+      3.5
+     ],
+     "elite skirmisher": [
+      3,
+      3,
+      3
+     ],
+     "heavy cavalry archer": [
+      3,
+      3
+     ],
+     "hand cannoneer": [
+      3
+     ]
+    },
+    "stable": {
+     "hussar": [
+      3,
+      3,
+      3
+     ],
+     "knight": [
+      3,
+      1.5
+     ],
+     "heavy camel rider": [
+      3.5,
+      3.5
+     ]
+    },
+    "siege workshop": {
+     "siege ram": [
+      3,
+      3
+     ],
+     "siege onager": [
+      3,
+      3
+     ],
+     "scorpion": [
+      3,
+      2
+     ],
+     "bombard cannon": [
+      3
+     ]
+    },
+    "monastery": {
+     "monk": [
+      3.5,
+      3.5
+     ]
+    },
+    "castle": {
+     "elite mameluke": [
+      3,
+      4
+     ],
+     "trebuchet": [
+      3
+     ]
+    },
+    "university": {
+     "keep": [
+      3,
+      3,
+      3
+     ],
+     "defenses": [
+      3,
+      3,
+      3,
+      2.5
+     ]
+    }
+   },
+   "description": {
+    "bonuses": [
+     "Phí giao dịch ở chợ chỉ 5%",
+     "Chợ rẻ hơn 75 gỗ",
+     "Thuyền vận tải gấp đôi máu, chở thêm 5",
+     "Thuyền Galley bắn nhanh hơn 25%",
+     "Cung kỵ +4 sát thương lên công trình"
+    ],
+    "unique": "Mameluke (lạc đà đánh tầm ngắn, khắc kỵ binh)",
+    "castleTech": "Madrasah: tu sĩ bị giết hoàn lại 33% giá",
+    "imperialTech": "Zealotry: lạc đà và Mameluke +30 máu",
+    "team": "Cung thủ bộ +2 sát thương lên công trình"
+   },
+   "descriptionEn": "• Market trade cost only 5%\n• Market costs -75 wood\n• Transport Ships 2x hit points,\n+5 carry capacity\n• Galleys fire 25% faster\n• Cavalry Archers +4 Attack vs. Buildings\n\nUnique Unit: Mameluke (short-range anti-Cavalry camel)\nCastle Age Tech: Madrasah (Killed Monks return 33% of their cost);\nImperial Age Tech: Zealotry (Camels, Mamelukes +30 hit points)\n\nTeam Bonus: Foot Archers +2 Attack vs. Buildings"
+  },
+  {
+   "key": "turkish",
+   "name": "Turks",
+   "vi": "Thổ Nhĩ Kỳ",
+   "source": "Turks",
+   "note": null,
+   "ranks": {
+    "town center": {
+     "villager": [
+      3,
+      3,
+      3,
+      3
+     ]
+    },
+    "barracks": {
+     "champion": [
+      3,
+      3,
+      3,
+      3
+     ],
+     "spearman": [
+      3,
+      1,
+      1
+     ]
+    },
+    "archery range": {
+     "crossbowman": [
+      3,
+      3,
+      2
+     ],
+     "skirmisher": [
+      3,
+      1,
+      1
+     ],
+     "heavy cavalry archer": [
+      3,
+      4
+     ],
+     "hand cannoneer": [
+      4
+     ]
+    },
+    "stable": {
+     "hussar": [
+      3.5,
+      3.5,
+      3.5
+     ],
+     "cavalier": [
+      3,
+      3
+     ],
+     "heavy camel rider": [
+      3,
+      3
+     ]
+    },
+    "siege workshop": {
+     "siege ram": [
+      3,
+      3
+     ],
+     "mangonel": [
+      3,
+      1
+     ],
+     "heavy scorpion": [
+      3,
+      2.5
+     ],
+     "bombard cannon": [
+      4
+     ]
+    },
+    "monastery": {
+     "monk": [
+      3,
+      2
+     ]
+    },
+    "castle": {
+     "elite janissary": [
+      3.5,
+      3.5
+     ],
+     "trebuchet": [
+      2.5
+     ]
+    },
+    "university": {
+     "keep": [
+      3,
+      3,
+      3
+     ],
+     "defenses": [
+      3,
+      3,
+      3,
+      3
+     ]
+    }
+   },
+   "description": {
+    "bonuses": [
+     "Đơn vị thuốc súng +25% máu",
+     "Nghiên cứu công nghệ thuốc súng rẻ hơn 50%; Chemistry miễn phí",
+     "Dân làng đào vàng nhanh hơn 20%",
+     "Nâng cấp Light Cavalry và Hussar miễn phí"
+    ],
+    "unique": "Janissary (lính súng tay)",
+    "castleTech": "Sipahi: cung kỵ và Genitour +20 máu",
+    "imperialTech": "Artillery: tháp đại bác, đại bác và thuyền đại bác +2 tầm bắn",
+    "team": "Đơn vị thuốc súng huấn luyện nhanh hơn 25%"
+   },
+   "descriptionEn": "• Gunpowder units +25% hit points\n• Researching Gunpowder technologies costs -50%; Chemistry free\n• Gold miners work 20% faster\n• Light Cavalry and Hussar upgrades free\n\nUnique Unit: Janissary (hand cannoneer)\n\nCastle Age Tech: Sipahi (Cavalry Archers, Genitours +20 HP);\nImperial Age Tech: Artillery (+2 range Bombard Towers, Bombard Cannons, Cannon Galleons)\n\nTeam Bonus: Gunpowder units are created 25% faster"
+  },
+  {
+   "key": "viking",
+   "name": "Vikings",
+   "vi": "Viking",
+   "source": "Vikings",
+   "note": null,
+   "ranks": {
+    "town center": {
+     "villager": [
+      3,
+      4,
+      4,
+      3
+     ]
+    },
+    "barracks": {
+     "champion": [
+      3,
+      3.5,
+      3.5,
+      4
+     ],
+     "pikeman": [
+      3.5,
+      3.5,
+      3
+     ]
+    },
+    "archery range": {
+     "arbalester": [
+      3,
+      3,
+      3.5
+     ],
+     "elite skirmisher": [
+      3,
+      3,
+      3
+     ],
+     "cavalry archer": [
+      2,
+      1
+     ]
+    },
+    "stable": {
+     "light cavalry": [
+      2,
+      1.5,
+      1
+     ],
+     "cavalier": [
+      2,
+      1
+     ]
+    },
+    "siege workshop": {
+     "siege ram": [
+      3,
+      3
+     ],
+     "onager": [
+      3,
+      3
+     ],
+     "heavy scorpion": [
+      3,
+      3
+     ]
+    },
+    "monastery": {
+     "monk": [
+      1.5,
+      1.5
+     ]
+    },
+    "castle": {
+     "elite berserk": [
+      3,
+      3.5
+     ],
+     "trebuchet": [
+      3
+     ]
+    },
+    "university": {
+     "guard tower": [
+      3,
+      3,
+      2
+     ],
+     "defenses": [
+      3,
+      3,
+      3,
+      3
+     ]
+    }
+   },
+   "description": {
+    "bonuses": [
+     "Chiến thuyền rẻ hơn 15/15/20% ở thời Phong kiến/Lâu đài/Đế quốc",
+     "Bộ binh +10/15/20% máu ở thời Phong kiến/Lâu đài/Đế quốc",
+     "Wheelbarrow và Hand Cart miễn phí"
+    ],
+    "unique": "Berserk (bộ binh tự hồi máu); Longboat (chiến thuyền)",
+    "castleTech": "Chieftains: bộ binh +5 sát thương lên kỵ binh, +4 lên lạc đà",
+    "imperialTech": "Berserkergang: Berserk hồi máu nhanh gấp đôi (1 máu/1,5 giây thay vì 1 máu/3 giây)",
+    "team": "Bến cảng rẻ hơn 15%"
+   },
+   "descriptionEn": "• Warships cost -15/15/20% in Feudal/Castle/Imperial Age\n• Infantry +10/15/20% HP in Feudal/Castle/Imperial Age\n• Wheelbarrow, Hand Cart free\n\nUnique Units: Berserk (regenerating Infantry); Longboat (warship)\n\nCastle Age Tech: Chieftains (Infantry +5 atk vs. Cavalry, +4 vs. Camels);\nImperial Age Tech: Berserkergang (Berserks regenerate 2x faster, 1HP/1.5s instead of 1HP/3s)\n\nTeam Bonus: Docks cost -15%"
+  },
+  {
+   "key": "mongol",
+   "name": "Mongols",
+   "vi": "Mông Cổ",
+   "source": "Mongols",
+   "note": "Steppe Lancer chỉ có ở bản DE nên đã bỏ.",
+   "ranks": {
+    "town center": {
+     "villager": [
+      3.5,
+      3,
+      3,
+      3
+     ]
+    },
+    "barracks": {
+     "champion": [
+      3,
+      3,
+      2.5,
+      2.5
+     ],
+     "pikeman": [
+      3,
+      3,
+      2
+     ]
+    },
+    "archery range": {
+     "arbalester": [
+      3,
+      3,
+      2.5
+     ],
+     "elite skirmisher": [
+      3,
+      3,
+      2
+     ],
+     "heavy cavalry archer": [
+      3.5,
+      3.5
+     ]
+    },
+    "stable": {
+     "hussar": [
+      3,
+      3.5,
+      3.5
+     ],
+     "cavalier": [
+      3,
+      2
+     ],
+     "heavy camel rider": [
+      3,
+      2.5
+     ]
+    },
+    "siege workshop": {
+     "siege ram": [
+      3,
+      4
+     ],
+     "siege onager": [
+      3,
+      3.5
+     ],
+     "heavy scorpion": [
+      3,
+      3.5
+     ]
+    },
+    "monastery": {
+     "monk": [
+      1.5,
+      1
+     ]
+    },
+    "castle": {
+     "elite mangudai": [
+      3,
+      4
+     ],
+     "trebuchet": [
+      3
+     ]
+    },
+    "university": {
+     "guard tower": [
+      3,
+      3,
+      1.5
+     ],
+     "defenses": [
+      3,
+      3,
+      3,
+      2.5
+     ]
+    }
+   },
+   "description": {
+    "bonuses": [
+     "Cung kỵ, Mangudai và Genitour bắn nhanh hơn 25%",
+     "Light Cavalry và Hussar +30% máu",
+     "Thợ săn làm việc nhanh hơn 50%"
+    ],
+    "unique": "Mangudai (cung kỵ bắn nhanh)",
+    "castleTech": "Nomads: nhà bị phá không làm mất chỗ dân số",
+    "imperialTech": "Drill: lính của xưởng công thành di chuyển nhanh hơn 50%",
+    "team": "Dòng kỵ trinh sát +2 tầm nhìn"
+   },
+   "descriptionEn": "• Cavalry Archers, Mangudai, Genitour fire 25% faster\n• Light Cavalry, Hussar +30% hit points\n• Hunters work 50% faster\n\nUnique Unit: Mangudai (fast-firing Cavalry Archer)\n\nCastle Age Tech: Nomads (Destroyed houses don't lose population room);\nImperial Age Tech: Drill (Siege Workshop units move 50% faster)\n\nTeam Bonus: Scout-Line +2 line of sight"
+  },
+  {
+   "key": "celtic",
+   "name": "Celts",
+   "vi": "Celt",
+   "source": "Celts",
+   "note": null,
+   "ranks": {
+    "town center": {
+     "villager": [
+      3.5,
+      3.5,
+      3.5,
+      3
+     ]
+    },
+    "barracks": {
+     "champion": [
+      3,
+      3.5,
+      3.5,
+      3.5
+     ],
+     "halberdier": [
+      3.5,
+      3.5,
+      3.5
+     ]
+    },
+    "archery range": {
+     "crossbowman": [
+      3,
+      2.5,
+      1
+     ],
+     "elite skirmisher": [
+      3,
+      3,
+      1.5
+     ],
+     "heavy cavalry archer": [
+      1.5,
+      1
+     ]
+    },
+    "stable": {
+     "hussar": [
+      2,
+      2,
+      2
+     ],
+     "paladin": [
+      2,
+      1.5
+     ]
+    },
+    "siege workshop": {
+     "siege ram": [
+      4,
+      4
+     ],
+     "siege onager": [
+      4,
+      4
+     ],
+     "heavy scorpion": [
+      4,
+      4
+     ]
+    },
+    "monastery": {
+     "monk": [
+      2,
+      1
+     ]
+    },
+    "castle": {
+     "elite woad raider": [
+      3,
+      4
+     ],
+     "trebuchet": [
+      3.5
+     ]
+    },
+    "university": {
+     "watch tower": [
+      3,
+      3,
+      2
+     ],
+     "defenses": [
+      3,
+      3,
+      3,
+      2.5
+     ]
+    }
+   },
+   "description": {
+    "bonuses": [
+     "Bộ binh di chuyển nhanh hơn 15%",
+     "Tiều phu làm việc nhanh hơn 15%",
+     "Vũ khí công thành bắn nhanh hơn 25%",
+     "Chiếm được cừu ngay cả khi có lính địch đứng cạnh"
+    ],
+    "unique": "Woad Raider (bộ binh chạy nhanh)",
+    "castleTech": "Stronghold: lâu đài và tháp bắn nhanh hơn 25%",
+    "imperialTech": "Furor Celtica: lính của xưởng công thành +40% máu",
+    "team": "Xưởng công thành huấn luyện nhanh hơn 20%"
+   },
+   "descriptionEn": "• Infantry move 15% faster\n• Lumberjacks work 15% faster\n• Siege Weapons fire 25% faster\n• Can convert sheep even if enemy units are next to them.\n\nUnique Unit: Woad Raider (fast-moving Infantry)\n\nCastle Age Tech: Stronghold (Castles, Towers fire 25% faster);\nImperial Age Tech: Furor Celtica (Siege Workshop units have +40% hit points)\n\nTeam Bonus: Siege Workshops work 20% faster"
+  },
+  {
+   "key": "spanish",
+   "name": "Spanish",
+   "vi": "Tây Ban Nha",
+   "source": "Spanish",
+   "note": null,
+   "ranks": {
+    "town center": {
+     "villager": [
+      3,
+      3,
+      3,
+      4
+     ]
+    },
+    "barracks": {
+     "champion": [
+      3,
+      3,
+      3,
+      3
+     ],
+     "halberdier": [
+      3,
+      3,
+      3
+     ]
+    },
+    "archery range": {
+     "archer": [
+      3,
+      1.5,
+      1
+     ],
+     "elite skirmisher": [
+      3,
+      3,
+      3
+     ],
+     "heavy cavalry archer": [
+      3,
+      2.5
+     ],
+     "hand cannoneer": [
+      3.5
+     ]
+    },
+    "stable": {
+     "hussar": [
+      3,
+      3,
+      3
+     ],
+     "paladin": [
+      3,
+      3,
+      3
+     ]
+    },
+    "siege workshop": {
+     "siege ram": [
+      3,
+      3
+     ],
+     "onager": [
+      3,
+      2
+     ],
+     "scorpion": [
+      3,
+      1
+     ],
+     "bombard cannon": [
+      2
+     ]
+    },
+    "monastery": {
+     "monk": [
+      4,
+      4
+     ],
+     "missionary": [
+      4,
+      4
+     ]
+    },
+    "castle": {
+     "elite conquistador": [
+      4,
+      3
+     ],
+     "trebuchet": [
+      2.5
+     ]
+    },
+    "university": {
+     "keep": [
+      3.5,
+      3.5,
+      3.5
+     ],
+     "defenses": [
+      3.5,
+      3.5,
+      3.5,
+      3.5
+     ]
+    }
+   },
+   "description": {
+    "bonuses": [
+     "Dân làng xây dựng nhanh hơn 30%",
+     "Nâng cấp ở lò rèn không tốn vàng",
+     "Đại bác và lính súng tay bắn nhanh hơn 18%",
+     "Thuyền đại bác bắn có Ballistics, đạn bay nhanh hơn"
+    ],
+    "unique": "Conquistador (lính súng tay cưỡi ngựa); Missionary (tu sĩ cưỡi ngựa)",
+    "castleTech": "Inquisition: cải đạo nhanh hơn - thời gian tối thiểu/tối đa -1 giây với lính, -7 giây với công trình",
+    "imperialTech": "Supremacy: dân làng +6 sát thương, +2/+2 giáp, +40 máu",
+    "team": "Đơn vị buôn bán làm ra thêm 25% vàng"
+   },
+   "descriptionEn": "• Builders work 30% faster\n• Blacksmith upgrades don't cost gold\n• Bombard Cannons and Hand Cannoneers fire 18% faster\n• Cannon Galleons fire with ballistics, faster missiles\n\nUnique Units: Conquistador (mounted hand cannoneer), Missionary (mounted monk)\nCastle Age Tech: Inquisition (Faster conversion: min/max conversion times -1s for units, -7s for Buildings);\nImperial Age Tech: Supremacy (Villagers +6 atk, +2/+2 Armor, +40 HP)\n\nTeam Bonus: Trade units generate +25% gold"
+  },
+  {
+   "key": "aztec",
+   "name": "Aztecs",
+   "vi": "Aztec",
+   "source": "Aztecs",
+   "note": null,
+   "ranks": {
+    "town center": {
+     "villager": [
+      3.5,
+      3.5,
+      3.5,
+      3
+     ]
+    },
+    "barracks": {
+     "champion": [
+      4,
+      3.5,
+      3.5,
+      4
+     ],
+     "pikeman": [
+      3.5,
+      3.5,
+      3
+     ],
+     "elite eagle warrior": [
+      3.5,
+      3.5,
+      3.5
+     ]
+    },
+    "archery range": {
+     "arbalester": [
+      3.5,
+      3,
+      2.5
+     ],
+     "elite skirmisher": [
+      3.5,
+      3.5,
+      3.5
+     ]
+    },
+    "siege workshop": {
+     "siege ram": [
+      3,
+      3
+     ],
+     "siege onager": [
+      3,
+      3
+     ],
+     "scorpion": [
+      3,
+      2
+     ]
+    },
+    "monastery": {
+     "monk": [
+      4,
+      4
+     ]
+    },
+    "castle": {
+     "elite jaguar warrior": [
+      2,
+      3
+     ],
+     "trebuchet": [
+      3.5
+     ]
+    },
+    "university": {
+     "guard tower": [
+      3,
+      3,
+      2
+     ],
+     "defenses": [
+      3,
+      3,
+      2,
+      1.5
+     ]
+    }
+   },
+   "description": {
+    "bonuses": [
+     "Dân làng mang thêm 5 tài nguyên",
+     "Lính quân sự (kể cả vũ khí công thành và chiến thuyền, trừ tu sĩ) huấn luyện nhanh hơn 18%",
+     "Tu sĩ +5 máu cho mỗi công nghệ ở tu viện",
+     "Bắt đầu với thêm 50 vàng"
+    ],
+    "unique": "Jaguar Warrior (bộ binh khắc bộ binh)",
+    "castleTech": "Atlatl: lính phóng lao và Genitour +1 sát thương, +1 tầm bắn",
+    "imperialTech": "Garland Wars: bộ binh +4 sát thương",
+    "team": "Thánh tích làm ra thêm 33% vàng"
+   },
+   "descriptionEn": "• Villagers carry +5\n• Military units - including Siege Weapons, Warships but not Monks - are created 18% faster\n• Monks +5 hit points for each Monastery technology\n• Start with +50 gold\n\nUnique Unit: Jaguar Warrior (anti-Infantry Infantry)\n\nCastle Age Tech: Atlatl (Skirmishers, Genitour +1 Attack, +1 Range);\nImperial Age Tech: Garland Wars (Infantry +4 Attack)\n\nTeam Bonus: Relics generate +33% gold"
+  },
+  {
+   "key": "mayan",
+   "name": "Mayans",
+   "vi": "Maya",
+   "source": "Mayans",
+   "note": null,
+   "ranks": {
+    "town center": {
+     "villager": [
+      3,
+      3,
+      3,
+      3
+     ]
+    },
+    "barracks": {
+     "two-handed swordsman": [
+      3,
+      3,
+      2.5,
+      1.5
+     ],
+     "halberdier": [
+      3,
+      3,
+      3
+     ],
+     "elite eagle warrior": [
+      3,
+      3,
+      4
+     ]
+    },
+    "archery range": {
+     "arbalester": [
+      3.5,
+      3.5,
+      3.5
+     ],
+     "elite skirmisher": [
+      3,
+      3,
+      3.5
+     ]
+    },
+    "siege workshop": {
+     "siege ram": [
+      3,
+      3
+     ],
+     "onager": [
+      3,
+      2
+     ],
+     "heavy scorpion": [
+      3,
+      2.5
+     ]
+    },
+    "monastery": {
+     "monk": [
+      2.5,
+      2
+     ]
+    },
+    "castle": {
+     "elite plumed archer": [
+      3.5,
+      4
+     ],
+     "trebuchet": [
+      2.5
+     ]
+    },
+    "university": {
+     "keep": [
+      3,
+      3,
+      2.5
+     ],
+     "defenses": [
+      3.5,
+      3.5,
+      3.5,
+      3.5
+     ]
+    }
+   },
+   "description": {
+    "bonuses": [
+     "Bắt đầu với thêm 1 dân làng nhưng ít hơn 50 thức ăn",
+     "Tài nguyên dùng lâu hơn 15%, nhưng nông dân làm chậm hơn khoảng 3%",
+     "Cung thủ rẻ hơn 10/20/30% ở thời Phong kiến/Lâu đài/Đế quốc"
+    ],
+    "unique": "Plumed Archer (cung thủ chạy nhanh)",
+    "castleTech": "Obsidian Arrows: dòng cung thủ +6 sát thương lên công trình và công trình đá",
+    "imperialTech": "El Dorado: chiến binh đại bàng +40 máu",
+    "team": "Tường rẻ hơn 50%"
+   },
+   "descriptionEn": "• Start with +1 villager, but -50 food\n• Resources last 15% longer, but farmers work ~3% slower\n• Archers cost -10/20/30% in Feudal/Castle/Imperial Age\n\nUnique Unit: Plumed Archer (fast-moving Archer)\n\nCastle Age Tech: Obsidian Arrows (Archer-line +6 Attack vs. Buildings, +6 vs. Stone Defense);\nImperial Age Tech: El Dorado (Eagle Warriors have +40 hit points)\n\nTeam Bonus: Walls cost -50%"
+  },
+  {
+   "key": "hun",
+   "name": "Huns",
+   "vi": "Hung Nô",
+   "source": "Huns",
+   "note": null,
+   "ranks": {
+    "town center": {
+     "villager": [
+      3,
+      3,
+      3,
+      3
+     ]
+    },
+    "barracks": {
+     "two-handed swordsman": [
+      3,
+      3,
+      2.5,
+      1
+     ],
+     "halberdier": [
+      3,
+      3,
+      2.5
+     ]
+    },
+    "archery range": {
+     "crossbowman": [
+      3,
+      3,
+      1.5
+     ],
+     "elite skirmisher": [
+      3,
+      3,
+      2
+     ],
+     "heavy cavalry archer": [
+      4,
+      4
+     ]
+    },
+    "stable": {
+     "hussar": [
+      3.5,
+      3.5,
+      3.5
+     ],
+     "paladin": [
+      3.5,
+      3.5
+     ]
+    },
+    "siege workshop": {
+     "siege ram": [
+      3,
+      3
+     ],
+     "mangonel": [
+      3,
+      1
+     ],
+     "scorpion": [
+      3,
+      1
+     ]
+    },
+    "monastery": {
+     "monk": [
+      2,
+      1.5
+     ]
+    },
+    "castle": {
+     "elite tarkan": [
+      2,
+      3
+     ],
+     "trebuchet": [
+      3.5
+     ]
+    },
+    "university": {
+     "watch tower": [
+      3,
+      2,
+      1
+     ],
+     "defenses": [
+      2.5,
+      2.5,
+      2.5,
+      1.5
+     ]
+    }
+   },
+   "description": {
+    "bonuses": [
+     "Không cần xây nhà, nhưng bắt đầu ít hơn 100 gỗ",
+     "Cung kỵ và Genitour rẻ hơn 10/20% ở thời Lâu đài/Đế quốc",
+     "Trebuchet chính xác hơn 35% (50% thay vì 15%)"
+    ],
+    "unique": "Tarkan (kỵ binh hạng trung, mạnh khi phá công trình)",
+    "castleTech": "Marauders: huấn luyện Tarkan ở chuồng ngựa",
+    "imperialTech": "Atheism: chiến thắng bằng thánh tích/kỳ quan cần thêm 100 năm; Spies/Treason rẻ hơn 50%",
+    "team": "Chuồng ngựa huấn luyện nhanh hơn 20%"
+   },
+   "descriptionEn": "• Do not need houses, but start with -100 wood\n• Cavalry Archers, Genitours cost -10/20% in Castle/Imperial Age\n• Trebuchets +35% accuracy (50% instead of 15%)\n\nUnique Unit: Tarkan (medium Cavalry with bonus against Buildings)\nCastle Age Tech: Marauders (Create Tarkans at Stables);\nImperial Age Tech: Atheism (+100 years Relic, Wonder victories; Spies/Treason costs -50%)\n\nTeam Bonus: Stables work 20% faster"
+  },
+  {
+   "key": "korean",
+   "name": "Koreans",
+   "vi": "Triều Tiên",
+   "source": "Koreans",
+   "note": null,
+   "ranks": {
+    "town center": {
+     "villager": [
+      3,
+      3,
+      3,
+      3
+     ]
+    },
+    "barracks": {
+     "champion": [
+      3,
+      3,
+      3,
+      2.5
+     ],
+     "halberdier": [
+      3.5,
+      3.5,
+      3
+     ]
+    },
+    "archery range": {
+     "arbalester": [
+      3.5,
+      3.5,
+      3.5
+     ],
+     "elite skirmisher": [
+      3.5,
+      3.5,
+      3.5
+     ],
+     "heavy cavalry archer": [
+      3,
+      2
+     ],
+     "hand cannoneer": [
+      3
+     ]
+    },
+    "stable": {
+     "hussar": [
+      2,
+      2,
+      2
+     ],
+     "cavalier": [
+      2,
+      1.5
+     ]
+    },
+    "siege workshop": {
+     "capped ram": [
+      3,
+      2.5
+     ],
+     "siege onager": [
+      3,
+      4
+     ],
+     "scorpion": [
+      3,
+      2
+     ],
+     "bombard cannon": [
+      3
+     ]
+    },
+    "monastery": {
+     "monk": [
+      1.5,
+      1.5
+     ]
+    },
+    "castle": {
+     "elite war wagon": [
+      2.5,
+      3.5
+     ],
+     "trebuchet": [
+      3
+     ]
+    },
+    "university": {
+     "keep": [
+      3,
+      4,
+      4
+     ],
+     "defenses": [
+      3,
+      3,
+      3,
+      3
+     ]
+    }
+   },
+   "description": {
+    "bonuses": [
+     "Dân làng +3 tầm nhìn",
+     "Dân làng đào đá nhanh hơn 20%",
+     "Tường và lâu đài xây nhanh hơn 33%, tháp nhanh hơn 5%",
+     "Nâng cấp tháp miễn phí (tháp đại bác cần Chemistry)",
+     "Tháp +1/+2 tầm bắn ở thời Lâu đài/Đế quốc"
+    ],
+    "unique": "War Wagon (cung kỵ nhiều máu, khắc cung thủ); Turtle Ship (chiến thuyền bọc giáp dày)",
+    "castleTech": "Panokseon: Turtle Ship di chuyển nhanh hơn 15%",
+    "imperialTech": "Shinkichon: dòng Onager +1 tầm bắn",
+    "team": "Tầm bắn tối thiểu của dòng Onager giảm còn 1"
+   },
+   "descriptionEn": "• Villagers +3 line of sight\n• Stone miners work 20% faster\n• Walls and Castles built 33% faster, Towers built 5% faster\n• Tower upgrades free (Bombard Tower requires Chemistry)\n• Towers +1/+2 range in Castle/Imperial Age\n\nUnique Units: War Wagon (high HP, anti-Archer Cavalry Archer), Turtle Ship (heavily armored warship)\nCastle Age Tech: Panokseon (Turtle Ships move 15% faster);\nImperial Age Tech: Shinkichon (Onager-line +1 range)\nTeam Bonus: Onager-line minimum range reduced to 1"
+  },
+  {
+   "key": "italian",
+   "name": "Italians",
+   "vi": "Ý",
+   "source": "Italians",
+   "note": null,
+   "ranks": {
+    "town center": {
+     "villager": [
+      3,
+      3,
+      3,
+      3
+     ]
+    },
+    "barracks": {
+     "champion": [
+      3,
+      3,
+      3,
+      3
+     ],
+     "pikeman": [
+      3,
+      3,
+      2
+     ],
+     "condottiero": [
+      3
+     ]
+    },
+    "archery range": {
+     "arbalester": [
+      3,
+      3.5,
+      3.5
+     ],
+     "elite skirmisher": [
+      3,
+      3,
+      3
+     ],
+     "cavalry archer": [
+      3,
+      1
+     ],
+     "hand cannoneer": [
+      3.5
+     ]
+    },
+    "stable": {
+     "hussar": [
+      3,
+      3,
+      3
+     ],
+     "cavalier": [
+      3,
+      3
+     ]
+    },
+    "siege workshop": {
+     "capped ram": [
+      3,
+      2
+     ],
+     "onager": [
+      3,
+      2
+     ],
+     "scorpion": [
+      3,
+      1
+     ],
+     "bombard cannon": [
+      3
+     ]
+    },
+    "monastery": {
+     "monk": [
+      3,
+      3
+     ]
+    },
+    "castle": {
+     "elite genoese crossbowman": [
+      3.5,
+      3.5
+     ],
+     "trebuchet": [
+      2.5
+     ]
+    },
+    "university": {
+     "keep": [
+      3,
+      3,
+      3
+     ],
+     "defenses": [
+      3,
+      3,
+      3,
+      3
+     ]
+    }
+   },
+   "description": {
+    "bonuses": [
+     "Lên thời rẻ hơn 15%",
+     "Công nghệ ở bến cảng rẻ hơn 50%",
+     "Thuyền đánh cá rẻ hơn 15%",
+     "Đơn vị thuốc súng rẻ hơn 20%"
+    ],
+    "unique": "Genoese Crossbowman (cung thủ khắc kỵ binh); Condottiero (bộ binh khắc lính thuốc súng)",
+    "castleTech": "Pavise: cung thủ bộ +1/+1 giáp",
+    "imperialTech": "Silk Road: đơn vị buôn bán rẻ hơn 50%",
+    "team": "Có thể huấn luyện Condottiero ở Nhà lính từ thời Đế quốc"
+   },
+   "descriptionEn": "• Advancing to the next Age costs -15%\n• Dock techs cost -50%\n• Fishing Ships cost -15%\n• Gunpowder units cost -20%\n\nUnique Units: Genoese Crossbowman (anti-Cavalry Archer), Condottiero (anti-Gunpowder Infantry)\n\nCastle Age Tech: Pavise (Foot Archers +1/+1 Armor);\nImperial Age Tech: Silk Road (Trade units cost -50%)\n\nTeam Bonus: Condottiero available in Barracks in Imperial Age"
+  },
+  {
+   "key": "indian",
+   "name": "Indians",
+   "vi": "Ấn Độ",
+   "source": "Hindustanis",
+   "note": "Dữ liệu lấy từ phe Hindustanis của bản DE (thay cho Indians). Lính đặc biệt của Ấn Độ trong 1.5 là Elephant Archer - không có điểm trên trang gốc.",
+   "ranks": {
+    "town center": {
+     "villager": [
+      3.5,
+      3.5,
+      4,
+      4
+     ]
+    },
+    "barracks": {
+     "champion": [
+      3,
+      3,
+      3,
+      2.5
+     ],
+     "pikeman": [
+      3,
+      3,
+      2.5
+     ]
+    },
+    "archery range": {
+     "crossbowman": [
+      3,
+      3,
+      2
+     ],
+     "elite skirmisher": [
+      3,
+      3,
+      3
+     ],
+     "heavy cavalry archer": [
+      3,
+      2.5
+     ],
+     "hand cannoneer": [
+      4
+     ]
+    },
+    "stable": {
+     "hussar": [
+      3.5,
+      3,
+      3
+     ],
+     "imperial camel rider": [
+      3.5,
+      4
+     ]
+    },
+    "siege workshop": {
+     "onager": [
+      3,
+      3
+     ],
+     "scorpion": [
+      3,
+      2
+     ],
+     "bombard cannon": [
+      3.5
+     ]
+    },
+    "monastery": {
+     "monk": [
+      3,
+      3
+     ]
+    },
+    "castle": {
+     "trebuchet": [
+      3
+     ]
+    },
+    "university": {
+     "guard tower": [
+      3,
+      3,
+      1.5
+     ],
+     "defenses": [
+      3,
+      3,
+      3,
+      2.5
+     ]
+    }
+   },
+   "description": {
+    "bonuses": [
+     "Dân làng rẻ hơn 10/15/20/25% ở thời Bóng tối/Phong kiến/Lâu đài/Đế quốc",
+     "Ngư dân làm việc nhanh hơn 15% và mang thêm 15",
+     "Lạc đà +0/+1 giáp"
+    ],
+    "unique": "Elephant Archer (cung kỵ voi chậm, nhiều máu); Imperial Camel (nâng cấp lạc đà)",
+    "castleTech": "Sultans: mọi nguồn thu vàng nhanh hơn 10%",
+    "imperialTech": "Shatagni: lính súng tay +1 tầm bắn",
+    "team": "Lạc đà +6, Mameluke/Camel Archer +5 sát thương lên công trình"
+   },
+   "descriptionEn": "• Villagers cost -10/15/20/25% in Dark/Feudal/Castle/Imperial Age\n• Fishermen work 15% faster and carry +15\n• Camels +0/+1 Armor\n\nUnique Units: Elephant Archer (High HP, slow Cavalry Archer), Imperial Camel (Camel upgrade)\n\nCastle Age Tech: Sultans (All gold income +10% faster);\nImperial Age Tech: Shatagni (Hand Cannoneers +1 range)\n\nTeam Bonus: Camels +6, Mamelukes/Camel Archers +5 Attack vs. Buildings"
+  },
+  {
+   "key": "incan",
+   "name": "Incas",
+   "vi": "Inca",
+   "source": "Incas",
+   "note": null,
+   "ranks": {
+    "town center": {
+     "villager": [
+      3,
+      3,
+      3.5,
+      3.5
+     ]
+    },
+    "barracks": {
+     "champion": [
+      3.5,
+      3,
+      3,
+      3
+     ],
+     "halberdier": [
+      3,
+      3,
+      3
+     ],
+     "elite eagle warrior": [
+      3,
+      3,
+      3.5
+     ]
+    },
+    "archery range": {
+     "arbalester": [
+      3,
+      3,
+      3
+     ],
+     "elite skirmisher": [
+      3,
+      3,
+      3.5
+     ],
+     "slinger": [
+      3,
+      3.5
+     ]
+    },
+    "siege workshop": {
+     "siege ram": [
+      3,
+      3
+     ],
+     "onager": [
+      3,
+      3
+     ],
+     "heavy scorpion": [
+      3,
+      3
+     ]
+    },
+    "monastery": {
+     "monk": [
+      2.5,
+      3
+     ]
+    },
+    "castle": {
+     "elite kamayuk": [
+      3,
+      3.5
+     ],
+     "trebuchet": [
+      3
+     ]
+    },
+    "university": {
+     "keep": [
+      3.5,
+      3.5,
+      3.5
+     ],
+     "defenses": [
+      3,
+      3.5,
+      3.5,
+      3
+     ]
+    }
+   },
+   "description": {
+    "bonuses": [
+     "Bắt đầu với một con lạc đà không bướu (llama) miễn phí",
+     "Dân làng được hưởng nâng cấp bộ binh ở lò rèn",
+     "Nhà cung cấp 10 dân số",
+     "Công trình rẻ hơn 15% đá"
+    ],
+    "unique": "Kamayuk (bộ binh khắc kỵ binh); Slinger (lính ném đá khắc bộ binh)",
+    "castleTech": "Andean Sling: lính phóng lao, Slinger và Genitour không còn tầm bắn tối thiểu",
+    "imperialTech": "Couriers: Kamayuk, Slinger và chiến binh đại bàng +1/+2 giáp",
+    "team": "Ruộng xây nhanh gấp đôi"
+   },
+   "descriptionEn": "• Start with a free llama\n• Villagers affected by Infantry Blacksmith upgrades\n• Houses support 10 population\n• Buildings cost -15% stone\n\nUnique Units: Kamayuk (anti-Cavalry Infantry), Slinger (anti-Infantry Archer)\n\nCastle Age Tech: Andean Sling (Skirmishers, Slingers and Genitours no minimum range);\nImperial Age Tech: Couriers (Kamayuks, Slingers, Eagles +1/+2 Armor)\n\nTeam Bonus: Farms built twice as fast"
+  },
+  {
+   "key": "magyar",
+   "name": "Magyars",
+   "vi": "Magyar",
+   "source": "Magyars",
+   "note": null,
+   "ranks": {
+    "town center": {
+     "villager": [
+      3,
+      3,
+      3,
+      3
+     ]
+    },
+    "barracks": {
+     "champion": [
+      3,
+      3,
+      2.5,
+      2
+     ],
+     "halberdier": [
+      3,
+      2.5,
+      2
+     ]
+    },
+    "archery range": {
+     "arbalester": [
+      3,
+      3,
+      3
+     ],
+     "elite skirmisher": [
+      3,
+      3,
+      3
+     ],
+     "heavy cavalry archer": [
+      3,
+      4
+     ]
+    },
+    "stable": {
+     "hussar": [
+      3.5,
+      3.5,
+      3.5
+     ],
+     "paladin": [
+      3,
+      3,
+      3
+     ]
+    },
+    "siege workshop": {
+     "capped ram": [
+      3,
+      2.5
+     ],
+     "onager": [
+      3,
+      3
+     ],
+     "heavy scorpion": [
+      3,
+      3
+     ]
+    },
+    "monastery": {
+     "monk": [
+      2,
+      2
+     ]
+    },
+    "castle": {
+     "magyar huszar": [
+      2,
+      4
+     ],
+     "trebuchet": [
+      3
+     ]
+    },
+    "university": {
+     "guard tower": [
+      3,
+      3,
+      1.5
+     ],
+     "defenses": [
+      3,
+      3,
+      3,
+      2.5
+     ]
+    }
+   },
+   "description": {
+    "bonuses": [
+     "Dân làng giết sói chỉ với 1 đòn",
+     "Forging, Iron Casting, Blast Furnace miễn phí",
+     "Kỵ trinh sát, Light Cavalry và Hussar rẻ hơn 15%"
+    ],
+    "unique": "Magyar Huszar (kỵ binh nhẹ)",
+    "castleTech": "Mercenaries: Magyar Huszar không tốn vàng",
+    "imperialTech": "Recurve Bow: dòng cung kỵ +1 tầm bắn, +1 sát thương",
+    "team": "Cung thủ bộ +2 tầm nhìn"
+   },
+   "descriptionEn": "• Villagers kill wolves with 1 strike\n• Forging, Iron Casting, Blast Furnace free\n• Scout Cavalry, Light Cavalry, Hussar cost -15%\n\nUnique Unit: Magyar Huszar (Light Cavalry)\n\nCastle Age Tech: Mercenaries (Magyar Huszars cost no gold);\nImperial Age Tech: Recurve Bow (Cavalry Archer-line +1 range, +1 Attack)\n\nTeam Bonus: Foot Archers +2 LoS"
+  },
+  {
+   "key": "slavic",
+   "name": "Slavs",
+   "vi": "Slav",
+   "source": "Slavs",
+   "note": null,
+   "ranks": {
+    "town center": {
+     "villager": [
+      3,
+      3.5,
+      3.5,
+      3.5
+     ]
+    },
+    "barracks": {
+     "champion": [
+      3,
+      3,
+      3.5,
+      4
+     ],
+     "halberdier": [
+      3,
+      3,
+      4
+     ]
+    },
+    "archery range": {
+     "crossbowman": [
+      3,
+      2.5,
+      1
+     ],
+     "elite skirmisher": [
+      3,
+      3,
+      2
+     ],
+     "heavy cavalry archer": [
+      2,
+      1
+     ]
+    },
+    "stable": {
+     "hussar": [
+      3,
+      3,
+      3
+     ],
+     "cavalier": [
+      3,
+      3
+     ]
+    },
+    "siege workshop": {
+     "siege ram": [
+      3.5,
+      3.5
+     ],
+     "siege onager": [
+      3.5,
+      3.5
+     ],
+     "heavy scorpion": [
+      3.5,
+      3.5
+     ]
+    },
+    "monastery": {
+     "monk": [
+      3.5,
+      3.5
+     ]
+    },
+    "castle": {
+     "elite boyar": [
+      2,
+      3
+     ],
+     "trebuchet": [
+      3
+     ]
+    },
+    "university": {
+     "guard tower": [
+      3,
+      3,
+      3
+     ],
+     "defenses": [
+      3,
+      3,
+      3,
+      3.5
+     ]
+    }
+   },
+   "description": {
+    "bonuses": [
+     "Nông dân làm việc nhanh hơn 15%",
+     "Tracking miễn phí",
+     "Lính của xưởng công thành rẻ hơn 15%"
+    ],
+    "unique": "Boyar (kỵ binh giáp cận chiến dày)",
+    "castleTech": "Orthodoxy: tu sĩ +3/+3 giáp",
+    "imperialTech": "Druzhina: bộ binh gây 5 sát thương lan bán kính 0,5 mỗi đòn",
+    "team": "Công trình quân sự cung cấp thêm 5 dân số"
+   },
+   "descriptionEn": "• Farmers work +15% faster\n• Tracking free\n• Siege Workshop units cost -15%\n\nUnique Unit: Boyar (Cavalry with heavy Melee Armor)\n\nCastle Age Tech: Orthodoxy (Monks +3/+3 Armor);\nImperial Age Tech: Druzhina (Infantry deal 5 damage in 0.5 radius per attack)\n\nTeam Bonus: Military Buildings provide +5 population"
+  },
+  {
+   "key": "portuguese",
+   "name": "Portuguese",
+   "vi": "Bồ Đào Nha",
+   "source": "Portuguese",
+   "note": null,
+   "ranks": {
+    "town center": {
+     "villager": [
+      3,
+      3,
+      3,
+      3
+     ]
+    },
+    "barracks": {
+     "champion": [
+      3,
+      3,
+      2.5,
+      2.5
+     ],
+     "halberdier": [
+      3,
+      2.5,
+      2.5
+     ]
+    },
+    "archery range": {
+     "arbalester": [
+      3.5,
+      3.5,
+      3.5
+     ],
+     "elite skirmisher": [
+      3,
+      3,
+      3
+     ],
+     "cavalry archer": [
+      3.5,
+      1.5
+     ],
+     "hand cannoneer": [
+      4
+     ]
+    },
+    "stable": {
+     "light cavalry": [
+      3,
+      3,
+      2.5
+     ],
+     "cavalier": [
+      3.5,
+      3.5
+     ]
+    },
+    "siege workshop": {
+     "capped ram": [
+      3,
+      2.5
+     ],
+     "onager": [
+      3.5,
+      3.5
+     ],
+     "scorpion": [
+      3,
+      2
+     ],
+     "bombard cannon": [
+      4
+     ]
+    },
+    "monastery": {
+     "monk": [
+      3.5,
+      3
+     ]
+    },
+    "castle": {
+     "elite organ gun": [
+      3,
+      3.5
+     ],
+     "trebuchet": [
+      3.5
+     ]
+    },
+    "university": {
+     "keep": [
+      3,
+      3,
+      2.5
+     ],
+     "defenses": [
+      3,
+      3,
+      3,
+      2.5
+     ]
+    }
+   },
+   "description": {
+    "bonuses": [
+     "Mọi đơn vị rẻ hơn 15% vàng",
+     "Tàu thuyền +10% máu",
+     "Xây được Feitoria ở thời Đế quốc (giá 250 vàng, 250 đá, chiếm 20 dân số; mỗi giây làm ra 0,8 thức ăn và gỗ, 0,45 vàng, 0,25 đá)"
+    ],
+    "unique": "Organ Gun (vũ khí công thành thuốc súng); Caravel (chiến thuyền bắn xuyên như Scorpion)",
+    "castleTech": "Carrack: tàu thuyền +1/+1 giáp",
+    "imperialTech": "Arquebus: đơn vị thuốc súng được hưởng Ballistics",
+    "team": "Cartography miễn phí từ thời Bóng tối"
+   },
+   "descriptionEn": "• All units cost -15% gold\n• Ships +10% HP\n• Can build Feitoria in Imperial Age (costs 250G 250S, 20 population; produces 0.8 F+W/s, 0.45 G/s, 0.25 S/s)\n\nUnique Units: Organ Gun (Gunpowder Siege), Caravel (Scorpion-like ship)\n\nCastle Age Tech: Carrack (Ships +1/+1 Armor);\nImperial Age Tech: Arquebus (Ballistics for Gunpowder units)\n\nTeam Bonus: Free Cartography from the Dark Age"
+  },
+  {
+   "key": "ethiopian",
+   "name": "Ethiopians",
+   "vi": "Ethiopia",
+   "source": "Ethiopians",
+   "note": null,
+   "ranks": {
+    "town center": {
+     "villager": [
+      3,
+      3,
+      3,
+      3
+     ]
+    },
+    "barracks": {
+     "two-handed swordsman": [
+      3,
+      3.5,
+      3,
+      2
+     ],
+     "halberdier": [
+      3,
+      3.5,
+      3
+     ]
+    },
+    "archery range": {
+     "arbalester": [
+      3.5,
+      3.5,
+      3.5
+     ],
+     "elite skirmisher": [
+      3,
+      3,
+      3
+     ],
+     "heavy cavalry archer": [
+      2.5,
+      2
+     ]
+    },
+    "stable": {
+     "hussar": [
+      2,
+      2,
+      2
+     ],
+     "cavalier": [
+      2.5,
+      1.5
+     ],
+     "heavy camel rider": [
+      2.5,
+      2
+     ]
+    },
+    "siege workshop": {
+     "siege ram": [
+      3,
+      3.5
+     ],
+     "siege onager": [
+      3,
+      4
+     ],
+     "heavy scorpion": [
+      3,
+      4
+     ],
+     "bombard cannon": [
+      3.5
+     ]
+    },
+    "monastery": {
+     "monk": [
+      2,
+      2
+     ]
+    },
+    "castle": {
+     "elite shotel warrior": [
+      3,
+      3
+     ],
+     "trebuchet": [
+      3
+     ]
+    },
+    "university": {
+     "keep": [
+      3,
+      3,
+      2.5
+     ],
+     "defenses": [
+      3,
+      3,
+      3,
+      2.5
+     ]
+    }
+   },
+   "description": {
+    "bonuses": [
+     "Dòng cung thủ bắn nhanh hơn 18%",
+     "Nhận thêm 100 vàng và 100 thức ăn mỗi khi lên thời",
+     "Nâng cấp Pikeman miễn phí"
+    ],
+    "unique": "Shotel Warrior (bộ binh đánh mạnh nhưng mỏng)",
+    "castleTech": "Royal Heirs: Shotel Warrior huấn luyện nhanh gấp đôi",
+    "imperialTech": "Torsion Engines: xe húc và Onager +0,5 bán kính sát thương lan",
+    "team": "Tháp và trạm gác +3 tầm nhìn"
+   },
+   "descriptionEn": "• Archer-line fires +18% faster\n• Receive +100 gold, +100 food when advancing to the next Age\n• Pikeman upgrade free\n\nUnique Unit: Shotel Warrior (Strong, but vulnerable Infantry)\n\nCastle Age Tech: Royal Heirs (Shotel Warriors are created twice as fast);\nImperial Age Tech: Torsion Engines (Rams, Onagers blast radius +0.5)\n\nTeam Bonus: Towers and Outposts +3 LoS"
+  },
+  {
+   "key": "malian",
+   "name": "Malians",
+   "vi": "Mali",
+   "source": "Malians",
+   "note": null,
+   "ranks": {
+    "town center": {
+     "villager": [
+      3,
+      3,
+      3,
+      3
+     ]
+    },
+    "barracks": {
+     "champion": [
+      3.5,
+      3.5,
+      3.5,
+      3.5
+     ],
+     "pikeman": [
+      3.5,
+      3.5,
+      2.5
+     ]
+    },
+    "archery range": {
+     "arbalester": [
+      3,
+      3,
+      2
+     ],
+     "elite skirmisher": [
+      3,
+      3,
+      2.5
+     ],
+     "heavy cavalry archer": [
+      3,
+      1.5
+     ],
+     "hand cannoneer": [
+      3
+     ]
+    },
+    "stable": {
+     "light cavalry": [
+      3,
+      3,
+      3.5
+     ],
+     "cavalier": [
+      3,
+      3.5
+     ],
+     "heavy camel rider": [
+      3,
+      3.5
+     ]
+    },
+    "siege workshop": {
+     "capped ram": [
+      3,
+      2
+     ],
+     "siege onager": [
+      3,
+      2.5
+     ],
+     "scorpion": [
+      3,
+      1
+     ],
+     "bombard cannon": [
+      2
+     ]
+    },
+    "monastery": {
+     "monk": [
+      3,
+      2.5
+     ]
+    },
+    "castle": {
+     "elite gbeto": [
+      3,
+      3
+     ],
+     "trebuchet": [
+      2.5
+     ]
+    },
+    "university": {
+     "keep": [
+      3,
+      3,
+      2.5
+     ],
+     "defenses": [
+      3,
+      3,
+      3,
+      3
+     ]
+    }
+   },
+   "description": {
+    "bonuses": [
+     "Công trình rẻ hơn 15% gỗ (trừ ruộng)",
+     "Lính nhà lính +1 giáp tên mỗi thời (từ thời Phong kiến)",
+     "Gold Mining miễn phí"
+    ],
+    "unique": "Gbeto (bộ binh đánh xa)",
+    "castleTech": "Tigui: nhà chính bắn thêm 5 mũi tên, kể cả khi không có ai bên trong",
+    "imperialTech": "Farimba: kỵ binh và lạc đà +5 sát thương",
+    "team": "Đại học nghiên cứu nhanh hơn 80%"
+   },
+   "descriptionEn": "• Buildings cost -15% wood (except Farms)\n• Barracks units +1 Pierce Armor per Age (starting from Feudal Age)\n• Gold Mining free\n\nUnique Unit: Gbeto (ranged Infantry)\n\nCastle Age Tech: Tigui (Town Centers fire 5 extra arrows, even empty);\nImperial Age Tech: Farimba (Cavalry, Camels +5 Attack)\n\nTeam Bonus: University researches +80% faster"
+  },
+  {
+   "key": "berbers",
+   "name": "Berbers",
+   "vi": "Berber",
+   "source": "Berbers",
+   "note": null,
+   "ranks": {
+    "town center": {
+     "villager": [
+      3.5,
+      3.5,
+      3.5,
+      3.5
+     ]
+    },
+    "barracks": {
+     "champion": [
+      3,
+      3,
+      3,
+      3
+     ],
+     "pikeman": [
+      3,
+      3,
+      2
+     ]
+    },
+    "archery range": {
+     "crossbowman": [
+      3,
+      3,
+      2
+     ],
+     "elite skirmisher": [
+      3,
+      3,
+      3
+     ],
+     "heavy cavalry archer": [
+      3,
+      2
+     ],
+     "hand cannoneer": [
+      3
+     ],
+     "elite genitour": [
+      3,
+      3
+     ]
+    },
+    "stable": {
+     "hussar": [
+      3,
+      3.5,
+      3.5
+     ],
+     "cavalier": [
+      3.5,
+      3.5
+     ],
+     "heavy camel rider": [
+      3.5,
+      4
+     ]
+    },
+    "siege workshop": {
+     "capped ram": [
+      3,
+      2.5
+     ],
+     "onager": [
+      3,
+      3
+     ],
+     "heavy scorpion": [
+      3,
+      3
+     ],
+     "bombard cannon": [
+      3
+     ]
+    },
+    "monastery": {
+     "monk": [
+      2.5,
+      2
+     ]
+    },
+    "castle": {
+     "elite camel archer": [
+      3.5,
+      4
+     ],
+     "trebuchet": [
+      3.5
+     ]
+    },
+    "university": {
+     "guard tower": [
+      3,
+      3,
+      2.5
+     ],
+     "defenses": [
+      3,
+      3,
+      3,
+      2.5
+     ]
+    }
+   },
+   "description": {
+    "bonuses": [
+     "Dân làng di chuyển nhanh hơn 10%",
+     "Lính chuồng ngựa rẻ hơn 15/20% ở thời Lâu đài/Đế quốc",
+     "Tàu thuyền di chuyển nhanh hơn 10%"
+    ],
+    "unique": "Camel Archer (cung kỵ lạc đà, khắc cung kỵ khác); Genitour (lính phóng lao cưỡi ngựa)",
+    "castleTech": "Kasbah: lâu đài của cả đội huấn luyện nhanh hơn 25%",
+    "imperialTech": "Maghrabi Camels: lính lạc đà tự hồi 1 máu mỗi 4 giây",
+    "team": "Có thể huấn luyện Genitour ở Trường bắn"
+   },
+   "descriptionEn": "• Villagers move +10% faster\n• Stable units cost -15/20% in Castle/Imperial Age\n• Ships move +10% faster\n\nUnique Units: Camel Archer (Cavalry Archer with bonus against other Cavalry Archers),\nGenitour (mounted Skirmisher)\nCastle Age Tech: Kasbah (Team Castles work +25% faster);\nImperial Age Tech: Maghrabi Camels (Camel troops regenerate 1 HP/4s)\n\nTeam Bonus: Genitour available in Archery Range"
+  },
+  {
+   "key": "khmer",
+   "name": "Khmer",
+   "vi": "Khmer",
+   "source": "Khmer",
+   "note": null,
+   "ranks": {
+    "town center": {
+     "villager": [
+      3.5,
+      3.5,
+      3.5,
+      3.5
+     ]
+    },
+    "barracks": {
+     "two-handed swordsman": [
+      3,
+      3,
+      2,
+      1
+     ],
+     "halberdier": [
+      3,
+      2.5,
+      2
+     ]
+    },
+    "archery range": {
+     "arbalester": [
+      3,
+      2.5,
+      2.5
+     ],
+     "elite skirmisher": [
+      3,
+      3,
+      3
+     ],
+     "heavy cavalry archer": [
+      2,
+      2
+     ],
+     "hand cannoneer": [
+      3
+     ]
+    },
+    "stable": {
+     "hussar": [
+      3,
+      3,
+      3
+     ],
+     "cavalier": [
+      3,
+      3
+     ],
+     "elite battle elephant": [
+      4,
+      4
+     ]
+    },
+    "siege workshop": {
+     "siege ram": [
+      3,
+      3
+     ],
+     "onager": [
+      3,
+      3
+     ],
+     "heavy scorpion": [
+      3.5,
+      4
+     ]
+    },
+    "monastery": {
+     "monk": [
+      2.5,
+      2
+     ]
+    },
+    "castle": {
+     "elite ballista elephant": [
+      2.5,
+      2.5
+     ],
+     "trebuchet": [
+      3
+     ]
+    },
+    "university": {
+     "keep": [
+      3,
+      3,
+      2.5
+     ],
+     "defenses": [
+      3,
+      3,
+      3,
+      3
+     ]
+    }
+   },
+   "description": {
+    "bonuses": [
+     "Không cần công trình nào để lên thời hay mở khóa công trình khác",
+     "Voi chiến (Battle Elephant) nhanh hơn 15%",
+     "Nhà có thể chứa 5 dân làng"
+    ],
+    "unique": "Ballista Elephant (voi công thành)",
+    "castleTech": "Tusk Swords: Battle Elephant +3 sát thương",
+    "imperialTech": "Double Crossbow: Ballista Elephant và Scorpion bắn 2 mũi tên",
+    "team": "Scorpion +1 tầm bắn"
+   },
+   "descriptionEn": "• No buildings required to advance to the next Age or to unlock other buildings\n• Battle Elephants +15% faster\n• Houses can shelter 5 villagers\n\nUnique Unit: Ballista Elephant (cavalry siege)\n\nCastle Age Tech: Tusk Swords (Battle Elephants +3 Attack)\nImperial Age Tech: Double Crossbow (Ballista Elephants and Scorpions shoot two projectiles)\n\nTeam Bonus: Scorpions +1 range"
+  },
+  {
+   "key": "malay",
+   "name": "Malay",
+   "vi": "Mã Lai",
+   "source": "Malay",
+   "note": null,
+   "ranks": {
+    "town center": {
+     "villager": [
+      3,
+      3.5,
+      3.5,
+      3
+     ]
+    },
+    "barracks": {
+     "two-handed swordsman": [
+      3,
+      3,
+      3,
+      4
+     ],
+     "halberdier": [
+      3,
+      3,
+      3
+     ]
+    },
+    "archery range": {
+     "arbalester": [
+      3,
+      3,
+      3
+     ],
+     "elite skirmisher": [
+      3,
+      3,
+      3
+     ],
+     "cavalry archer": [
+      2,
+      1
+     ]
+    },
+    "stable": {
+     "light cavalry": [
+      2,
+      1.5,
+      1
+     ],
+     "cavalier": [
+      1.5,
+      1
+     ],
+     "elite battle elephant": [
+      3.5,
+      3.5
+     ]
+    },
+    "siege workshop": {
+     "capped ram": [
+      3,
+      2.5
+     ],
+     "onager": [
+      3,
+      3
+     ],
+     "heavy scorpion": [
+      3,
+      3
+     ],
+     "bombard cannon": [
+      3
+     ]
+    },
+    "monastery": {
+     "monk": [
+      3,
+      3
+     ]
+    },
+    "castle": {
+     "elite karambit warrior": [
+      3,
+      3
+     ],
+     "trebuchet": [
+      3
+     ]
+    },
+    "university": {
+     "keep": [
+      3,
+      3,
+      2
+     ],
+     "defenses": [
+      3,
+      3,
+      3,
+      2
+     ]
+    }
+   },
+   "description": {
+    "bonuses": [
+     "Lên thời nhanh hơn 80%",
+     "Bẫy cá rẻ hơn 33%",
+     "Bẫy cá cho thức ăn vô hạn",
+     "Battle Elephant rẻ hơn 30%"
+    ],
+    "unique": "Karambit Warrior (bộ binh rẻ)",
+    "castleTech": "Thalassocracy: nâng bến cảng thành Harbor biết bắn tên",
+    "imperialTech": "Forced Levy: dòng lính kiếm không tốn vàng",
+    "team": "Bến cảng gấp đôi tầm nhìn"
+   },
+   "descriptionEn": "• Advancing to Ages +80% faster\n• Fish Traps cost -33%\n• Fish Traps provide unlimited food\n• Battle Elephants cost -30%\n\nUnique Unit: Karambit Warrior (cheap infantry)\n\nCastle Age Tech: Thalassocracy (Upgrades your Docks to Harbors, which fire arrows)\nImperial Age Tech: Forced Levy (Militia-line costs no gold)\n\nTeam Bonus: Docks +100% LoS"
+  },
+  {
+   "key": "burmese",
+   "name": "Burmese",
+   "vi": "Miến Điện",
+   "source": "Burmese",
+   "note": null,
+   "ranks": {
+    "town center": {
+     "villager": [
+      3,
+      3,
+      3,
+      3
+     ]
+    },
+    "barracks": {
+     "champion": [
+      3,
+      3.5,
+      3.5,
+      3.5
+     ],
+     "halberdier": [
+      3.5,
+      3.5,
+      3.5
+     ]
+    },
+    "archery range": {
+     "crossbowman": [
+      3,
+      2,
+      1
+     ],
+     "elite skirmisher": [
+      3,
+      2,
+      1
+     ],
+     "heavy cavalry archer": [
+      2,
+      1.5
+     ]
+    },
+    "stable": {
+     "hussar": [
+      3,
+      3,
+      3.5
+     ],
+     "cavalier": [
+      3,
+      3.5
+     ],
+     "elite battle elephant": [
+      3.5,
+      4
+     ]
+    },
+    "siege workshop": {
+     "capped ram": [
+      3,
+      2.5
+     ],
+     "onager": [
+      3,
+      3
+     ],
+     "heavy scorpion": [
+      3,
+      3
+     ],
+     "bombard cannon": [
+      3
+     ]
+    },
+    "monastery": {
+     "monk": [
+      3.5,
+      3.5
+     ]
+    },
+    "castle": {
+     "elite arambai": [
+      3,
+      3
+     ],
+     "trebuchet": [
+      3
+     ]
+    },
+    "university": {
+     "keep": [
+      3,
+      3,
+      2.5
+     ],
+     "defenses": [
+      3,
+      3,
+      3,
+      2.5
+     ]
+    }
+   },
+   "description": {
+    "bonuses": [
+     "Nâng cấp ở trại gỗ miễn phí",
+     "Bộ binh +1 sát thương mỗi thời (từ thời Phong kiến)",
+     "Công nghệ ở tu viện rẻ hơn 50%"
+    ],
+    "unique": "Arambai (kỵ binh đánh xa, mạnh nhưng kém chính xác)",
+    "castleTech": "Howdah: Battle Elephant +1/+1 giáp",
+    "imperialTech": "Manipur Cavalry: kỵ binh và Arambai +6 sát thương lên công trình (3 trong số đó bị giáp công trình chặn được)",
+    "team": "Thấy vị trí các thánh tích trên bản đồ"
+   },
+   "descriptionEn": "• Free Lumbercamp upgrades\n• Infantry +1 Attack per Age (starting in Feudal Age)\n• Monastery techs cost -50%\n\nUnique Unit: Arambai (Powerful, but inaccurate ranged cavalry)\n\nCastle Age Tech: Howdah (Battle Elephants +1/+1 Armor)\nImperial Age Tech: Manipur Cavalry (Cavalry and Arambai +6 Attack vs. Buildings, +3 of that blockable by building armor)\n\nTeam Bonus: Relics visible on map"
+  },
+  {
+   "key": "vietnamese",
+   "name": "Vietnamese",
+   "vi": "Việt Nam",
+   "source": "Vietnamese",
+   "note": null,
+   "ranks": {
+    "town center": {
+     "villager": [
+      3,
+      3,
+      3,
+      3
+     ]
+    },
+    "barracks": {
+     "champion": [
+      3,
+      3,
+      3,
+      2.5
+     ],
+     "halberdier": [
+      3,
+      3,
+      3
+     ]
+    },
+    "archery range": {
+     "arbalester": [
+      3.5,
+      3.5,
+      3.5
+     ],
+     "imperial skirmisher": [
+      3.5,
+      3.5,
+      3.5
+     ],
+     "heavy cavalry archer": [
+      3.5,
+      2.5
+     ]
+    },
+    "stable": {
+     "light cavalry": [
+      3,
+      3,
+      2.5
+     ],
+     "cavalier": [
+      3,
+      2.5
+     ],
+     "elite battle elephant": [
+      3,
+      3
+     ]
+    },
+    "siege workshop": {
+     "capped ram": [
+      3,
+      2.5
+     ],
+     "onager": [
+      3,
+      3
+     ],
+     "scorpion": [
+      3,
+      2
+     ],
+     "bombard cannon": [
+      3
+     ]
+    },
+    "monastery": {
+     "monk": [
+      2,
+      2
+     ]
+    },
+    "castle": {
+     "elite rattan archer": [
+      3,
+      4
+     ],
+     "trebuchet": [
+      3
+     ]
+    },
+    "university": {
+     "guard tower": [
+      3,
+      3,
+      3
+     ],
+     "defenses": [
+      3,
+      3,
+      2.5,
+      2
+     ]
+    }
+   },
+   "description": {
+    "bonuses": [
+     "Thấy vị trí của đối thủ ngay khi bắt đầu",
+     "Lính trường bắn +20% máu",
+     "Conscription miễn phí"
+    ],
+    "unique": "Rattan Archer (cung thủ giáp tên dày)",
+    "castleTech": "Chatras: Battle Elephant +50 máu",
+    "imperialTech": "Paper Money: cống nạp 500 vàng cho mỗi đồng minh",
+    "team": "Mở khóa nâng cấp Imperial Skirmisher"
+   },
+   "descriptionEn": "• Reveal enemy positions at game start\n• Archery Range units +20% HP\n• Conscription free\n\nUnique Units: Rattan Archer (Archer with high pierce armor)\n\nCastle Age Tech: Chatras (Battle Elephants +50 HP)\nImperial Age Tech: Paper Money (Tributes 500 gold to each Ally)\n\nTeam Bonus: Have access to Imperial Skirmisher upgrade "
+  }
+ ]
+}

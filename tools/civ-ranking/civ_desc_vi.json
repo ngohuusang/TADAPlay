@@ -1,0 +1,219 @@
+{
+ "briton": {
+  "bonuses": ["Nhà chính rẻ hơn 50% gỗ ở thời Lâu đài", "Cung thủ bộ (trừ lính phóng lao) +1/+2 tầm bắn ở thời Lâu đài/Đế quốc", "Dân làng chăn cừu làm việc nhanh hơn 25%"],
+  "unique": "Longbowman (cung thủ tầm xa)",
+  "castleTech": "Yeomen: cung thủ bộ và lính phóng lao +1 tầm bắn; tháp +2 sát thương",
+  "imperialTech": "Warwolf: máy bắn đá lớn (Trebuchet) gây sát thương lan bán kính 0,5 và bắn trúng 100%",
+  "team": "Trường bắn huấn luyện nhanh hơn 20%"
+ },
+ "frankish": {
+  "bonuses": ["Dân làng hái quả làm việc nhanh hơn 25%", "Lâu đài rẻ hơn 25%", "Kỵ binh +20% máu", "Các nâng cấp ruộng miễn phí (cần có Cối xay)"],
+  "unique": "Throwing Axeman (bộ binh đánh xa)",
+  "castleTech": "Chivalry: chuồng ngựa huấn luyện nhanh hơn 40%",
+  "imperialTech": "Bearded Axe: Throwing Axeman +1 tầm bắn",
+  "team": "Hiệp sĩ +2 tầm nhìn"
+ },
+ "gothic": {
+  "bonuses": ["Bộ binh rẻ hơn 35% từ thời Phong kiến", "Bộ binh +1 sát thương lên công trình", "Dân làng +5 sát thương lên lợn rừng; thợ săn mang thêm 15 thịt", "+10 dân số ở thời Đế quốc"],
+  "unique": "Huskarl (bộ binh khắc cung thủ)",
+  "castleTech": "Anarchy: huấn luyện Huskarl ở Nhà lính",
+  "imperialTech": "Perfusion: Nhà lính huấn luyện nhanh gấp đôi",
+  "team": "Nhà lính huấn luyện nhanh hơn 20%"
+ },
+ "teutonic": {
+  "bonuses": ["Tu sĩ hồi máu với tầm gấp đôi", "Tháp chứa thêm 5 lính, nhà chính thêm 10; số mũi tên tối đa +4 (nhà chính +5)", "Murder Holes miễn phí", "Ruộng rẻ hơn 33%"],
+  "unique": "Teutonic Knight (bộ binh giáp cận chiến dày)",
+  "castleTech": "Ironclad: vũ khí công thành +4 giáp cận chiến",
+  "imperialTech": "Crenellations: lâu đài +3 tầm bắn; bộ binh đóng trong lâu đài cũng bắn tên",
+  "team": "Lính khó bị cải đạo hơn: thời gian cải đạo tối thiểu/tối đa +1/+2 giây, tỉ lệ cải đạo giảm một nửa"
+ },
+ "japanese": {
+  "bonuses": ["Thuyền đánh cá gấp đôi máu, +2 giáp tên, làm việc nhanh hơn 5/10/15/20% ở thời Bóng tối/Phong kiến/Lâu đài/Đế quốc", "Cối xay, trại gỗ, trại mỏ rẻ hơn 50%", "Bộ binh đánh nhanh hơn 33% từ thời Phong kiến"],
+  "unique": "Samurai (bộ binh khắc lính đặc biệt)",
+  "castleTech": "Yasama: tháp bắn thêm 2 mũi tên",
+  "imperialTech": "Kataparuto: Trebuchet bắn nhanh hơn 33% và thu/dựng nhanh gấp 4",
+  "team": "Thuyền Galley +50% tầm nhìn"
+ },
+ "chinese": {
+  "bonuses": ["Bắt đầu với thêm 3 dân làng nhưng ít hơn 50 gỗ và 200 thức ăn", "Công nghệ rẻ hơn 10/15/20% ở thời Phong kiến/Lâu đài/Đế quốc", "Nhà chính cung cấp 10 dân số", "Nhà chính +5 tầm nhìn", "Thuyền phá hủy (Demolition Ship) +50% máu"],
+  "unique": "Chu Ko Nu (cung thủ bắn liên thanh)",
+  "castleTech": "Great Wall: tường và tháp +30% máu",
+  "imperialTech": "Rocketry: Chu Ko Nu +2, Scorpion +4 sát thương xuyên giáp",
+  "team": "Ruộng cho thêm 45 thức ăn"
+ },
+ "byzantine": {
+  "bonuses": ["Công trình +10/20/30/40% máu ở thời Bóng tối/Phong kiến/Lâu đài/Đế quốc", "Lạc đà, lính phóng lao và dòng lính giáo rẻ hơn 25%", "Thuyền lửa (Fire Ship) đánh nhanh hơn 20%", "Town Watch miễn phí", "Lên thời Đế quốc rẻ hơn 33%"],
+  "unique": "Cataphract (kỵ binh khắc bộ binh)",
+  "castleTech": "Greek Fire: thuyền lửa +1 tầm",
+  "imperialTech": "Logistica: Cataphract gây 5 sát thương lan (bán kính 0,5) và +6 sát thương lên bộ binh",
+  "team": "Tu sĩ hồi máu nhanh hơn 50%"
+ },
+ "persian": {
+  "bonuses": ["Bắt đầu với thêm 50 gỗ và 50 thức ăn", "Nhà chính và bến cảng gấp đôi máu; làm việc nhanh hơn 10/15/20% ở thời Phong kiến/Lâu đài/Đế quốc"],
+  "unique": "War Elephant (kỵ binh voi chậm, rất trâu)",
+  "castleTech": "Boiling Oil: lâu đài +9 sát thương lên xe húc (chỉ mũi tên đầu tiên)",
+  "imperialTech": "Mahouts: War Elephant di chuyển nhanh hơn 30%",
+  "team": "Hiệp sĩ +2 sát thương lên cung thủ"
+ },
+ "saracen": {
+  "bonuses": ["Phí giao dịch ở chợ chỉ 5%", "Chợ rẻ hơn 75 gỗ", "Thuyền vận tải gấp đôi máu, chở thêm 5", "Thuyền Galley bắn nhanh hơn 25%", "Cung kỵ +4 sát thương lên công trình"],
+  "unique": "Mameluke (lạc đà đánh tầm ngắn, khắc kỵ binh)",
+  "castleTech": "Madrasah: tu sĩ bị giết hoàn lại 33% giá",
+  "imperialTech": "Zealotry: lạc đà và Mameluke +30 máu",
+  "team": "Cung thủ bộ +2 sát thương lên công trình"
+ },
+ "turkish": {
+  "bonuses": ["Đơn vị thuốc súng +25% máu", "Nghiên cứu công nghệ thuốc súng rẻ hơn 50%; Chemistry miễn phí", "Dân làng đào vàng nhanh hơn 20%", "Nâng cấp Light Cavalry và Hussar miễn phí"],
+  "unique": "Janissary (lính súng tay)",
+  "castleTech": "Sipahi: cung kỵ và Genitour +20 máu",
+  "imperialTech": "Artillery: tháp đại bác, đại bác và thuyền đại bác +2 tầm bắn",
+  "team": "Đơn vị thuốc súng huấn luyện nhanh hơn 25%"
+ },
+ "viking": {
+  "bonuses": ["Chiến thuyền rẻ hơn 15/15/20% ở thời Phong kiến/Lâu đài/Đế quốc", "Bộ binh +10/15/20% máu ở thời Phong kiến/Lâu đài/Đế quốc", "Wheelbarrow và Hand Cart miễn phí"],
+  "unique": "Berserk (bộ binh tự hồi máu); Longboat (chiến thuyền)",
+  "castleTech": "Chieftains: bộ binh +5 sát thương lên kỵ binh, +4 lên lạc đà",
+  "imperialTech": "Berserkergang: Berserk hồi máu nhanh gấp đôi (1 máu/1,5 giây thay vì 1 máu/3 giây)",
+  "team": "Bến cảng rẻ hơn 15%"
+ },
+ "mongol": {
+  "bonuses": ["Cung kỵ, Mangudai và Genitour bắn nhanh hơn 25%", "Light Cavalry và Hussar +30% máu", "Thợ săn làm việc nhanh hơn 50%"],
+  "unique": "Mangudai (cung kỵ bắn nhanh)",
+  "castleTech": "Nomads: nhà bị phá không làm mất chỗ dân số",
+  "imperialTech": "Drill: lính của xưởng công thành di chuyển nhanh hơn 50%",
+  "team": "Dòng kỵ trinh sát +2 tầm nhìn"
+ },
+ "celtic": {
+  "bonuses": ["Bộ binh di chuyển nhanh hơn 15%", "Tiều phu làm việc nhanh hơn 15%", "Vũ khí công thành bắn nhanh hơn 25%", "Chiếm được cừu ngay cả khi có lính địch đứng cạnh"],
+  "unique": "Woad Raider (bộ binh chạy nhanh)",
+  "castleTech": "Stronghold: lâu đài và tháp bắn nhanh hơn 25%",
+  "imperialTech": "Furor Celtica: lính của xưởng công thành +40% máu",
+  "team": "Xưởng công thành huấn luyện nhanh hơn 20%"
+ },
+ "spanish": {
+  "bonuses": ["Dân làng xây dựng nhanh hơn 30%", "Nâng cấp ở lò rèn không tốn vàng", "Đại bác và lính súng tay bắn nhanh hơn 18%", "Thuyền đại bác bắn có Ballistics, đạn bay nhanh hơn"],
+  "unique": "Conquistador (lính súng tay cưỡi ngựa); Missionary (tu sĩ cưỡi ngựa)",
+  "castleTech": "Inquisition: cải đạo nhanh hơn - thời gian tối thiểu/tối đa -1 giây với lính, -7 giây với công trình",
+  "imperialTech": "Supremacy: dân làng +6 sát thương, +2/+2 giáp, +40 máu",
+  "team": "Đơn vị buôn bán làm ra thêm 25% vàng"
+ },
+ "aztec": {
+  "bonuses": ["Dân làng mang thêm 5 tài nguyên", "Lính quân sự (kể cả vũ khí công thành và chiến thuyền, trừ tu sĩ) huấn luyện nhanh hơn 18%", "Tu sĩ +5 máu cho mỗi công nghệ ở tu viện", "Bắt đầu với thêm 50 vàng"],
+  "unique": "Jaguar Warrior (bộ binh khắc bộ binh)",
+  "castleTech": "Atlatl: lính phóng lao và Genitour +1 sát thương, +1 tầm bắn",
+  "imperialTech": "Garland Wars: bộ binh +4 sát thương",
+  "team": "Thánh tích làm ra thêm 33% vàng"
+ },
+ "mayan": {
+  "bonuses": ["Bắt đầu với thêm 1 dân làng nhưng ít hơn 50 thức ăn", "Tài nguyên dùng lâu hơn 15%, nhưng nông dân làm chậm hơn khoảng 3%", "Cung thủ rẻ hơn 10/20/30% ở thời Phong kiến/Lâu đài/Đế quốc"],
+  "unique": "Plumed Archer (cung thủ chạy nhanh)",
+  "castleTech": "Obsidian Arrows: dòng cung thủ +6 sát thương lên công trình và công trình đá",
+  "imperialTech": "El Dorado: chiến binh đại bàng +40 máu",
+  "team": "Tường rẻ hơn 50%"
+ },
+ "hun": {
+  "bonuses": ["Không cần xây nhà, nhưng bắt đầu ít hơn 100 gỗ", "Cung kỵ và Genitour rẻ hơn 10/20% ở thời Lâu đài/Đế quốc", "Trebuchet chính xác hơn 35% (50% thay vì 15%)"],
+  "unique": "Tarkan (kỵ binh hạng trung, mạnh khi phá công trình)",
+  "castleTech": "Marauders: huấn luyện Tarkan ở chuồng ngựa",
+  "imperialTech": "Atheism: chiến thắng bằng thánh tích/kỳ quan cần thêm 100 năm; Spies/Treason rẻ hơn 50%",
+  "team": "Chuồng ngựa huấn luyện nhanh hơn 20%"
+ },
+ "korean": {
+  "bonuses": ["Dân làng +3 tầm nhìn", "Dân làng đào đá nhanh hơn 20%", "Tường và lâu đài xây nhanh hơn 33%, tháp nhanh hơn 5%", "Nâng cấp tháp miễn phí (tháp đại bác cần Chemistry)", "Tháp +1/+2 tầm bắn ở thời Lâu đài/Đế quốc"],
+  "unique": "War Wagon (cung kỵ nhiều máu, khắc cung thủ); Turtle Ship (chiến thuyền bọc giáp dày)",
+  "castleTech": "Panokseon: Turtle Ship di chuyển nhanh hơn 15%",
+  "imperialTech": "Shinkichon: dòng Onager +1 tầm bắn",
+  "team": "Tầm bắn tối thiểu của dòng Onager giảm còn 1"
+ },
+ "italian": {
+  "bonuses": ["Lên thời rẻ hơn 15%", "Công nghệ ở bến cảng rẻ hơn 50%", "Thuyền đánh cá rẻ hơn 15%", "Đơn vị thuốc súng rẻ hơn 20%"],
+  "unique": "Genoese Crossbowman (cung thủ khắc kỵ binh); Condottiero (bộ binh khắc lính thuốc súng)",
+  "castleTech": "Pavise: cung thủ bộ +1/+1 giáp",
+  "imperialTech": "Silk Road: đơn vị buôn bán rẻ hơn 50%",
+  "team": "Có thể huấn luyện Condottiero ở Nhà lính từ thời Đế quốc"
+ },
+ "indian": {
+  "bonuses": ["Dân làng rẻ hơn 10/15/20/25% ở thời Bóng tối/Phong kiến/Lâu đài/Đế quốc", "Ngư dân làm việc nhanh hơn 15% và mang thêm 15", "Lạc đà +0/+1 giáp"],
+  "unique": "Elephant Archer (cung kỵ voi chậm, nhiều máu); Imperial Camel (nâng cấp lạc đà)",
+  "castleTech": "Sultans: mọi nguồn thu vàng nhanh hơn 10%",
+  "imperialTech": "Shatagni: lính súng tay +1 tầm bắn",
+  "team": "Lạc đà +6, Mameluke/Camel Archer +5 sát thương lên công trình"
+ },
+ "incan": {
+  "bonuses": ["Bắt đầu với một con lạc đà không bướu (llama) miễn phí", "Dân làng được hưởng nâng cấp bộ binh ở lò rèn", "Nhà cung cấp 10 dân số", "Công trình rẻ hơn 15% đá"],
+  "unique": "Kamayuk (bộ binh khắc kỵ binh); Slinger (lính ném đá khắc bộ binh)",
+  "castleTech": "Andean Sling: lính phóng lao, Slinger và Genitour không còn tầm bắn tối thiểu",
+  "imperialTech": "Couriers: Kamayuk, Slinger và chiến binh đại bàng +1/+2 giáp",
+  "team": "Ruộng xây nhanh gấp đôi"
+ },
+ "magyar": {
+  "bonuses": ["Dân làng giết sói chỉ với 1 đòn", "Forging, Iron Casting, Blast Furnace miễn phí", "Kỵ trinh sát, Light Cavalry và Hussar rẻ hơn 15%"],
+  "unique": "Magyar Huszar (kỵ binh nhẹ)",
+  "castleTech": "Mercenaries: Magyar Huszar không tốn vàng",
+  "imperialTech": "Recurve Bow: dòng cung kỵ +1 tầm bắn, +1 sát thương",
+  "team": "Cung thủ bộ +2 tầm nhìn"
+ },
+ "slavic": {
+  "bonuses": ["Nông dân làm việc nhanh hơn 15%", "Tracking miễn phí", "Lính của xưởng công thành rẻ hơn 15%"],
+  "unique": "Boyar (kỵ binh giáp cận chiến dày)",
+  "castleTech": "Orthodoxy: tu sĩ +3/+3 giáp",
+  "imperialTech": "Druzhina: bộ binh gây 5 sát thương lan bán kính 0,5 mỗi đòn",
+  "team": "Công trình quân sự cung cấp thêm 5 dân số"
+ },
+ "portuguese": {
+  "bonuses": ["Mọi đơn vị rẻ hơn 15% vàng", "Tàu thuyền +10% máu", "Xây được Feitoria ở thời Đế quốc (giá 250 vàng, 250 đá, chiếm 20 dân số; mỗi giây làm ra 0,8 thức ăn và gỗ, 0,45 vàng, 0,25 đá)"],
+  "unique": "Organ Gun (vũ khí công thành thuốc súng); Caravel (chiến thuyền bắn xuyên như Scorpion)",
+  "castleTech": "Carrack: tàu thuyền +1/+1 giáp",
+  "imperialTech": "Arquebus: đơn vị thuốc súng được hưởng Ballistics",
+  "team": "Cartography miễn phí từ thời Bóng tối"
+ },
+ "ethiopian": {
+  "bonuses": ["Dòng cung thủ bắn nhanh hơn 18%", "Nhận thêm 100 vàng và 100 thức ăn mỗi khi lên thời", "Nâng cấp Pikeman miễn phí"],
+  "unique": "Shotel Warrior (bộ binh đánh mạnh nhưng mỏng)",
+  "castleTech": "Royal Heirs: Shotel Warrior huấn luyện nhanh gấp đôi",
+  "imperialTech": "Torsion Engines: xe húc và Onager +0,5 bán kính sát thương lan",
+  "team": "Tháp và trạm gác +3 tầm nhìn"
+ },
+ "malian": {
+  "bonuses": ["Công trình rẻ hơn 15% gỗ (trừ ruộng)", "Lính nhà lính +1 giáp tên mỗi thời (từ thời Phong kiến)", "Gold Mining miễn phí"],
+  "unique": "Gbeto (bộ binh đánh xa)",
+  "castleTech": "Tigui: nhà chính bắn thêm 5 mũi tên, kể cả khi không có ai bên trong",
+  "imperialTech": "Farimba: kỵ binh và lạc đà +5 sát thương",
+  "team": "Đại học nghiên cứu nhanh hơn 80%"
+ },
+ "berbers": {
+  "bonuses": ["Dân làng di chuyển nhanh hơn 10%", "Lính chuồng ngựa rẻ hơn 15/20% ở thời Lâu đài/Đế quốc", "Tàu thuyền di chuyển nhanh hơn 10%"],
+  "unique": "Camel Archer (cung kỵ lạc đà, khắc cung kỵ khác); Genitour (lính phóng lao cưỡi ngựa)",
+  "castleTech": "Kasbah: lâu đài của cả đội huấn luyện nhanh hơn 25%",
+  "imperialTech": "Maghrabi Camels: lính lạc đà tự hồi 1 máu mỗi 4 giây",
+  "team": "Có thể huấn luyện Genitour ở Trường bắn"
+ },
+ "khmer": {
+  "bonuses": ["Không cần công trình nào để lên thời hay mở khóa công trình khác", "Voi chiến (Battle Elephant) nhanh hơn 15%", "Nhà có thể chứa 5 dân làng"],
+  "unique": "Ballista Elephant (voi công thành)",
+  "castleTech": "Tusk Swords: Battle Elephant +3 sát thương",
+  "imperialTech": "Double Crossbow: Ballista Elephant và Scorpion bắn 2 mũi tên",
+  "team": "Scorpion +1 tầm bắn"
+ },
+ "malay": {
+  "bonuses": ["Lên thời nhanh hơn 80%", "Bẫy cá rẻ hơn 33%", "Bẫy cá cho thức ăn vô hạn", "Battle Elephant rẻ hơn 30%"],
+  "unique": "Karambit Warrior (bộ binh rẻ)",
+  "castleTech": "Thalassocracy: nâng bến cảng thành Harbor biết bắn tên",
+  "imperialTech": "Forced Levy: dòng lính kiếm không tốn vàng",
+  "team": "Bến cảng gấp đôi tầm nhìn"
+ },
+ "burmese": {
+  "bonuses": ["Nâng cấp ở trại gỗ miễn phí", "Bộ binh +1 sát thương mỗi thời (từ thời Phong kiến)", "Công nghệ ở tu viện rẻ hơn 50%"],
+  "unique": "Arambai (kỵ binh đánh xa, mạnh nhưng kém chính xác)",
+  "castleTech": "Howdah: Battle Elephant +1/+1 giáp",
+  "imperialTech": "Manipur Cavalry: kỵ binh và Arambai +6 sát thương lên công trình (3 trong số đó bị giáp công trình chặn được)",
+  "team": "Thấy vị trí các thánh tích trên bản đồ"
+ },
+ "vietnamese": {
+  "bonuses": ["Thấy vị trí của đối thủ ngay khi bắt đầu", "Lính trường bắn +20% máu", "Conscription miễn phí"],
+  "unique": "Rattan Archer (cung thủ giáp tên dày)",
+  "castleTech": "Chatras: Battle Elephant +50 máu",
+  "imperialTech": "Paper Money: cống nạp 500 vàng cho mỗi đồng minh",
+  "team": "Mở khóa nâng cấp Imperial Skirmisher"
+ }
+}
