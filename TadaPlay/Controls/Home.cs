@@ -522,6 +522,63 @@ namespace TadaPlay.Controls
             _ = System.Threading.Tasks.Task.Run(CaptureLiveMatch);
         }
 
+        // Record size at the last tick, and when it last grew - the cheap "still playing" signal.
+        private long _clockRecordLength = -1;
+        private DateTime _clockRecordGrewUtc;
+        private DateTime _clockLastPublishUtc;
+        private bool _clockLastPublishedPaused;
+
+        // The game writes its record in bursts, so a gap this long with no growth is needed
+        // before it counts as stopped. Checked every RecordWatchIntervalMs (5s), so a real
+        // pause is reported within about 25 seconds.
+        private static readonly TimeSpan RecordQuietAllowance = TimeSpan.FromSeconds(10);
+
+        // How often the estimated clock goes out. Each publish is a user-list broadcast to
+        // every client, so not every 2s tick; a pause starting or ending goes out at once.
+        private static readonly TimeSpan EstimatedClockPublishInterval = TimeSpan.FromSeconds(10);
+
+        private void AdvanceEstimatedClock()
+        {
+            string recordPath = _watchedRecordPath;
+            if (recordPath == null || !MatchShareState.InGame)
+            {
+                _clockRecordLength = -1;
+                return;
+            }
+
+            long length;
+            try
+            {
+                length = new FileInfo(recordPath).Length;
+            }
+            catch (Exception ex)
+            {
+                DebugLogger.Warn($"Home: cannot size '{recordPath}' for the clock: {ex.Message}");
+                return;
+            }
+
+            DateTime now = DateTime.UtcNow;
+            if (length != _clockRecordLength)
+            {
+                // The first sighting counts as growth: the match was detected because the record
+                // was being written moments ago.
+                _clockRecordLength = length;
+                _clockRecordGrewUtc = now;
+            }
+            bool growing = now - _clockRecordGrewUtc < RecordQuietAllowance;
+
+            MatchShareState.AdvanceEstimate(growing);
+
+            bool paused = MatchShareState.Paused;
+            if (paused != _clockLastPublishedPaused
+                || now - _clockLastPublishUtc >= EstimatedClockPublishInterval)
+            {
+                _clockLastPublishedPaused = paused;
+                _clockLastPublishUtc = now;
+                MatchStatusPublisher.Publish(webSocketService, appContext.GetAllowSpectateSetting());
+            }
+        }
+
         /// <summary>
         /// Updates only the match clock, for a player who has opted out of being watched.
         ///
@@ -541,8 +598,10 @@ namespace TadaPlay.Controls
                 // that is the entire reason the shadow-copy capture exists. Analyzing the live
                 // path here is what made the first version of this backstop do nothing at all:
                 // it failed silently on every call and the clock stayed at 00:00.
-                string snapshotPath = LiveRecordSnapshotStore.FindFor(recordPath)
-                                      ?? LiveRecordSnapshotStore.Current();
+                // This match's snapshot only. Falling back to the newest snapshot of any match
+                // reported the PREVIOUS game's length as this one's clock - and every 90s it
+                // pulled the estimated clock back to it.
+                string snapshotPath = LiveRecordSnapshotStore.FindFor(recordPath);
                 if (snapshotPath == null)
                 {
                     // No snapshot means nothing has been captured - true for a player who has
@@ -1661,6 +1720,12 @@ namespace TadaPlay.Controls
             // Before the upload check: whether the game is open matters to the status even
             // while the last match's record is still uploading.
             CheckGameProcess();
+
+            // Between real readings, carry the match clock forward so other players see it
+            // moving (see MatchShareState.AdvanceEstimate for why it cannot simply be read more
+            // often). Driven from here rather than the live-share timer, which only runs for
+            // players who allow spectating - opted-out players' clocks never moved at all.
+            AdvanceEstimatedClock();
 
             if (_uploadInProgress) return; // let the in-flight upload finish first
 

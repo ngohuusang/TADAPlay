@@ -275,7 +275,92 @@ namespace TadaPlay.Utils
             lock (Gate)
             {
                 DateTime now = DateTime.UtcNow;
+                if (durationMs > 0)
+                {
+                    _realMs = durationMs;
+                    _realUtc = now;
+                }
+                _estimateTickUtc = now;
+                ApplySample(durationMs, now);
+            }
+        }
 
+        // --- Estimated clock, between real readings ---
+        //
+        // A real reading needs the record, and the game holds that open without read sharing,
+        // so the only safe way in is a volume shadow copy - which freezes disk writes and makes
+        // the game stutter. Captures are therefore taken only while someone is watching, and
+        // with nobody watching the clock used to stop at the first capture (~90 real seconds,
+        // about 2:35 of game time at normal speed) and stay there for the rest of the match.
+        // Every player in a match nobody opened showed "đang chơi 02:38" for an hour.
+        //
+        // In between, the clock is carried forward at the game's speed while the record is
+        // still growing, which costs one file-size check. A real reading always replaces it.
+
+        private static long? _realMs;
+        private static DateTime? _realUtc;
+        private static DateTime? _estimateTickUtc;
+
+        // UserPatch 1.5 "Normal" game speed: game seconds per real second. Used until a real
+        // reading lets the actual speed be measured.
+        private const double DefaultSpeed = 1.7;
+
+        // A timer stalled longer than this (machine asleep, UI thread blocked) is not counted
+        // as play.
+        private static readonly TimeSpan MaxEstimateStep = TimeSpan.FromSeconds(20);
+
+        /// <summary>
+        /// Moves the clock on by the real time since the last call, at the game's speed, when
+        /// <paramref name="recordGrowing"/> says the game is still writing its record. A record
+        /// that has stopped growing means a paused game, so the clock is left to stand still and
+        /// the pause rule picks it up.
+        /// </summary>
+        public static void AdvanceEstimate(bool recordGrowing)
+        {
+            lock (Gate)
+            {
+                if (!_inGame) return;
+                DateTime now = DateTime.UtcNow;
+                if (_estimateTickUtc == null)
+                {
+                    _estimateTickUtc = now;
+                    return;
+                }
+
+                TimeSpan step = now - _estimateTickUtc.Value;
+                _estimateTickUtc = now;
+                if (!recordGrowing || step <= TimeSpan.Zero || step > MaxEstimateStep)
+                {
+                    EvaluatePause(now);
+                    return;
+                }
+
+                ApplySample(_durationMs + (long)(step.TotalMilliseconds * SpeedLocked()), now);
+            }
+        }
+
+        /// <summary>
+        /// Game time per real second, measured from the latest real reading against when the
+        /// match was first seen, and clamped to the speeds the game offers. The record appears
+        /// at game start, before the loading screen ends, so this reads slightly low - a clock
+        /// that runs a little slow rather than one that runs ahead.
+        /// </summary>
+        private static double SpeedLocked()
+        {
+            if (_realMs is long ms && _realUtc is DateTime at && _startedUtc is DateTime start)
+            {
+                double realSeconds = (at - start).TotalSeconds;
+                if (realSeconds >= 30)
+                {
+                    return Math.Max(1.0, Math.Min(2.0, ms / 1000.0 / realSeconds));
+                }
+            }
+            return DefaultSpeed;
+        }
+
+        private static void ApplySample(long durationMs, DateTime now)
+        {
+            {
                 if (_clockLastAdvancedUtc == null)
                 {
                     // First sample of the match: nothing to compare against yet.
@@ -303,6 +388,9 @@ namespace TadaPlay.Utils
             {
                 _inGame = true;
                 _startedUtc = DateTime.UtcNow;
+                _realMs = null;
+                _realUtc = null;
+                _estimateTickUtc = null;
                 _nextCaptureUtc = DateTime.UtcNow + CaptureInterval;
                 _recordPath = recordPath;
                 _durationMs = 0;
