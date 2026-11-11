@@ -1658,6 +1658,10 @@ namespace TadaPlay.Controls
 
         private void RecordWatchTimer_Tick(object sender, EventArgs e)
         {
+            // Before the upload check: whether the game is open matters to the status even
+            // while the last match's record is still uploading.
+            CheckGameProcess();
+
             if (_uploadInProgress) return; // let the in-flight upload finish first
 
             string gameFolder = appContext.GetGameFolder();
@@ -1713,6 +1717,71 @@ namespace TadaPlay.Controls
             }
 
             RecordWatchTick(current);
+        }
+
+        // When the current game process was first seen, and whether this game has already
+        // been warned about having no record.
+        private DateTime? _gameSeenSinceUtc;
+        private bool _noRecordWarned;
+        private static readonly TimeSpan NoRecordWarnAfter = TimeSpan.FromMinutes(5);
+
+        /// <summary>
+        /// Tracks whether the player's own game is open, so they show as playing even when no
+        /// record appears, and warns once per game when one has been open a while without one.
+        /// </summary>
+        private void CheckGameProcess()
+        {
+            bool running;
+            try
+            {
+                // A game opened to watch someone else is not this player playing.
+                if (_liveStream is { IsRunning: true })
+                {
+                    running = false;
+                }
+                else
+                {
+                    using var game = LiveRecordReader.FindGameProcess();
+                    running = game != null;
+                }
+            }
+            catch (Exception ex)
+            {
+                DebugLogger.Warn($"Home: game process check failed: {ex.Message}");
+                return;
+            }
+
+            if (running != MatchShareState.GameRunning)
+            {
+                MatchShareState.GameRunning = running;
+                DebugLogger.Info($"Home: game process {(running ? "started" : "exited")}.");
+                MatchStatusPublisher.Publish(webSocketService, appContext.GetAllowSpectateSetting());
+            }
+
+            if (!running)
+            {
+                _gameSeenSinceUtc = null;
+                _noRecordWarned = false;
+                return;
+            }
+
+            _gameSeenSinceUtc ??= DateTime.UtcNow;
+            if (_watchedRecordPath != null || MatchShareState.InGame)
+            {
+                // A record is being tracked, so this game is fine.
+                _noRecordWarned = true;
+                return;
+            }
+
+            if (_noRecordWarned || DateTime.UtcNow - _gameSeenSinceUtc.Value < NoRecordWarnAfter) return;
+            _noRecordWarned = true;
+
+            string folder = appContext.GetGameFolder();
+            DebugLogger.Warn($"Home: game open {NoRecordWarnAfter.TotalMinutes} min with no new record under '{folder}'.");
+            printLog($"[Cảnh báo] Game đã mở {NoRecordWarnAfter.TotalMinutes:0} phút nhưng chưa thấy file record mới " +
+                     $"trong thư mục game ({folder}). Nếu bạn đang trong trận: hãy bật \"Record Game\" ở phòng chờ " +
+                     "và kiểm tra thư mục game trong Cài đặt đúng là bản bạn đang chơi. Không có record thì trận " +
+                     "không được tải lên, không tính điểm và người khác không xem được.", Color.OrangeRed);
         }
 
         // Set on the UI thread, cleared on the scan's thread - volatile so the tick actually

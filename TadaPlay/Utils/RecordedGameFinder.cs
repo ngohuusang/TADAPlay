@@ -50,8 +50,9 @@ namespace TadaPlay.Utils
 
             try
             {
-                var newest = RecordPatterns
-                    .SelectMany(pattern => SafeEnumerate(gameFolder, pattern))
+                var newest = SearchRoots(gameFolder)
+                    .SelectMany(root => RecordPatterns.Select(pattern => (root, pattern)))
+                    .SelectMany(rp => SafeEnumerate(rp.root, rp.pattern))
                     .Select(path => new FileInfo(path))
                     .Where(fi => !fi.Name.StartsWith(ReplayPrefix, StringComparison.OrdinalIgnoreCase))
                     .Where(fi => !fi.Name.StartsWith(LivePrefix, StringComparison.OrdinalIgnoreCase))
@@ -97,11 +98,55 @@ namespace TadaPlay.Utils
             return Directory.Exists(saveGame) ? saveGame : gameFolder;
         }
 
+        /// <summary>
+        /// The game folder, plus its UAC VirtualStore copy when there is one.
+        ///
+        /// A game installed under Program Files and started without admin rights (a desktop
+        /// shortcut rather than this app) cannot write there, so Windows silently redirects its
+        /// records to %LOCALAPPDATA%\VirtualStore\Program Files\... . This app runs elevated
+        /// and sees only the real folder, so those matches were never noticed.
+        /// </summary>
+        public static System.Collections.Generic.IEnumerable<string> SearchRoots(string gameFolder)
+        {
+            yield return gameFolder;
+
+            string virtualStore = null;
+            try
+            {
+                string full = Path.GetFullPath(gameFolder);
+                string root = Path.GetPathRoot(full);
+                string local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+                if (!string.IsNullOrEmpty(root) && !string.IsNullOrEmpty(local))
+                {
+                    virtualStore = Path.Combine(local, "VirtualStore", full.Substring(root.Length));
+                }
+            }
+            catch (Exception ex)
+            {
+                DebugLogger.Warn($"RecordedGameFinder: cannot work out the VirtualStore folder: {ex.Message}");
+            }
+
+            if (virtualStore != null && Directory.Exists(virtualStore)) yield return virtualStore;
+        }
+
+        // IgnoreInaccessible: the SearchOption overload stops the WHOLE enumeration at the first
+        // subfolder it may not read, and that exception surfaced mid-scan - so one locked folder
+        // anywhere in the game tree meant no record was ever found again, every 5 seconds, and
+        // that player never showed as playing. AttributesToSkip 0 keeps hidden/system files in,
+        // as the old overload did.
+        private static readonly EnumerationOptions ScanOptions = new()
+        {
+            RecurseSubdirectories = true,
+            IgnoreInaccessible = true,
+            AttributesToSkip = 0,
+            MatchCasing = MatchCasing.CaseInsensitive,
+        };
+
         private static System.Collections.Generic.IEnumerable<string> SafeEnumerate(string root, string pattern)
         {
             try
             {
-                return Directory.EnumerateFiles(root, pattern, SearchOption.AllDirectories);
+                return Directory.EnumerateFiles(root, pattern, ScanOptions);
             }
             catch (Exception ex)
             {
