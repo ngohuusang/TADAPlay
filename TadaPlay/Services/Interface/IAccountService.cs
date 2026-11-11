@@ -46,6 +46,9 @@ public interface IAccountService
     Task<List<PlayerMatch>> GetPlayerMatchesAsync(string username, int limit = 30);
 
     Task<List<MatchSummary>> GetMatchesAsync();
+
+    /// <summary>One page of matches, newest first, filtered by player and/or time range.</summary>
+    Task<MatchPage> GetMatchesPageAsync(MatchQuery query);
     Task RenameMatchAsync(long matchId, string roomName);
 
     Task DownloadRecordAsync(long recordId, string destinationPath);

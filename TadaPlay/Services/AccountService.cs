@@ -527,6 +527,42 @@ public class AccountService : IAccountService
         return result?.Matches ?? new List<MatchSummary>();
     }
 
+    public async Task<MatchPage> GetMatchesPageAsync(MatchQuery query)
+    {
+        _httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _appContext.GetJwtTokenSetting());
+
+        var url = new System.Text.StringBuilder(BASE_URL)
+            .Append("?action=matches")
+            .Append("&limit=").Append(query.Limit)
+            .Append("&offset=").Append(query.Offset);
+        if (!string.IsNullOrWhiteSpace(query.Player))
+        {
+            url.Append("&q=").Append(Uri.EscapeDataString(query.Player.Trim()));
+        }
+        // finished_at is stored in UTC, so the bounds go over in UTC too.
+        if (query.FromUtc.HasValue)
+        {
+            url.Append("&from=").Append(Uri.EscapeDataString(
+                query.FromUtc.Value.ToString("yyyy-MM-dd HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture)));
+        }
+        if (query.ToUtc.HasValue)
+        {
+            url.Append("&to=").Append(Uri.EscapeDataString(
+                query.ToUtc.Value.ToString("yyyy-MM-dd HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture)));
+        }
+
+        var response = await _httpClient.GetAsync(url.ToString());
+        response.EnsureSuccessStatusCode();
+
+        var body = await response.Content.ReadAsStringAsync();
+        var result = JsonConvert.DeserializeObject<MatchesResponse>(body);
+        return new MatchPage
+        {
+            Matches = result?.Matches ?? new List<MatchSummary>(),
+            Total = result?.Total,
+        };
+    }
+
     /// <summary>
     /// Renames a match. Allowed for the account that uploaded it and for admins; the server
     /// decides, so a refusal comes back as an error rather than being prevented here.

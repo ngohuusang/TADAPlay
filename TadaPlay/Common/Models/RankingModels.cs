@@ -144,6 +144,33 @@ namespace TadaPlay.Common.Models
 
         [JsonProperty("matches")]
         public List<MatchSummary> Matches { get; set; }
+
+        /// <summary>Matches under the current filter, across all pages. Null from a server
+        /// that predates paging.</summary>
+        [JsonProperty("total")]
+        public int? Total { get; set; }
+    }
+
+    /// <summary>What to ask api.php?action=matches for: one page, optionally filtered.</summary>
+    public class MatchQuery
+    {
+        public int Offset { get; set; }
+        public int Limit { get; set; } = 50;
+
+        /// <summary>A player name, matched loosely (case and accents ignored).</summary>
+        public string Player { get; set; }
+
+        /// <summary>Inclusive lower bound, in UTC.</summary>
+        public DateTime? FromUtc { get; set; }
+
+        /// <summary>Exclusive upper bound, in UTC.</summary>
+        public DateTime? ToUtc { get; set; }
+    }
+
+    public class MatchPage
+    {
+        public List<MatchSummary> Matches { get; set; } = new();
+        public int? Total { get; set; }
     }
 
     public class MatchSummary

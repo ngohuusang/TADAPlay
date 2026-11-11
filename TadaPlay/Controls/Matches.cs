@@ -28,6 +28,23 @@ namespace TadaPlay.Controls
         private readonly Button _replayButton;
         private readonly Button _renameButton;
 
+        // Filtering and paging. The server does both: it only ever sends one page, so a
+        // filter applied here would only search the page already on screen.
+        private const int PageSize = 50;
+        private readonly TextBox _searchBox;
+        private readonly DateTimePicker _fromPicker;
+        private readonly DateTimePicker _toPicker;
+        private readonly Button _clearFilterButton;
+        private readonly Button _prevButton;
+        private readonly Button _nextButton;
+        private readonly Label _pageLabel;
+        private readonly System.Windows.Forms.Timer _searchDebounce;
+        private int _page;          // zero-based
+        private int? _total;        // null when the server does not report one
+        private int _shownCount;
+        private int _requestSeq;    // drops responses that a newer request has overtaken
+        private bool _suspendReload; // set while Xóa lọc resets several controls at once
+
         public Matches(IAccountService accountService, IAppContext appContext)
         {
             _accountService = accountService;
@@ -51,6 +68,54 @@ namespace TadaPlay.Controls
             header.Controls.Add(title);
             header.Controls.Add(backButton);
             header.Controls.Add(_refreshButton);
+
+            var filterBar = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Top,
+                Height = 40,
+                Padding = new Padding(10, 4, 10, 0),
+                WrapContents = false,
+            };
+            _searchBox = new TextBox
+            {
+                Width = 220,
+                PlaceholderText = "Tìm theo tên người chơi...",
+                Margin = new Padding(3, 5, 12, 3),
+            };
+            // Typing searches on its own after a short pause, so each keystroke is not a request;
+            // Enter searches at once.
+            _searchDebounce = new System.Windows.Forms.Timer { Interval = 400 };
+            _searchDebounce.Tick += async (s, e) => { _searchDebounce.Stop(); await ReloadFromFirstPageAsync(); };
+            _searchBox.TextChanged += (s, e) =>
+            {
+                if (_suspendReload) return;
+                _searchDebounce.Stop();
+                _searchDebounce.Start();
+            };
+            _searchBox.KeyDown += async (s, e) =>
+            {
+                if (e.KeyCode != Keys.Enter) return;
+                e.SuppressKeyPress = true;
+                _searchDebounce.Stop();
+                await ReloadFromFirstPageAsync();
+            };
+
+            // ShowCheckBox: an unticked date means "no bound on this side", which is the
+            // default - a range is something the player opts into.
+            _fromPicker = NewDatePicker();
+            _toPicker = NewDatePicker();
+            _fromPicker.ValueChanged += async (s, e) => await ReloadFromFirstPageAsync();
+            _toPicker.ValueChanged += async (s, e) => await ReloadFromFirstPageAsync();
+
+            _clearFilterButton = new Button { Text = "Xóa lọc", Width = 80, Height = 27, Margin = new Padding(8, 4, 3, 3) };
+            _clearFilterButton.Click += async (s, e) => await ClearFiltersAsync();
+
+            filterBar.Controls.Add(_searchBox);
+            filterBar.Controls.Add(FilterCaption("Từ ngày"));
+            filterBar.Controls.Add(_fromPicker);
+            filterBar.Controls.Add(FilterCaption("Đến ngày"));
+            filterBar.Controls.Add(_toPicker);
+            filterBar.Controls.Add(_clearFilterButton);
 
             _listView = new ListView
             {
@@ -92,6 +157,29 @@ namespace TadaPlay.Controls
             footer.Controls.Add(detailsButton);
             footer.Controls.Add(_renameButton);
 
+            var pager = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Left,
+                Width = 300,
+                WrapContents = false,
+            };
+            _prevButton = new Button { Text = "‹ Trước", Width = 80, Height = 34, Enabled = false };
+            _prevButton.Click += async (s, e) => { if (_page > 0) { _page--; await LoadAsync(); } };
+            _pageLabel = new Label
+            {
+                Text = "Trang 1",
+                AutoSize = false,
+                Width = 120,
+                Height = 34,
+                TextAlign = ContentAlignment.MiddleCenter,
+            };
+            _nextButton = new Button { Text = "Sau ›", Width = 80, Height = 34, Enabled = false };
+            _nextButton.Click += async (s, e) => { _page++; await LoadAsync(); };
+            pager.Controls.Add(_prevButton);
+            pager.Controls.Add(_pageLabel);
+            pager.Controls.Add(_nextButton);
+            footer.Controls.Add(pager);
+
             _statusLabel = new Label
             {
                 Dock = DockStyle.Bottom,
@@ -103,9 +191,94 @@ namespace TadaPlay.Controls
             Controls.Add(_listView);
             Controls.Add(_statusLabel);
             Controls.Add(footer);
+            Controls.Add(filterBar);
             Controls.Add(header);
 
+            Disposed += (s, e) => _searchDebounce.Dispose();
+
             Load += async (s, e) => await LoadAsync();
+        }
+
+        private static DateTimePicker NewDatePicker() => new DateTimePicker
+        {
+            Format = DateTimePickerFormat.Custom,
+            CustomFormat = "dd/MM/yyyy",
+            ShowCheckBox = true,
+            Checked = false,
+            Width = 130,
+            Margin = new Padding(3, 4, 3, 3),
+        };
+
+        private static Label FilterCaption(string text) => new Label
+        {
+            Text = text,
+            AutoSize = true,
+            Margin = new Padding(6, 9, 0, 0),
+            ForeColor = Color.DimGray,
+        };
+
+        private async System.Threading.Tasks.Task ReloadFromFirstPageAsync()
+        {
+            if (_suspendReload) return;
+            _page = 0;
+            await LoadAsync();
+        }
+
+        /// <summary>Resets all three filters with a single reload rather than one per control.</summary>
+        private async System.Threading.Tasks.Task ClearFiltersAsync()
+        {
+            _suspendReload = true;
+            try
+            {
+                _searchDebounce.Stop();
+                _searchBox.Text = "";
+                _fromPicker.Checked = false;
+                _toPicker.Checked = false;
+            }
+            finally
+            {
+                _suspendReload = false;
+            }
+            await ReloadFromFirstPageAsync();
+        }
+
+        /// <summary>
+        /// The current filter as a server query. The pickers hold the player's LOCAL calendar
+        /// days; the server compares against UTC, so a day becomes [local midnight, next local
+        /// midnight) converted to UTC - otherwise a match at 01:00 in Vietnam would land on the
+        /// previous day.
+        /// </summary>
+        private MatchQuery BuildQuery()
+        {
+            var query = new MatchQuery
+            {
+                Offset = _page * PageSize,
+                Limit = PageSize,
+                Player = string.IsNullOrWhiteSpace(_searchBox.Text) ? null : _searchBox.Text.Trim(),
+            };
+            if (_fromPicker.Checked)
+            {
+                query.FromUtc = DateTime.SpecifyKind(_fromPicker.Value.Date, DateTimeKind.Local).ToUniversalTime();
+            }
+            if (_toPicker.Checked)
+            {
+                query.ToUtc = DateTime.SpecifyKind(_toPicker.Value.Date.AddDays(1), DateTimeKind.Local).ToUniversalTime();
+            }
+            return query;
+        }
+
+        private bool HasFilter =>
+            !string.IsNullOrWhiteSpace(_searchBox.Text) || _fromPicker.Checked || _toPicker.Checked;
+
+        private void UpdatePager(bool loading)
+        {
+            int pages = _total.HasValue ? Math.Max(1, (int)Math.Ceiling(_total.Value / (double)PageSize)) : 0;
+            _pageLabel.Text = pages > 0 ? $"Trang {_page + 1} / {pages}" : $"Trang {_page + 1}";
+            _prevButton.Enabled = !loading && _page > 0;
+            // Without a total (an older server) a full page is the only hint there may be more.
+            _nextButton.Enabled = !loading && (_total.HasValue
+                ? (_page + 1) * PageSize < _total.Value
+                : _shownCount == PageSize);
         }
 
         private void UpdateReplayButton()
@@ -208,12 +381,28 @@ namespace TadaPlay.Controls
 
         private async System.Threading.Tasks.Task LoadAsync()
         {
+            if (_fromPicker.Checked && _toPicker.Checked && _fromPicker.Value.Date > _toPicker.Value.Date)
+            {
+                _statusLabel.ForeColor = Color.DarkOrange;
+                _statusLabel.Text = "\"Từ ngày\" đang sau \"Đến ngày\" - hãy chọn lại khoảng thời gian.";
+                return;
+            }
+
+            int seq = ++_requestSeq;
             _refreshButton.Enabled = false;
+            UpdatePager(loading: true);
             _statusLabel.ForeColor = Color.Gray;
             _statusLabel.Text = "Đang tải danh sách trận đấu...";
             try
             {
-                var matches = await _accountService.GetMatchesAsync();
+                MatchPage page = await _accountService.GetMatchesPageAsync(BuildQuery());
+                // A newer search or page click was made while this one was in flight; its
+                // result is the one the player is waiting for, so this one is dropped.
+                if (seq != _requestSeq || IsDisposed) return;
+
+                var matches = page.Matches;
+                _total = page.Total;
+                _shownCount = matches.Count;
 
                 _listView.BeginUpdate();
                 _listView.Items.Clear();
@@ -252,20 +441,33 @@ namespace TadaPlay.Controls
                 _listView.EndUpdate();
                 UiUtils.StretchLastListViewColumn(_listView, 130);
 
-                _statusLabel.Text = matches.Count == 0
-                    ? "Chưa có trận đấu nào."
-                    : $"{matches.Count} trận đấu. Chọn một trận và bấm \"Phát lại\".";
+                if (matches.Count == 0)
+                {
+                    _statusLabel.Text = HasFilter ? "Không có trận đấu nào khớp với bộ lọc." : "Chưa có trận đấu nào.";
+                }
+                else
+                {
+                    int first = _page * PageSize + 1;
+                    int last = _page * PageSize + matches.Count;
+                    string range = _total.HasValue ? $"{first}–{last} trong {_total} trận" : $"{first}–{last}";
+                    _statusLabel.Text = $"Hiển thị {range}{(HasFilter ? " (đã lọc)" : "")}. Chọn một trận và bấm \"Phát lại\".";
+                }
             }
             catch (Exception ex)
             {
+                if (seq != _requestSeq || IsDisposed) return;
                 DebugLogger.Error($"Matches: load failed: {ex.Message}");
                 _statusLabel.ForeColor = Color.Firebrick;
                 _statusLabel.Text = "Lỗi tải danh sách trận đấu: " + ex.Message;
             }
             finally
             {
-                _refreshButton.Enabled = true;
-                UpdateReplayButton();
+                if (seq == _requestSeq && !IsDisposed)
+                {
+                    _refreshButton.Enabled = true;
+                    UpdatePager(loading: false);
+                    UpdateReplayButton();
+                }
             }
         }
 
