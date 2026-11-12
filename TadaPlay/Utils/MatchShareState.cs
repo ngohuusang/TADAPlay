@@ -84,13 +84,11 @@ namespace TadaPlay.Utils
         private static volatile bool _gameRunning;
 
         /// <summary>
-        /// True while the player's own game is open, whether or not a record has appeared.
+        /// True while the player's own game is open - menu, lobby or match alike.
         ///
-        /// The record file is how a match is normally detected, but a game with Record Game
-        /// off, or writing to a folder this app does not watch, never produces one - and that
-        /// player looked idle to everyone for the whole match. Kept apart from
-        /// <see cref="InGame"/> because everything tied to the record (captures, the clock,
-        /// spectating) needs a record; this only feeds the status other players see.
+        /// Not a sign of playing: the game is open long before a match starts. Used only to
+        /// warn when a game has been open a long time without ever producing a record
+        /// (Record Game off, or a game folder this app does not watch).
         /// </summary>
         public static bool GameRunning
         {

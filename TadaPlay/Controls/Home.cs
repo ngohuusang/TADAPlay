@@ -1759,7 +1759,7 @@ namespace TadaPlay.Controls
                         UiUtils.InvokeOnUiThread(this, () =>
                         {
                             // A scan started before the last one landed could double-report.
-                            if (_watchedRecordPath == null) OnNewRecordDetected(found);
+                            if (_watchedRecordPath == null) ConsiderNewRecord(found);
                         }, "HOME_RECORD_FOUND");
                     }
                     catch (Exception ex)
@@ -1791,8 +1791,8 @@ namespace TadaPlay.Controls
         private static readonly TimeSpan NoRecordWarnAfter = TimeSpan.FromMinutes(5);
 
         /// <summary>
-        /// Tracks whether the player's own game is open, so they show as playing even when no
-        /// record appears, and warns once per game when one has been open a while without one.
+        /// Tracks whether the player's own game is open, and warns once per game when one has
+        /// been open a while without producing a record.
         /// </summary>
         private void CheckGameProcess()
         {
@@ -1818,9 +1818,9 @@ namespace TadaPlay.Controls
 
             if (running != MatchShareState.GameRunning)
             {
+                // Not published: an open game is not a match (see MatchStatusPublisher).
                 MatchShareState.GameRunning = running;
                 DebugLogger.Info($"Home: game process {(running ? "started" : "exited")}.");
-                MatchStatusPublisher.Publish(webSocketService, appContext.GetAllowSpectateSetting());
             }
 
             if (!running)
@@ -1847,6 +1847,46 @@ namespace TadaPlay.Controls
                      $"trong thư mục game ({folder}). Nếu bạn đang trong trận: hãy bật \"Record Game\" ở phòng chờ " +
                      "và kiểm tra thư mục game trong Cài đặt đúng là bản bạn đang chơi. Không có record thì trận " +
                      "không được tải lên, không tính điểm và người khác không xem được.", Color.OrangeRed);
+        }
+
+        // A new record seen once but not yet growing, and its size then.
+        private string _candidateRecordPath;
+        private long _candidateRecordLength;
+
+        /// <summary>
+        /// Starts tracking a newly found record only once it has grown between two scans.
+        ///
+        /// The game writes a record's header while the match is still loading, and only the
+        /// match itself keeps appending to it. Announcing the match the moment the file
+        /// appeared showed players as playing during the loading screen; waiting for the size
+        /// to change costs one scan (about 5 seconds) and means the match is really running.
+        /// </summary>
+        private void ConsiderNewRecord(string found)
+        {
+            long length;
+            try
+            {
+                length = new FileInfo(found).Length;
+            }
+            catch (Exception ex)
+            {
+                DebugLogger.Warn($"Home: cannot size new record '{found}': {ex.Message}");
+                return;
+            }
+
+            if (!string.Equals(_candidateRecordPath, found, StringComparison.OrdinalIgnoreCase))
+            {
+                _candidateRecordPath = found;
+                _candidateRecordLength = length;
+                DebugLogger.Info($"Home: new record '{Path.GetFileName(found)}' ({length} bytes) - " +
+                                 "waiting for it to grow before treating it as a match.");
+                return;
+            }
+
+            if (length <= _candidateRecordLength) return; // not growing yet: still loading
+
+            _candidateRecordPath = null;
+            OnNewRecordDetected(found);
         }
 
         // Set on the UI thread, cleared on the scan's thread - volatile so the tick actually

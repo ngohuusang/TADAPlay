@@ -34,13 +34,10 @@ namespace TadaPlay.Utils
         {
             if (socket == null) return;
 
-            bool recordInGame = MatchShareState.InGame;
-            // The game being open counts too: with no record (Record Game off, or written
-            // somewhere this app does not look) it is the only sign of a match at all.
-            bool inGame = recordInGame || MatchShareState.GameRunning;
-            // Without a record there is nothing to watch, so say "playing, not spectatable"
-            // rather than show a countdown to a capture that is never coming.
-            if (!recordInGame && inGame) allowSpectate = false;
+            // Only a match whose record is being written counts as playing. 3.37.5 also
+            // counted the game merely being open, which showed players sitting in the menu or
+            // a lobby as "đang chơi" - wrong far more often than the no-record case it fixed.
+            bool inGame = MatchShareState.InGame;
             string currentMatch = MatchShareState.CurrentRecordPath;
             // WatchableNow first: while the running match is still too young, other players
             // are shown the countdown rather than a spectate button that would be refused.
