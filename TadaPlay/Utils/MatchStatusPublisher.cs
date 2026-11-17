@@ -34,6 +34,9 @@ namespace TadaPlay.Utils
         {
             if (socket == null) return;
 
+            // Only a match whose record is being written counts as playing. 3.37.5 also
+            // counted the game merely being open, which showed players sitting in the menu or
+            // a lobby as "đang chơi" - wrong far more often than the no-record case it fixed.
             bool inGame = MatchShareState.InGame;
             string currentMatch = MatchShareState.CurrentRecordPath;
             // WatchableNow first: while the running match is still too young, other players

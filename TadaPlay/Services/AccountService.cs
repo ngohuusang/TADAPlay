@@ -114,7 +114,9 @@ public class AccountService : IAccountService
 
     public async Task<bool> DoAuthAsync()
     {
-        if (!_appContext.GetAutoLoginSetting())
+        // No stored token (e.g. the last session ended because the account logged in elsewhere):
+        // nothing to resume, so show the login form rather than an error.
+        if (!_appContext.GetAutoLoginSetting() || string.IsNullOrEmpty(_appContext.GetJwtTokenSetting()))
         {
             return false;
         }
@@ -124,9 +126,19 @@ public class AccountService : IAccountService
         // launch after the first. The version header is registered once in the constructor, so
         // this body-less GET already carries it.
         var response = await _httpClient.GetAsync(BASE_URL + "?action=auth");
+        var responseBody = await response.Content.ReadAsStringAsync();
+
+        // A token that is expired, or whose session a login on another PC replaced, can never
+        // succeed - drop it so the next launch does not retry it, and show the server's reason.
+        if (response.StatusCode == HttpStatusCode.Unauthorized)
+        {
+            string message = null;
+            try { message = JObject.Parse(responseBody)["message"]?.ToString(); } catch (Exception) { }
+            ClearLocalSession();
+            throw new LoginException(string.IsNullOrWhiteSpace(message) ? "Phiên đăng nhập đã hết hạn." : message);
+        }
         response.EnsureSuccessStatusCode();
 
-        var responseBody = await response.Content.ReadAsStringAsync();
         var apiResponse = JsonConvert.DeserializeObject<LoginResponse>(responseBody);
 
         ThrowIfUpdateRequired(apiResponse);
@@ -433,6 +445,66 @@ public class AccountService : IAccountService
         return result;
     }
 
+    /// <summary>
+    /// Every in-game name this account has been seen playing under.
+    ///
+    /// Fetched when a player's detail is opened rather than carried on the lobby broadcast: the
+    /// broadcast repeats every few seconds for every user, so a per-user list would be paid for
+    /// constantly and read almost never.
+    ///
+    /// Never throws. A detail dialog that cannot list previous names is still a useful dialog,
+    /// and failing the whole thing over the least important line in it would be the wrong trade.
+    /// </summary>
+    public async Task<List<PlayerGameName>> GetPlayerNamesAsync(string username)
+    {
+        if (string.IsNullOrWhiteSpace(username)) return new List<PlayerGameName>();
+
+        try
+        {
+            _httpClient.DefaultRequestHeaders.Authorization =
+                new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _appContext.GetJwtTokenSetting());
+            var response = await _httpClient.GetAsync(
+                BASE_URL + "?action=player_names&username=" + Uri.EscapeDataString(username));
+            response.EnsureSuccessStatusCode();
+
+            var body = await response.Content.ReadAsStringAsync();
+            var result = JsonConvert.DeserializeObject<PlayerNamesResponse>(body);
+            return result?.Names ?? new List<PlayerGameName>();
+        }
+        catch (Exception ex)
+        {
+            DebugLogger.Warn($"AccountService: cannot list in-game names for '{username}': {ex.Message}");
+            return new List<PlayerGameName>();
+        }
+    }
+
+    /// <summary>
+    /// The matches a player appeared in. Never throws - the detail dialog that shows this is
+    /// perfectly readable without it, so a failure leaves the list empty and is logged instead.
+    /// </summary>
+    public async Task<List<PlayerMatch>> GetPlayerMatchesAsync(string username, int limit = 30)
+    {
+        if (string.IsNullOrWhiteSpace(username)) return new List<PlayerMatch>();
+
+        try
+        {
+            _httpClient.DefaultRequestHeaders.Authorization =
+                new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _appContext.GetJwtTokenSetting());
+            var response = await _httpClient.GetAsync(
+                BASE_URL + "?action=player_matches&username=" + Uri.EscapeDataString(username) + "&limit=" + limit);
+            response.EnsureSuccessStatusCode();
+
+            var body = await response.Content.ReadAsStringAsync();
+            var result = JsonConvert.DeserializeObject<PlayerMatchesResponse>(body);
+            return result?.Matches ?? new List<PlayerMatch>();
+        }
+        catch (Exception ex)
+        {
+            DebugLogger.Warn($"AccountService: cannot list matches for '{username}': {ex.Message}");
+            return new List<PlayerMatch>();
+        }
+    }
+
     public async Task<List<RankingEntry>> GetLeaderboardAsync()
     {
         _httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _appContext.GetJwtTokenSetting());
@@ -453,6 +525,42 @@ public class AccountService : IAccountService
         var body = await response.Content.ReadAsStringAsync();
         var result = JsonConvert.DeserializeObject<MatchesResponse>(body);
         return result?.Matches ?? new List<MatchSummary>();
+    }
+
+    public async Task<MatchPage> GetMatchesPageAsync(MatchQuery query)
+    {
+        _httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _appContext.GetJwtTokenSetting());
+
+        var url = new System.Text.StringBuilder(BASE_URL)
+            .Append("?action=matches")
+            .Append("&limit=").Append(query.Limit)
+            .Append("&offset=").Append(query.Offset);
+        if (!string.IsNullOrWhiteSpace(query.Player))
+        {
+            url.Append("&q=").Append(Uri.EscapeDataString(query.Player.Trim()));
+        }
+        // finished_at is stored in UTC, so the bounds go over in UTC too.
+        if (query.FromUtc.HasValue)
+        {
+            url.Append("&from=").Append(Uri.EscapeDataString(
+                query.FromUtc.Value.ToString("yyyy-MM-dd HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture)));
+        }
+        if (query.ToUtc.HasValue)
+        {
+            url.Append("&to=").Append(Uri.EscapeDataString(
+                query.ToUtc.Value.ToString("yyyy-MM-dd HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture)));
+        }
+
+        var response = await _httpClient.GetAsync(url.ToString());
+        response.EnsureSuccessStatusCode();
+
+        var body = await response.Content.ReadAsStringAsync();
+        var result = JsonConvert.DeserializeObject<MatchesResponse>(body);
+        return new MatchPage
+        {
+            Matches = result?.Matches ?? new List<MatchSummary>(),
+            Total = result?.Total,
+        };
     }
 
     /// <summary>
@@ -579,10 +687,26 @@ public class AccountService : IAccountService
 
     public async Task<bool> DoLogoutAsync()
     {
-        await ReleaseVpnProfileAsync();
+        // Best effort: the call is a no-op on the server now, and it fails outright when a login
+        // on another PC has already replaced this session (401). Neither is a reason to leave
+        // the player stuck logged in, so the local session is cleared regardless.
+        try
+        {
+            await ReleaseVpnProfileAsync();
+        }
+        catch (Exception ex)
+        {
+            DebugLogger.Warn("AccountService: release_vpn_profile failed during logout: " + ex.Message);
+        }
+
+        ClearLocalSession();
+        return true;
+    }
+
+    public void ClearLocalSession()
+    {
         _appContext.SetJwtTokenSetting(null);
         _appContext.SetCurrentUser(null);
-
-        return true;
+        _appContext.SetVpnProfile(null);
     }
 }

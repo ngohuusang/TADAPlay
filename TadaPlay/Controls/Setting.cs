@@ -20,10 +20,27 @@ namespace TadaPlay.Controls
         // Card heights. Explicit rather than measured because the modal is sized from this
         // control's Height (see the note in the constructor), so the numbers have to be known
         // before anything is laid out.
-        private const int DisplayCardHeight = 180;
-        private const int FolderCardHeight = 272;
-        private const int DiagnosticCardHeight = 220;
+        // Every card is 80 of chrome (a 56 title band plus 12/12 content padding) and then its
+        // own content, so the numbers below are that 80 plus what each one actually holds.
+        // Kept tight on purpose: four roomy cards came to 914 pixels in a window that can show
+        // about 550, so the dialog scrolled to reach settings that fit on one screen if the
+        // space is not spent on explanations of switches that explain themselves.
+        private const int FolderCardHeight = 176;      // path field 40, gap 8, a row of buttons 48
+        private const int DisplayCardHeight = 132;     // one 52 segmented control
+        private const int OptionsCardHeight = 172;     // two 42 switch rows, plus 8 so the lower
+                                                       // one is not flush with the card's edge
         private const int CardGap = 14;
+
+        /// <summary>
+        /// What the modal puts around the content: its title bar and its Cancel/OK row. Measured
+        /// off the rendered dialog (about 111 pixels) with a little in hand, rather than guessed -
+        /// the first guess of 170 was pessimistic enough to force a scrollbar onto a dialog that
+        /// fits.
+        /// </summary>
+        private const int ModalChrome = 150;
+
+        /// <summary>Never shrink below this, even in a very small window - it would show nothing useful.</summary>
+        private const int MinimumDialogHeight = 420;
 
         Form form;
         private readonly IAppContext _appContext;
@@ -41,7 +58,9 @@ namespace TadaPlay.Controls
             this.BackColor = UiTheme.PageBg;
             // Even bottom padding: at 4 the last card's Save button sat almost on the edge of
             // the dialog, which reads as the screen having been cut off.
-            this.Padding = new Padding(14, 14, 14, 16);
+            // The bottom is deliberately deeper than the top: below it sits the modal's own
+            // Cancel/OK row, and at 16 the last card ran straight into it.
+            this.Padding = new Padding(14, 14, 14, 28);
             // Deliberately NOT using AutoSize/GrowAndShrink here: a plain UserControl's default
             // layout engine doesn't compute preferred size from Dock=Top children (that's a
             // FlowLayoutPanel-only behavior), so AutoSize would just fight the explicit Height
@@ -59,17 +78,33 @@ namespace TadaPlay.Controls
             {
                 // Added first, so it ends up last: the log switch is the card a player needs
                 // least often, and only when someone has asked them for a log.
-                Controls.Add(BuildDiagnosticSection());
+                Controls.Add(BuildOptionsSection());
                 Controls.Add(BuildDisplayModeSection());
                 Controls.Add(BuildGameFolderSection());
-                totalHeight += DisplayCardHeight + FolderCardHeight + DiagnosticCardHeight
+                totalHeight += FolderCardHeight + DisplayCardHeight + OptionsCardHeight
                                + CardGap * 3;
             }
 
             // AntdUI.Modal.open's (Form, string, object) overload does read control.Height
             // correctly to size the dialog - it just needs a real value here, which AutoSize
             // was never actually providing (see note above).
-            this.Height = totalHeight;
+            //
+            // But only up to what the window can actually show. The dialog is sized from this
+            // number with no upper bound of its own, so a tall one is simply cut off at the
+            // bottom: the last card loses its padding and the card above it loses whatever sat
+            // at its bottom edge - which is exactly what adding a fourth card did. Past that
+            // point the cards scroll instead, so a section can never become unreachable, on this
+            // window or on a smaller screen.
+            int visible = (form?.ClientSize.Height ?? 720) - ModalChrome;
+            if (totalHeight > visible)
+            {
+                this.AutoScroll = true;
+                this.Height = Math.Max(MinimumDialogHeight, visible);
+            }
+            else
+            {
+                this.Height = totalHeight;
+            }
         }
 
         // Display mode picker: which of the two app-bundled WK launcher exes (see
@@ -110,44 +145,85 @@ namespace TadaPlay.Controls
                     : GameExecutablePreparer.WideMode);
             };
 
-            var hint = new AntdUI.Label
-            {
-                Dock = DockStyle.Top,
-                Height = 36,
-                Text = "Wide dùng toàn bộ chiều ngang màn hình. Center giữ khung game ở giữa.",
-                ForeColor = UiTheme.Muted,
-                Font = new Font("Segoe UI", 9F),
-                TextAlign = ContentAlignment.MiddleLeft,
-                TextMultiLine = true,
-            };
-
-            // Dock=Top stacks in reverse add order: add bottom-most first.
-            content.Controls.Add(hint);
+            // No explanatory line under it: the two options already say "màn hình rộng" and
+            // "căn giữa" on their own faces, and a sentence repeating that cost 36 pixels of a
+            // dialog that had run out of them.
             content.Controls.Add(modes);
             return card;
         }
 
         /// <summary>
-        /// The debug-log switch.
+        /// The two switches that used to be a card each: launching with Windows, and the debug log.
         ///
-        /// The app used to write Log\tadaplay.log unconditionally on every machine, every
-        /// session. Almost nobody ever reads one, so it was pure cost: a file that grew all
-        /// evening for no reader. It is now off unless it is switched on here, which is the
-        /// only time it is worth anything - when something has gone wrong and someone has asked
-        /// for it.
-        ///
-        /// The button beside it opens the folder, because a player who has just been asked for
-        /// their log should not also have to be told where the app was installed.
+        /// Together now because they are the same shape of thing - one line, one switch - and two
+        /// cards spent 160 pixels of chrome to say that twice. Their explanatory paragraphs went
+        /// with them: a switch reading "Ghi nhật ký ra file" does not need a sentence below it
+        /// saying that it writes a log to a file.
         /// </summary>
-        private Control BuildDiagnosticSection()
+        private Control BuildOptionsSection()
         {
-            var card = UiTheme.Card(UiTheme.IconLog, "Nhật ký gỡ lỗi",
-                                    "Chỉ bật khi cần hỗ trợ",
-                                    UiTheme.AccentDiagnostic, DiagnosticCardHeight,
+            var card = UiTheme.Card(UiTheme.IconLog, "Tùy chọn",
+                                    "Khởi động máy và nhật ký",
+                                    UiTheme.AccentDiagnostic, OptionsCardHeight,
                                     out System.Windows.Forms.Panel content);
 
-            // A compact row rather than a docked switch: Dock=Top stretches an AntdUI.Switch
-            // across the full width, which reads as a grey bar rather than a toggle.
+            var openLogButton = UiTheme.Quiet("Mở thư mục nhật ký", UiTheme.IconLog, height: 32);
+            openLogButton.Enabled = Directory.Exists(DebugLogger.LogFolder);
+            openLogButton.Click += (s, e) =>
+            {
+                try
+                {
+                    if (!Directory.Exists(DebugLogger.LogFolder)) return;
+                    // UseShellExecute so this hands the path to Explorer rather than trying to
+                    // run it - a directory is not an executable.
+                    Process.Start(new ProcessStartInfo(DebugLogger.LogFolder) { UseShellExecute = true });
+                }
+                catch (Exception ex)
+                {
+                    AntdUI.Modal.open(new AntdUI.Modal.Config(form, "Lỗi",
+                        $"Không mở được thư mục nhật ký: {ex.Message}", AntdUI.TType.Error)
+                    { CancelText = null, OkText = "Đóng" });
+                }
+            };
+
+            // The log's folder button sits on the log's own row, where a paragraph used to be.
+            Control logRow = SwitchRow("Ghi nhật ký ra file", 250,
+                _appContext.GetDebugLogSetting,
+                on =>
+                {
+                    _appContext.SetDebugLogSetting(on);
+                    // Applied now rather than at the next start: someone reproducing a problem
+                    // needs the log for the run they are about to do, not the one after it.
+                    DebugLogger.SetFileLogging(on);
+                    if (on) DebugLogger.Info("Debug log switched on from Cài đặt.");
+                    openLogButton.Enabled = Directory.Exists(DebugLogger.LogFolder);
+                });
+            logRow.Controls.Add(UiTheme.ButtonColumn(openLogButton, DockStyle.Right, 180, top: 5, gap: 0));
+
+            // Off takes effect at once - the scheduled task is removed there and then, not at the
+            // next launch - so a player who does not want this app starting with their computer
+            // can see it gone rather than take it on trust.
+            Control startupRow = SwitchRow("Mở cùng Windows (chạy ẩn trong khay hệ thống)", 430,
+                _appContext.GetStartWithWindowsSetting,
+                on =>
+                {
+                    _appContext.SetStartWithWindowsSetting(on);
+                    DebugLogger.Info($"Start with Windows switched {(on ? "on" : "off")} from Cài đặt.");
+                });
+
+            // Dock=Top stacks in reverse add order: add bottom-most first.
+            content.Controls.Add(logRow);
+            content.Controls.Add(startupRow);
+            return card;
+        }
+
+        /// <summary>
+        /// One line carrying a switch. The current value is read through <paramref name="read"/>
+        /// each time rather than captured once, so a row can never act on a stale copy of it.
+        /// </summary>
+        private static Control SwitchRow(string caption, int captionWidth,
+                                         Func<bool> read, Action<bool> write)
+        {
             var row = new System.Windows.Forms.Panel
             {
                 Dock = DockStyle.Top,
@@ -159,37 +235,17 @@ namespace TadaPlay.Controls
             {
                 Size = new Size(44, 24),
                 Location = new Point(0, 9),
-                Checked = _appContext.GetDebugLogSetting(),
+                Checked = read(),
             };
 
-            var caption = new AntdUI.Label
+            var label = new AntdUI.Label
             {
-                Text = "Ghi nhật ký ra file",
+                Text = caption,
                 Font = new Font("Segoe UI", 11F),
                 ForeColor = UiTheme.Ink,
                 Location = new Point(56, 10),
-                Size = new Size(420, 24),
+                Size = new Size(captionWidth, 24),
                 BackColor = Color.Transparent,
-            };
-
-            var openButton = UiTheme.Quiet("Mở thư mục nhật ký", UiTheme.IconLog);
-            openButton.Enabled = Directory.Exists(DebugLogger.LogFolder);
-            openButton.Click += (s, e) =>
-            {
-                try
-                {
-                    if (!Directory.Exists(DebugLogger.LogFolder)) return;
-                    // UseShellExecute so this hands the path to Explorer rather than trying to
-                    // run it - a directory is not an executable.
-                    Process.Start(new ProcessStartInfo(DebugLogger.LogFolder)
-                    { UseShellExecute = true });
-                }
-                catch (Exception ex)
-                {
-                    AntdUI.Modal.open(new AntdUI.Modal.Config(form, "Lỗi",
-                        $"Không mở được thư mục nhật ký: {ex.Message}", AntdUI.TType.Error)
-                    { CancelText = null, OkText = "Đóng" });
-                }
             };
 
             // AntdUI's Switch animates, and CheckedChanged fires off the back of that animation,
@@ -200,38 +256,15 @@ namespace TadaPlay.Controls
             toggle.CheckedChanged += (s, e) =>
             {
                 if (!userToggled) return;
-                if (toggle.Checked == _appContext.GetDebugLogSetting()) return;
-
-                _appContext.SetDebugLogSetting(toggle.Checked);
-                // Applied now rather than at the next start: someone reproducing a problem
-                // needs the log for the run they are about to do, not the one after it.
-                DebugLogger.SetFileLogging(toggle.Checked);
-                if (toggle.Checked) DebugLogger.Info("Debug log switched on from Cài đặt.");
-                openButton.Enabled = Directory.Exists(DebugLogger.LogFolder);
+                if (toggle.Checked == read()) return;
+                write(toggle.Checked);
             };
 
-            row.Controls.Add(caption);
+            row.Controls.Add(label);
             row.Controls.Add(toggle);
-
-            var hint = new AntdUI.Label
-            {
-                Dock = DockStyle.Top,
-                Height = 52,
-                Text = "Mặc định tắt. Bật để ghi lại hoạt động của ứng dụng vào file, "
-                     + "rồi gửi file cho quản trị viên khi cần hỗ trợ.",
-                ForeColor = UiTheme.Muted,
-                Font = new Font("Segoe UI", 9F),
-                TextAlign = ContentAlignment.MiddleLeft,
-                TextMultiLine = true,
-            };
-
-            // Dock=Top stacks in reverse add order: add bottom-most first.
-            content.Controls.Add(openButton);
-            content.Controls.Add(UiTheme.Gap(10));
-            content.Controls.Add(hint);
-            content.Controls.Add(row);
-            return card;
+            return row;
         }
+
 
         // Game folder picker: where AoE2 saves recorded games (.mgz). Persisted immediately.
         private Control BuildGameFolderSection()
@@ -252,7 +285,7 @@ namespace TadaPlay.Controls
                 // system one the picker has always used.
                 using var dialog = new System.Windows.Forms.FolderBrowserDialog
                 {
-                    Description = "Chọn thư mục cài đặt AoE2 (nơi chứa thư mục SaveGame).",
+                    Description = "Chọn thư mục cài đặt AoE2 (nơi chứa thư mục age2_x1).",
                     SelectedPath = _appContext.GetGameFolder() ?? string.Empty
                 };
                 if (dialog.ShowDialog(this) == DialogResult.OK)
@@ -264,7 +297,7 @@ namespace TadaPlay.Controls
 
             // Opens the in-app hotkey editor for the currently-configured game folder, so players
             // can rebind keys / import a .hki layout without going into the game's own options menu.
-            var hotkeyButton = UiTheme.Quiet("Chỉnh sửa phím tắt trong game...");
+            var hotkeyButton = UiTheme.Quiet("Phím tắt trong game...");
             hotkeyButton.Click += (s, e) =>
             {
                 string folder = _appContext.GetGameFolder();
@@ -294,13 +327,24 @@ namespace TadaPlay.Controls
                 }
             };
 
+            // The three actions side by side rather than stacked: they are alternatives to each
+            // other - point at an install, fetch one, or edit its keys - and stacked they cost
+            // three rows plus their gaps, over a hundred pixels, to offer three short buttons.
+            var actions = new System.Windows.Forms.Panel
+            {
+                Dock = DockStyle.Top,
+                Height = 48,
+                BackColor = Color.Transparent,
+            };
+            // Added right to left: the layout docks the most recently added control first, so the
+            // last one added ends up leftmost.
+            actions.Controls.Add(UiTheme.ButtonColumn(hotkeyButton, DockStyle.Left, 178, top: 4, gap: 0));
+            actions.Controls.Add(UiTheme.ButtonColumn(downloadButton, DockStyle.Left, 176, top: 4));
+            actions.Controls.Add(UiTheme.ButtonColumn(browseButton, DockStyle.Left, 186, top: 4));
+
             // Dock=Top within the same parent stacks in reverse add order: add bottom-most first.
-            content.Controls.Add(hotkeyButton);
+            content.Controls.Add(actions);
             content.Controls.Add(UiTheme.Gap(8));
-            content.Controls.Add(downloadButton);
-            content.Controls.Add(UiTheme.Gap(8));
-            content.Controls.Add(browseButton);
-            content.Controls.Add(UiTheme.Gap(10));
             content.Controls.Add(pathBox);
             return card;
         }

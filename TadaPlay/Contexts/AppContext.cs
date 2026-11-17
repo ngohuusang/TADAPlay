@@ -121,6 +121,36 @@ public class AppContext : IAppContext
         return RunSchtasks($"/Query /TN \"{STARTUP_TASK_NAME}\"") == 0;
     }
 
+    /// <summary>
+    /// Whether the player wants the app launched when Windows starts.
+    ///
+    /// Kept as a setting of its own rather than read back from the scheduled task, because the
+    /// two answer different questions: the task says what Windows is currently set up to do, and
+    /// this says what the player asked for. They come apart every time the installer runs - it
+    /// creates the task itself - so without a remembered choice an update would quietly switch
+    /// startup back on for someone who had turned it off.
+    ///
+    /// Absent means on, which is what every build before this one did unconditionally: an
+    /// existing player's machine keeps behaving exactly as it did until they say otherwise.
+    /// </summary>
+    public bool GetStartWithWindowsSetting()
+    {
+        object value = GetRegistryValue("StartWithWindows");
+        if (value == null) return true;
+        return value.ToString() == "1"
+               || string.Equals(value.ToString(), "true", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Records the choice and makes Windows match it right away - registering the task, or
+    /// removing it, rather than leaving the change for some later launch to apply.
+    /// </summary>
+    public void SetStartWithWindowsSetting(bool startWithWindows)
+    {
+        SetRegistryValue("StartWithWindows", startWithWindows ? 1 : 0);
+        SetRunOnStartupSetting(startWithWindows);
+    }
+
     private static int RunSchtasks(string arguments)
     {
         try

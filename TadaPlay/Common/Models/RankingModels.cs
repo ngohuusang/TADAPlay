@@ -38,6 +38,102 @@ namespace TadaPlay.Common.Models
 
         [JsonProperty("win_rate")]
         public int WinRate { get; set; }
+
+        /// <summary>
+        /// The name this player appears as inside the game. Null when nothing has been
+        /// recorded for them - which is itself worth showing, because it means their matches
+        /// cannot be tied back to this account.
+        /// </summary>
+        [JsonProperty("in_game_name")]
+        public string InGameName { get; set; }
+
+        /// <summary>The VPN address pinned to the account, or null.</summary>
+        [JsonProperty("vpn_ip")]
+        public string VpnIp { get; set; }
+    }
+
+    /// <summary>Response from api.php?action=player_names.</summary>
+    public class PlayerNamesResponse
+    {
+        [JsonProperty("success")]
+        public bool Success { get; set; }
+
+        [JsonProperty("username")]
+        public string Username { get; set; }
+
+        [JsonProperty("names")]
+        public List<PlayerGameName> Names { get; set; }
+    }
+
+    /// <summary>One in-game name an account has been seen playing under.</summary>
+    public class PlayerGameName
+    {
+        [JsonProperty("name")]
+        public string Name { get; set; }
+
+        [JsonProperty("first_seen")]
+        public string FirstSeen { get; set; }
+
+        [JsonProperty("last_seen")]
+        public string LastSeen { get; set; }
+    }
+
+    /// <summary>Response from api.php?action=player_matches.</summary>
+    public class PlayerMatchesResponse
+    {
+        [JsonProperty("success")]
+        public bool Success { get; set; }
+
+        [JsonProperty("matches")]
+        public List<PlayerMatch> Matches { get; set; }
+    }
+
+    /// <summary>One match a player appeared in, from their side of it.</summary>
+    public class PlayerMatch
+    {
+        [JsonProperty("id")]
+        public long Id { get; set; }
+
+        [JsonProperty("room_name")]
+        public string RoomName { get; set; }
+
+        [JsonProperty("finished_at")]
+        public string FinishedAt { get; set; }
+
+        /// <summary>"pending", "resolved" or "needs_review".</summary>
+        [JsonProperty("status")]
+        public string Status { get; set; }
+
+        [JsonProperty("team")]
+        public int? Team { get; set; }
+
+        [JsonProperty("score")]
+        public int? Score { get; set; }
+
+        /// <summary>
+        /// Null when nobody has reported a winner yet, which is a different thing from losing.
+        /// </summary>
+        [JsonProperty("won")]
+        public bool? Won { get; set; }
+
+        [JsonProperty("is_mvp")]
+        public bool IsMvp { get; set; }
+
+        [JsonProperty("team_mates")]
+        public List<string> TeamMates { get; set; }
+
+        [JsonProperty("opponents")]
+        public List<string> Opponents { get; set; }
+
+        /// <summary>
+        /// Whether the replay file is actually on the server. Checked there rather than assumed,
+        /// so a row never offers a button that cannot work.
+        /// </summary>
+        [JsonProperty("can_replay")]
+        public bool CanReplay { get; set; }
+
+        [JsonProperty("file_name")]
+        public string FileName { get; set; }
     }
 
     /// <summary>Response from api.php?action=matches.</summary>
@@ -48,6 +144,33 @@ namespace TadaPlay.Common.Models
 
         [JsonProperty("matches")]
         public List<MatchSummary> Matches { get; set; }
+
+        /// <summary>Matches under the current filter, across all pages. Null from a server
+        /// that predates paging.</summary>
+        [JsonProperty("total")]
+        public int? Total { get; set; }
+    }
+
+    /// <summary>What to ask api.php?action=matches for: one page, optionally filtered.</summary>
+    public class MatchQuery
+    {
+        public int Offset { get; set; }
+        public int Limit { get; set; } = 50;
+
+        /// <summary>A player name, matched loosely (case and accents ignored).</summary>
+        public string Player { get; set; }
+
+        /// <summary>Inclusive lower bound, in UTC.</summary>
+        public DateTime? FromUtc { get; set; }
+
+        /// <summary>Exclusive upper bound, in UTC.</summary>
+        public DateTime? ToUtc { get; set; }
+    }
+
+    public class MatchPage
+    {
+        public List<MatchSummary> Matches { get; set; } = new();
+        public int? Total { get; set; }
     }
 
     public class MatchSummary

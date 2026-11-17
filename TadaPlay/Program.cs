@@ -29,6 +29,12 @@ namespace TadaPlay
 
             ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
 
+            // .NET ships no legacy code pages, and the game's text files are Windows-1252 - a
+            // mod's language.ini included. Without this, reading one throws instead of producing
+            // text, and the characters that need it are exactly the ones in names and tooltips
+            // (®, ’, –). Registered once here because it is process-wide.
+            System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
+
             ApplicationConfiguration.Initialize();
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);

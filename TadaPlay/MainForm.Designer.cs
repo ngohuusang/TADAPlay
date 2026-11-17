@@ -34,6 +34,7 @@
             rankingButton = new AntdUI.Button();
             matchesButton = new AntdUI.Button();
             settingButton = new AntdUI.Button();
+            modsButton = new AntdUI.Button();
             virtualPanel = new AntdUI.VirtualPanel();
             rankingTooltip = new AntdUI.TooltipComponent();
             trayIcon = new NotifyIcon(components);
@@ -46,8 +47,11 @@
             // 
             // windowBar
             // 
+            // Docked right, so the LAST one added sits furthest right: ranking, matches, mods,
+            // settings from left to right.
             windowBar.Controls.Add(rankingButton);
             windowBar.Controls.Add(matchesButton);
+            windowBar.Controls.Add(modsButton);
             windowBar.Controls.Add(settingButton);
             windowBar.Dock = DockStyle.Top;
             windowBar.Font = new Font("Segoe UI", 14.25F, FontStyle.Regular, GraphicsUnit.Point, 0);
@@ -93,6 +97,22 @@
             matchesButton.Type = AntdUI.TTypeMini.Primary;
             matchesButton.Visible = false;
             matchesButton.WaveSize = 0;
+            //
+            // modsButton
+            //
+            modsButton.Dock = DockStyle.Right;
+            modsButton.Ghost = true;
+            modsButton.Location = new Point(830, 0);
+            modsButton.Name = "modsButton";
+            modsButton.Radius = 0;
+            modsButton.Size = new Size(50, 55);
+            modsButton.TabIndex = 15;
+            rankingTooltip.SetTip(modsButton, "Cài mod cho game");
+            // Coloured like its neighbours: as the one grey icon in a row of coloured ones it read
+            // as disabled.
+            modsButton.Type = AntdUI.TTypeMini.Info;
+            modsButton.Visible = false;
+            modsButton.WaveSize = 0;
             //
             // settingButton
             //
@@ -180,6 +200,7 @@
         private AntdUI.Button settingButton;
         private AntdUI.Button rankingButton;
         private AntdUI.Button matchesButton;
+        private AntdUI.Button modsButton;
         private NotifyIcon trayIcon;
         private ContextMenuStrip trayContextMenu;
         private ToolStripMenuItem trayShowMenuItem;

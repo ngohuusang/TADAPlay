@@ -32,6 +32,7 @@
             playPanel = new Panel();
             logRichTextBox = new RichTextBox();
             startGameButton = new AntdUI.Button();
+            networkCheckButton = new AntdUI.Button();
             ipAddressLabel = new Label();
             reconnectVpnButton = new AntdUI.Button();
             vpnStatusLabel = new Label();
@@ -66,6 +67,7 @@
             // 
             playPanel.BackColor = Color.Snow;
             playPanel.Controls.Add(logRichTextBox);
+            playPanel.Controls.Add(networkCheckButton);
             playPanel.Controls.Add(startGameButton);
             playPanel.Controls.Add(ipAddressLabel);
             playPanel.Controls.Add(reconnectVpnButton);
@@ -105,6 +107,20 @@
             startGameButton.Text = "BẮT ĐẦU";
             startGameButton.Type = AntdUI.TTypeMini.Error;
             startGameButton.Click += startGameButton_Click;
+            // 
+            // networkCheckButton
+            // 
+            networkCheckButton.Dock = DockStyle.Top;
+            networkCheckButton.Font = new Font("Segoe UI", 10F, FontStyle.Regular, GraphicsUnit.Point, 0);
+            networkCheckButton.Location = new Point(3, 240);
+            networkCheckButton.Name = "networkCheckButton";
+            networkCheckButton.Padding = new Padding(5);
+            networkCheckButton.Radius = 10;
+            networkCheckButton.Size = new Size(535, 40);
+            networkCheckButton.TabIndex = 10;
+            networkCheckButton.Text = "Kiểm tra mạng cho game";
+            networkCheckButton.Type = AntdUI.TTypeMini.Default;
+            networkCheckButton.Click += networkCheckButton_Click;
             // 
             // ipAddressLabel
             // 
@@ -291,6 +307,7 @@
         private Label ipAddressLabel;
         private AntdUI.Button reconnectVpnButton;
         private AntdUI.Button startGameButton;
+        private AntdUI.Button networkCheckButton;
         private RichTextBox logRichTextBox;
         private TableLayoutPanel tableLayoutPanel1;
         private AntdUI.Chat.MsgList userList;
