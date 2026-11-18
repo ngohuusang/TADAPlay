@@ -42,5 +42,12 @@ namespace TadaPlay.Utils
             GameRecordFormat.SteamHd => "steam-hd",
             _ => "unknown"
         };
+
+        public static string DisplayName(GameRecordFormat format) => format switch
+        {
+            GameRecordFormat.UserPatch => "AOE2 WK",
+            GameRecordFormat.SteamHd => "Steam HD",
+            _ => "không xác định"
+        };
     }
 }

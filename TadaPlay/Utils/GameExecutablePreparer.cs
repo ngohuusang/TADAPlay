@@ -30,7 +30,7 @@ namespace TadaPlay.Utils
         {
             if (string.IsNullOrWhiteSpace(gameFolder)) return null;
 
-            gameFolder = RecordedGameFinder.ResolveGameFolder(gameFolder);
+            gameFolder = RecordedGameFinder.ResolveGameFolder(gameFolder, format);
             bool hasLegacyLayout = Directory.Exists(Path.Combine(gameFolder, "age2_x1"));
             if (format == GameRecordFormat.SteamHd
                 || (format == GameRecordFormat.Unknown && !hasLegacyLayout

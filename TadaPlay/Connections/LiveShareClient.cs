@@ -166,26 +166,55 @@ namespace TadaPlay.Connections
                 return new FetchResult { Error = "Chưa chọn người chơi." };
             }
 
+            GameRecordFormat viewerFormat = RecordedGameFinder.DetectInstalledFormat(gameFolder);
+            if (viewerFormat == GameRecordFormat.Unknown)
+            {
+                return new FetchResult
+                {
+                    Error = "Không xác định được phiên bản AoE2 trong Cài đặt. " +
+                            "Thư mục cần chứa age2_x1 (AOE2 WK) hoặc AoK HD.exe (Steam HD)."
+                };
+            }
+
             byte[] data;
             string matchName;
             bool inGame;
             GameRecordFormat format;
+            using var timeout = new CancellationTokenSource(Http.Timeout);
+            using var linked = CancellationTokenSource.CreateLinkedTokenSource(timeout.Token, token);
             try
             {
                 using HttpResponseMessage response = await Http.GetAsync(
                     $"http://{hostIp}:{LiveShareServer.Port}/live/record",
-                    HttpCompletionOption.ResponseContentRead, token);
+                    HttpCompletionOption.ResponseHeadersRead, linked.Token);
 
                 if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
                 {
                     return new FetchResult { Error = $"{hostLabel} chưa có trận đấu nào để xem." };
                 }
                 response.EnsureSuccessStatusCode();
-                data = await response.Content.ReadAsByteArrayAsync(token);
                 matchName = Header(response, "X-Match-Name");
                 inGame = Header(response, "X-In-Game") == "true";
                 format = ParseWireFormat(Header(response, "X-Record-Format"));
-                if (format == GameRecordFormat.Unknown) format = GameRecordFormat.UserPatch;
+                if (format == GameRecordFormat.Unknown)
+                {
+                    // Builds predating format metadata only supported AOE2 WK records.
+                    format = GameRecordFormat.UserPatch;
+                    DebugLogger.Warn($"LiveShareClient: host {hostIp} omitted X-Record-Format; " +
+                                     "treating it as an AOE2 WK host for compatibility.");
+                }
+
+                if (format != viewerFormat)
+                {
+                    return new FetchResult
+                    {
+                        Error = $"Không thể xem trận: {hostLabel} đang dùng {GameRecordFormats.DisplayName(format)}, " +
+                                $"còn máy bạn đang dùng {GameRecordFormats.DisplayName(viewerFormat)}. " +
+                                "Người chơi và người xem cần cùng phiên bản AoE2."
+                    };
+                }
+
+                data = await response.Content.ReadAsByteArrayAsync(linked.Token);
             }
             catch (Exception ex)
             {

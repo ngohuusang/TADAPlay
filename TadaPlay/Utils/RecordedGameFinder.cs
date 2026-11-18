@@ -43,7 +43,7 @@ namespace TadaPlay.Utils
         public static string FindLatestRecord(string gameFolder, DateTime? modifiedAfterUtc = null,
                                                GameRecordFormat format = GameRecordFormat.Unknown)
         {
-            gameFolder = ResolveGameFolder(gameFolder);
+            gameFolder = ResolveGameFolder(gameFolder, format);
             if (string.IsNullOrWhiteSpace(gameFolder) || !Directory.Exists(gameFolder))
             {
                 DebugLogger.Warn($"RecordedGameFinder: game folder not set or missing: '{gameFolder}'.");
@@ -87,7 +87,7 @@ namespace TadaPlay.Utils
         public static string FindSaveGameDirectory(string gameFolder,
                                                     GameRecordFormat format = GameRecordFormat.Unknown)
         {
-            gameFolder = ResolveGameFolder(gameFolder);
+            gameFolder = ResolveGameFolder(gameFolder, format);
             if (string.IsNullOrWhiteSpace(gameFolder) || !Directory.Exists(gameFolder))
             {
                 return null;
@@ -106,21 +106,65 @@ namespace TadaPlay.Utils
             return format == GameRecordFormat.SteamHd ? null : gameFolder;
         }
 
-        /// <summary>
-        /// Uses the Steam installation root when the selected folder is its nested legacy game
-        /// directory. This keeps Steam HD records and launchers discoverable from either path.
-        /// </summary>
-        public static string ResolveGameFolder(string gameFolder)
+        /// <summary>Resolves the configured folder to the installation matching the record format.</summary>
+        public static string ResolveGameFolder(string gameFolder,
+                                               GameRecordFormat format = GameRecordFormat.Unknown)
         {
             if (string.IsNullOrWhiteSpace(gameFolder)) return gameFolder;
 
             var folder = new DirectoryInfo(gameFolder);
+            if (format == GameRecordFormat.UserPatch)
+            {
+                if (Directory.Exists(Path.Combine(folder.FullName, "age2_x1"))) return folder.FullName;
+
+                if (File.Exists(Path.Combine(folder.FullName, "AoK HD.exe")))
+                {
+                    try
+                    {
+                        foreach (string child in Directory.EnumerateDirectories(folder.FullName))
+                        {
+                            if (Directory.Exists(Path.Combine(child, "age2_x1"))) return child;
+                        }
+                    }
+                    catch (IOException ex)
+                    {
+                        DebugLogger.Warn($"RecordedGameFinder: cannot locate the legacy game under " +
+                                         $"'{folder.FullName}': {ex.Message}");
+                    }
+                    catch (UnauthorizedAccessException ex)
+                    {
+                        DebugLogger.Warn($"RecordedGameFinder: cannot locate the legacy game under " +
+                                         $"'{folder.FullName}': {ex.Message}");
+                    }
+                }
+
+                return gameFolder;
+            }
+
             if (File.Exists(Path.Combine(folder.FullName, "AoK HD.exe"))) return folder.FullName;
 
             DirectoryInfo parent = folder.Parent;
             return parent != null && File.Exists(Path.Combine(parent.FullName, "AoK HD.exe"))
                 ? parent.FullName
                 : gameFolder;
+        }
+
+        public static GameRecordFormat DetectInstalledFormat(string gameFolder)
+        {
+            if (string.IsNullOrWhiteSpace(gameFolder)) return GameRecordFormat.Unknown;
+
+            string configuredFolder = Path.GetFullPath(gameFolder);
+            if (File.Exists(Path.Combine(configuredFolder, "AoK HD.exe")))
+                return GameRecordFormat.SteamHd;
+
+            DirectoryInfo parent = Directory.GetParent(configuredFolder);
+            if (parent != null && File.Exists(Path.Combine(parent.FullName, "AoK HD.exe")))
+                return GameRecordFormat.SteamHd;
+
+            if (Directory.Exists(Path.Combine(configuredFolder, "age2_x1")))
+                return GameRecordFormat.UserPatch;
+
+            return GameRecordFormat.Unknown;
         }
 
         /// <summary>

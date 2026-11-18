@@ -30,7 +30,7 @@ namespace TadaPlay.Utils
             {
                 return (LaunchStatus.NotConfigured,
                     "Không tìm thấy file khởi chạy game. Kiểm tra lại thư mục game trong Cài đặt " +
-                    "(phải chứa thư mục con age2_x1).", null, null);
+                    "(phải chứa age2_x1 của AOE2 WK hoặc AoK HD.exe của Steam HD).", null, null);
             }
             if (!File.Exists(exePath))
             {
