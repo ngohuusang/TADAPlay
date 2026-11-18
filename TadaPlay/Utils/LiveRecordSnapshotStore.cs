@@ -20,7 +20,6 @@ namespace TadaPlay.Utils
     /// </summary>
     public static class LiveRecordSnapshotStore
     {
-        private const string SnapshotSuffix = ".live.mgz";
         private static readonly TimeSpan KeepFor = TimeSpan.FromDays(7);
 
         /// <summary>Folder holding live snapshots; created on first use.</summary>
@@ -40,7 +39,9 @@ namespace TadaPlay.Utils
         public static string PathFor(string recordPath)
         {
             if (string.IsNullOrWhiteSpace(recordPath)) return null;
-            return Path.Combine(Directory, Path.GetFileNameWithoutExtension(recordPath) + SnapshotSuffix);
+            string extension = Path.GetExtension(recordPath);
+            return Path.Combine(Directory,
+                Path.GetFileNameWithoutExtension(recordPath) + ".live" + extension);
         }
 
         /// <summary>Existing snapshot for a record, or null.</summary>
@@ -58,7 +59,8 @@ namespace TadaPlay.Utils
         {
             try
             {
-                return System.IO.Directory.EnumerateFiles(Directory, "*" + SnapshotSuffix)
+                return System.IO.Directory.EnumerateFiles(Directory, "*.live.*")
+                    .Where(p => !p.EndsWith(".tmp", StringComparison.OrdinalIgnoreCase))
                     .Select(p => new FileInfo(p))
                     .OrderByDescending(fi => fi.LastWriteTimeUtc)
                     .Select(fi => fi.FullName)
@@ -119,8 +121,11 @@ namespace TadaPlay.Utils
                 return null;
             }
 
-            LiveRecordReader.RecordAnalysis analysis = LiveRecordReader.AnalyzeFile(recordPath);
-            if (analysis == null)
+            GameRecordFormat format = GameRecordFormats.FromPath(recordPath);
+            LiveRecordReader.RecordAnalysis analysis = format == GameRecordFormat.SteamHd
+                ? null
+                : LiveRecordReader.AnalyzeFile(recordPath);
+            if (format != GameRecordFormat.SteamHd && analysis == null)
             {
                 note = "Record không đọc được nên không chia sẻ.";
                 return null;
@@ -128,9 +133,9 @@ namespace TadaPlay.Utils
 
             try
             {
-                byte[] data = analysis.NeedsRepair
-                    ? analysis.RepairedData
-                    : File.ReadAllBytes(recordPath);
+                byte[] data = format == GameRecordFormat.SteamHd
+                    ? File.ReadAllBytes(recordPath)
+                    : analysis.NeedsRepair ? analysis.RepairedData : File.ReadAllBytes(recordPath);
 
                 string target = PathFor(recordPath);
                 string temp = target + ".tmp";
@@ -138,7 +143,8 @@ namespace TadaPlay.Utils
                 File.Move(temp, target, overwrite: true);
 
                 DebugLogger.Info($"LiveRecordSnapshotStore: published '{Path.GetFileName(recordPath)}' " +
-                                 $"for spectating ({analysis.Operations} ops, {data.Length} bytes).");
+                                 $"for spectating ({(analysis == null ? "Steam HD raw" : $"{analysis.Operations} ops")}, " +
+                                 $"{data.Length} bytes).");
                 return target;
             }
             catch (Exception ex)
@@ -162,7 +168,7 @@ namespace TadaPlay.Utils
             try
             {
                 DateTime cutoff = DateTime.UtcNow - KeepFor;
-                foreach (string file in System.IO.Directory.EnumerateFiles(Directory, "*" + SnapshotSuffix)
+                foreach (string file in System.IO.Directory.EnumerateFiles(Directory, "*.live.*")
                                                            .Concat(System.IO.Directory.EnumerateFiles(Directory, "*.tmp")))
                 {
                     if (File.GetLastWriteTimeUtc(file) < cutoff) TryDelete(file);

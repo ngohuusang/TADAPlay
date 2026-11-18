@@ -47,6 +47,8 @@ namespace TadaPlay.Utils
             long gameMs = MatchShareState.DurationMs;
             bool paused = MatchShareState.Paused;
             int waitSeconds = MatchShareState.WaitSeconds;
+            string recordFormat = GameRecordFormats.WireName(
+                GameRecordFormats.FromPath(currentMatch));
 
             // Paused belongs in the signature: while a game is paused the clock stops moving,
             // so gameMs alone stops changing too and the pause would never be broadcast - the
@@ -54,7 +56,7 @@ namespace TadaPlay.Utils
             // allowSpectate belongs in the signature: flipping the setting changes nothing
             // else about the payload, so without it the change would never be broadcast and
             // other players would keep seeing the old answer.
-            string signature = $"{inGame}|{hasMatch}|{gameMs}|{paused}|{allowSpectate}";
+            string signature = $"{inGame}|{hasMatch}|{gameMs}|{paused}|{allowSpectate}|{recordFormat}";
             lock (Gate)
             {
                 if (!force && signature == _lastSent) return;
@@ -73,7 +75,8 @@ namespace TadaPlay.Utils
                     // Lets other clients say "playing, not spectatable" instead of showing a
                     // countdown to a capture that is never coming.
                     allow_spectate = allowSpectate,
-                    wait_seconds = waitSeconds
+                    wait_seconds = waitSeconds,
+                    record_format = recordFormat
                 });
                 DebugLogger.Info($"MatchStatusPublisher: sent inGame={inGame} hasMatch={hasMatch} " +
                                  $"gameMs={gameMs} paused={paused} wait={waitSeconds}s.");

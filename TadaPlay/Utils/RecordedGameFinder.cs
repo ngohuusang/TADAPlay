@@ -6,8 +6,8 @@ using TadaPlay.Logger;
 namespace TadaPlay.Utils
 {
     /// <summary>
-    /// Locates Age of Empires II recorded games (.mgz / .mgx — UserPatch / WololoKingdoms)
-    /// under the user-configured game folder, and the folder to drop replays into.
+    /// Locates Age of Empires II recorded games (.mgz / .mgx for UserPatch and .aoe2record for
+    /// Steam HD) under the user-configured game folder, and the folder to drop replays into.
     ///
     /// Records live in a "SaveGame" folder under the game install, e.g.
     ///   &lt;GameFolder&gt;\SaveGame\rec.YYYYMMDD-HHMMSS.mgz
@@ -16,7 +16,7 @@ namespace TadaPlay.Utils
     /// </summary>
     public static class RecordedGameFinder
     {
-        private static readonly string[] RecordPatterns = { "*.mgz", "*.mgx" };
+        private static readonly string[] RecordPatterns = { "*.mgz", "*.mgx", "*.aoe2record" };
 
         /// <summary>
         /// File-name prefix stamped on records downloaded for local replay (see
@@ -40,8 +40,10 @@ namespace TadaPlay.Utils
         /// set, restricts to files written at/after that time (pass the game's start time to
         /// avoid stale records).
         /// </summary>
-        public static string FindLatestRecord(string gameFolder, DateTime? modifiedAfterUtc = null)
+        public static string FindLatestRecord(string gameFolder, DateTime? modifiedAfterUtc = null,
+                                               GameRecordFormat format = GameRecordFormat.Unknown)
         {
+            gameFolder = ResolveGameFolder(gameFolder);
             if (string.IsNullOrWhiteSpace(gameFolder) || !Directory.Exists(gameFolder))
             {
                 DebugLogger.Warn($"RecordedGameFinder: game folder not set or missing: '{gameFolder}'.");
@@ -56,6 +58,8 @@ namespace TadaPlay.Utils
                     .Select(path => new FileInfo(path))
                     .Where(fi => !fi.Name.StartsWith(ReplayPrefix, StringComparison.OrdinalIgnoreCase))
                     .Where(fi => !fi.Name.StartsWith(LivePrefix, StringComparison.OrdinalIgnoreCase))
+                    .Where(fi => format == GameRecordFormat.Unknown
+                                 || GameRecordFormats.FromPath(fi.FullName) == format)
                     .Where(fi => !modifiedAfterUtc.HasValue || fi.LastWriteTimeUtc >= modifiedAfterUtc.Value)
                     .OrderByDescending(fi => fi.LastWriteTimeUtc)
                     .FirstOrDefault();
@@ -80,22 +84,43 @@ namespace TadaPlay.Utils
         /// of the most recent record under the game folder, else &lt;GameFolder&gt;\SaveGame, else
         /// the game folder itself. Returns null if the game folder is not configured.
         /// </summary>
-        public static string FindSaveGameDirectory(string gameFolder)
+        public static string FindSaveGameDirectory(string gameFolder,
+                                                    GameRecordFormat format = GameRecordFormat.Unknown)
         {
+            gameFolder = ResolveGameFolder(gameFolder);
             if (string.IsNullOrWhiteSpace(gameFolder) || !Directory.Exists(gameFolder))
             {
                 return null;
             }
 
-            // Prefer the folder that already holds the newest record.
-            string latest = FindLatestRecord(gameFolder);
+            // Prefer the folder that already holds a record of the requested format.
+            string latest = FindLatestRecord(gameFolder, format: format);
             if (!string.IsNullOrEmpty(latest))
             {
                 return Path.GetDirectoryName(latest);
             }
 
             string saveGame = Path.Combine(gameFolder, "SaveGame");
-            return Directory.Exists(saveGame) ? saveGame : gameFolder;
+            if (Directory.Exists(saveGame)) return saveGame;
+
+            return format == GameRecordFormat.SteamHd ? null : gameFolder;
+        }
+
+        /// <summary>
+        /// Uses the Steam installation root when the selected folder is its nested legacy game
+        /// directory. This keeps Steam HD records and launchers discoverable from either path.
+        /// </summary>
+        public static string ResolveGameFolder(string gameFolder)
+        {
+            if (string.IsNullOrWhiteSpace(gameFolder)) return gameFolder;
+
+            var folder = new DirectoryInfo(gameFolder);
+            if (File.Exists(Path.Combine(folder.FullName, "AoK HD.exe"))) return folder.FullName;
+
+            DirectoryInfo parent = folder.Parent;
+            return parent != null && File.Exists(Path.Combine(parent.FullName, "AoK HD.exe"))
+                ? parent.FullName
+                : gameFolder;
         }
 
         /// <summary>

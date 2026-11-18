@@ -4,6 +4,12 @@
     <_LastSelectedProfileId>D:\AOCProject\TADAPlay\TadaPlay\Properties\PublishProfiles\FolderProfile.pubxml</_LastSelectedProfileId>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Update="Controls\AccountInfo.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Update="Controls\CivRanking.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
     <Compile Update="Controls\GameDownloadForm.cs">
       <SubType>Form</SubType>
     </Compile>
@@ -22,8 +28,20 @@
     <Compile Update="Controls\Matches.cs">
       <SubType>UserControl</SubType>
     </Compile>
+    <Compile Update="Controls\ModsDialog.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Update="Controls\NetworkCheckDialog.cs">
+      <SubType>Form</SubType>
+    </Compile>
     <Compile Update="Controls\Ranking.cs">
       <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Update="Controls\RankingDetailDialog.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Update="Controls\ServerPingDialog.cs">
+      <SubType>Form</SubType>
     </Compile>
     <Compile Update="MainForm.cs">
       <SubType>Form</SubType>

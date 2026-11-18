@@ -285,7 +285,7 @@ namespace TadaPlay.Controls
                 // system one the picker has always used.
                 using var dialog = new System.Windows.Forms.FolderBrowserDialog
                 {
-                    Description = "Chọn thư mục cài đặt AoE2 (nơi chứa thư mục age2_x1).",
+                    Description = "Chọn thư mục legacy chứa age2_x1 hoặc thư mục Steam HD chứa AoK HD.exe.",
                     SelectedPath = _appContext.GetGameFolder() ?? string.Empty
                 };
                 if (dialog.ShowDialog(this) == DialogResult.OK)

@@ -78,6 +78,7 @@ namespace TadaPlay.Connections
         private readonly string _hostLabel;
         private readonly string _path;
         private readonly string _matchName;
+        private readonly GameRecordFormat _recordFormat;
         private readonly Action<string, bool> _report;   // message, isProblem
         private readonly CancellationTokenSource _cancel = new();
 
@@ -104,6 +105,7 @@ namespace TadaPlay.Connections
             _hostLabel = hostLabel ?? hostIp;
             _path = start.Path;
             _matchName = start.MatchName;
+            _recordFormat = start.RecordFormat;
             _fetched = start.RawBytes;
             _pending = start.Pending ?? Array.Empty<byte>();
             _report = report ?? ((_, __) => { });
@@ -190,6 +192,12 @@ namespace TadaPlay.Connections
                     {
                         Finish($"[Xem] {_hostLabel} đã bắt đầu trận mới - bấm vào tên họ trong " +
                                "danh sách để xem trận đó.", false);
+                        return;
+                    }
+                    if (tail.RecordFormat != GameRecordFormat.Unknown
+                        && tail.RecordFormat != _recordFormat)
+                    {
+                        Finish($"[Xem] Định dạng record của {_hostLabel} đã thay đổi - dừng cập nhật.", true);
                         return;
                     }
                     if (tail.TotalBytes > 0 && _fetched > tail.TotalBytes)

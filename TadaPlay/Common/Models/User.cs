@@ -96,6 +96,9 @@ namespace TadaPlay.Common.Models
         [JsonProperty("wait_seconds")]
         public int WaitSeconds { get; set; }
 
+        [JsonProperty("record_format")]
+        public string RecordFormat { get; set; }
+
         /// <summary>How far into their match this player is.</summary>
         public TimeSpan GameTime => TimeSpan.FromMilliseconds(GameMs);
 

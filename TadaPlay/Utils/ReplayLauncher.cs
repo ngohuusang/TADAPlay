@@ -40,10 +40,11 @@ namespace TadaPlay.Utils
                 return new Result { Message = "Không thể phát lại: thiếu dịch vụ." };
             }
 
+            GameRecordFormat format = GameRecordFormats.FromPath(originalFileName);
             // The game only browses records from its own SaveGame folder - a file dropped
             // anywhere else does not appear in its Replays list even if the game is launched
             // pointing straight at it.
-            string saveDir = RecordedGameFinder.FindSaveGameDirectory(appContext.GetGameFolder());
+            string saveDir = RecordedGameFinder.FindSaveGameDirectory(appContext.GetGameFolder(), format);
             if (string.IsNullOrEmpty(saveDir))
             {
                 using var picker = new FolderBrowserDialog
@@ -85,7 +86,7 @@ namespace TadaPlay.Utils
                 var (status, message, _, _) = await Task.Factory.StartNew(() =>
                 {
                     string exePath = GameExecutablePreparer.PrepareAndGetExePath(
-                        appContext.GetGameFolder(), appContext.GetGameLaunchMode());
+                        appContext.GetGameFolder(), appContext.GetGameLaunchMode(), format);
                     return GameLauncher.Launch(exePath, destPath);
                 }, System.Threading.CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
 

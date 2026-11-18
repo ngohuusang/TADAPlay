@@ -25,9 +25,25 @@ namespace TadaPlay.Utils
         private const string CenterExeResourceName = "TadaPlay.Resources.WK-center.exe";
         private const string WideExeResourceName = "TadaPlay.Resources.WK-wide.exe";
 
-        public static string PrepareAndGetExePath(string gameFolder, string mode)
+        public static string PrepareAndGetExePath(string gameFolder, string mode,
+                                                   GameRecordFormat format = GameRecordFormat.Unknown)
         {
             if (string.IsNullOrWhiteSpace(gameFolder)) return null;
+
+            gameFolder = RecordedGameFinder.ResolveGameFolder(gameFolder);
+            bool hasLegacyLayout = Directory.Exists(Path.Combine(gameFolder, "age2_x1"));
+            if (format == GameRecordFormat.SteamHd
+                || (format == GameRecordFormat.Unknown && !hasLegacyLayout
+                    && File.Exists(Path.Combine(gameFolder, "AoK HD.exe"))))
+            {
+                string hdExe = Path.Combine(gameFolder, "AoK HD.exe");
+                if (!File.Exists(hdExe))
+                {
+                    DebugLogger.Error($"GameExecutablePreparer: Steam HD launcher not found: '{hdExe}'.");
+                    return null;
+                }
+                return hdExe;
+            }
 
             string age2X1Dir = Path.Combine(gameFolder, "age2_x1");
             if (!Directory.Exists(age2X1Dir))

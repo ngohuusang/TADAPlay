@@ -765,8 +765,11 @@ namespace TadaPlay.Controls
 
                 // Mid-match the header length is still a zero placeholder, so the snapshot has
                 // to be repaired and trimmed before anyone can play it.
-                LiveRecordReader.RecordAnalysis analysis = LiveRecordReader.Analyze(data, recordPath);
-                if (analysis == null || analysis.BodyBytes <= 0)
+                GameRecordFormat format = GameRecordFormats.FromPath(recordPath);
+                LiveRecordReader.RecordAnalysis analysis = format == GameRecordFormat.SteamHd
+                    ? null
+                    : LiveRecordReader.Analyze(data, recordPath);
+                if (format != GameRecordFormat.SteamHd && (analysis == null || analysis.BodyBytes <= 0))
                 {
                     DebugLogger.Info($"Home: live capture produced nothing playable yet " +
                                      $"({data.Length} bytes read, no whole operations).");
@@ -776,12 +779,14 @@ namespace TadaPlay.Controls
                 var snapshot = new LiveRecordReader.Snapshot
                 {
                     SourcePath = recordPath,
-                    Data = analysis.NeedsRepair
-                        ? analysis.RepairedData
-                        : Trim(data, analysis.HeaderLength + analysis.BodyBytes),
-                    HeaderLength = analysis.HeaderLength,
-                    BodyBytes = analysis.BodyBytes,
-                    BodyOperations = analysis.Operations
+                    Data = format == GameRecordFormat.SteamHd
+                        ? data
+                        : analysis.NeedsRepair
+                            ? analysis.RepairedData
+                            : Trim(data, analysis.HeaderLength + analysis.BodyBytes),
+                    HeaderLength = analysis?.HeaderLength ?? 0,
+                    BodyBytes = analysis?.BodyBytes ?? data.Length,
+                    BodyOperations = analysis?.Operations ?? 0
                 };
                 if (LiveRecordSnapshotStore.Save(snapshot) == null) return;
 
@@ -805,16 +810,20 @@ namespace TadaPlay.Controls
                 _liveCaptureBytes = snapshot.Data.Length;
                 // Published so viewers can be told how far into the match they would be
                 // joining, rather than just that something is available.
-                MatchShareState.ReportDuration(analysis.DurationMs);
-                var clock = TimeSpan.FromMilliseconds(analysis.DurationMs);
-                printLog($"[Xem] Đã cập nhật trận cho người xem (phút {clock.Minutes:00}:{clock.Seconds:00}, " +
+                if (analysis != null) MatchShareState.ReportDuration(analysis.DurationMs);
+                var clock = TimeSpan.FromMilliseconds(analysis?.DurationMs ?? 0);
+                string clockText = analysis == null ? "HD" : $"phút {clock.Minutes:00}:{clock.Seconds:00}";
+                printLog($"[Xem] Đã cập nhật trận cho người xem ({clockText}, " +
                          $"lần {_liveCaptureCount}: {snapshot.Data.Length / 1024} KB, +{growthKb} KB).",
                          Color.RoyalBlue);
 
-                DebugLogger.Info($"Home: live capture {_liveCaptureCount} of '{recordPath}': " +
-                                 $"{analysis.Operations} ops, {snapshot.Data.Length} bytes " +
-                                 $"(header {analysis.HeaderLength}, body {analysis.BodyBytes}, " +
-                                 $"repaired={analysis.NeedsRepair}) in {started.ElapsedMilliseconds} ms.");
+                DebugLogger.Info(analysis == null
+                    ? $"Home: live HD capture {_liveCaptureCount} of '{recordPath}': " +
+                      $"{snapshot.Data.Length} bytes in {started.ElapsedMilliseconds} ms."
+                    : $"Home: live capture {_liveCaptureCount} of '{recordPath}': " +
+                      $"{analysis.Operations} ops, {snapshot.Data.Length} bytes " +
+                      $"(header {analysis.HeaderLength}, body {analysis.BodyBytes}, " +
+                      $"repaired={analysis.NeedsRepair}) in {started.ElapsedMilliseconds} ms.");
             }
             catch (Exception ex)
             {
@@ -1220,13 +1229,13 @@ namespace TadaPlay.Controls
             }
         }
 
-        // True only when the configured folder actually contains the game (the age2_x1 folder), not
-        // merely that some path is set - a moved/deleted/empty folder should still offer the download.
+        // The configured folder may be either a legacy install with age2_x1 or a Steam HD install.
         private bool IsGameInstalled()
         {
             string folder = appContext.GetGameFolder();
             return !string.IsNullOrWhiteSpace(folder)
-                && System.IO.Directory.Exists(System.IO.Path.Combine(folder, "age2_x1"));
+                && (System.IO.Directory.Exists(System.IO.Path.Combine(folder, "age2_x1"))
+                    || System.IO.File.Exists(System.IO.Path.Combine(folder, "AoK HD.exe")));
         }
 
         private void UpdateStartButtonState()
@@ -2092,7 +2101,7 @@ namespace TadaPlay.Controls
                 }
 
                 string exePath = GameExecutablePreparer.PrepareAndGetExePath(
-                    gameFolder, appContext.GetGameLaunchMode());
+                    gameFolder, appContext.GetGameLaunchMode(), fetch.RecordFormat);
                 var (status, message, pid, startedUtc) = GameLauncher.Launch(exePath, fetch.Path);
                 printLog($"[Xem] {message}",
                          status == GameLauncher.LaunchStatus.Success ? Color.DarkGreen : Color.Red);
@@ -2203,12 +2212,16 @@ namespace TadaPlay.Controls
             // The host's state comes from a lookup in the lobby's existing online-user list, so
             // there is no extra traffic to the host, which matters because it is asked every 600ms.
             _playheadGovernor?.Dispose();
-            _playheadGovernor = new ReplayFollower(
-                fetch.Path,
-                msg => printLog(msg, Color.RoyalBlue),
-                () => LiveShareClient.FromBroadcast(LookupOnlineUser(hostLabel)),
-                appContext.GetGameFolder());
-            _playheadGovernor.Start();
+            _playheadGovernor = null;
+            if (fetch.RecordFormat == GameRecordFormat.UserPatch)
+            {
+                _playheadGovernor = new ReplayFollower(
+                    fetch.Path,
+                    msg => printLog(msg, Color.RoyalBlue),
+                    () => LiveShareClient.FromBroadcast(LookupOnlineUser(hostLabel)),
+                    appContext.GetGameFolder());
+                _playheadGovernor.Start();
+            }
         }
 
         /// <summary>
@@ -2426,6 +2439,13 @@ namespace TadaPlay.Controls
                     {
                         UiUtils.ShowAntdModal(mainForm, "Không tìm thấy record", msg, AntdUI.TType.Warn);
                     }
+                    return;
+                }
+
+                if (GameRecordFormats.FromPath(recordPath) == GameRecordFormat.SteamHd)
+                {
+                    printLog("[Record] Tải record .aoe2record của Steam HD lên máy chủ chưa được hỗ trợ.",
+                             Color.Orange);
                     return;
                 }
 

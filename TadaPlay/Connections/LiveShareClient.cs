@@ -32,6 +32,7 @@ namespace TadaPlay.Connections
             public long GameMs { get; set; }
             /// <summary>The host's game is paused: its match clock has stopped advancing.</summary>
             public bool Paused { get; set; }
+            public GameRecordFormat RecordFormat { get; set; }
 
             /// <summary>
             /// Whether the host permits being watched. False means their match will never
@@ -72,6 +73,7 @@ namespace TadaPlay.Connections
                     Bytes = long.TryParse(Read(json, "bytes"), out long b) ? b : 0,
                     GameMs = long.TryParse(Read(json, "gameMs"), out long g) ? g : 0,
                     Paused = Read(json, "paused") == "true",
+                    RecordFormat = ParseWireFormat(Read(json, "recordFormat")?.Trim('"')),
                     FinishedUtc = DateTime.TryParse(Read(json, "finishedUtc")?.Trim('"'),
                                                     null, System.Globalization.DateTimeStyles.RoundtripKind,
                                                     out DateTime t) ? t : null
@@ -109,6 +111,7 @@ namespace TadaPlay.Connections
             /// <summary>Fetched but not written yet: a trailing operation that isn't complete.</summary>
             public byte[] Pending { get; set; } = Array.Empty<byte>();
             public int Operations { get; set; }
+            public GameRecordFormat RecordFormat { get; set; }
             /// <summary>The host was still playing when this was served.</summary>
             public bool InGame { get; set; }
         }
@@ -132,7 +135,8 @@ namespace TadaPlay.Connections
                 GameMs = user.GameMs,
                 Paused = user.Paused,
                 AllowSpectate = user.AllowSpectate,
-                WaitSeconds = user.WaitSeconds
+                WaitSeconds = user.WaitSeconds,
+                RecordFormat = ParseWireFormat(user.RecordFormat)
             };
         }
 
@@ -143,6 +147,7 @@ namespace TadaPlay.Connections
             public string MatchName { get; set; }
             public long TotalBytes { get; set; }
             public bool InGame { get; set; }
+            public GameRecordFormat RecordFormat { get; set; }
             /// <summary>Set when the host could not be reached; Data is meaningless then.</summary>
             public string Error { get; set; }
             public bool Failed => Error != null;
@@ -164,6 +169,7 @@ namespace TadaPlay.Connections
             byte[] data;
             string matchName;
             bool inGame;
+            GameRecordFormat format;
             try
             {
                 using HttpResponseMessage response = await Http.GetAsync(
@@ -178,6 +184,8 @@ namespace TadaPlay.Connections
                 data = await response.Content.ReadAsByteArrayAsync(token);
                 matchName = Header(response, "X-Match-Name");
                 inGame = Header(response, "X-In-Game") == "true";
+                format = ParseWireFormat(Header(response, "X-Record-Format"));
+                if (format == GameRecordFormat.Unknown) format = GameRecordFormat.UserPatch;
             }
             catch (Exception ex)
             {
@@ -185,29 +193,35 @@ namespace TadaPlay.Connections
                 return new FetchResult { Error = $"Không tải được trận đấu từ {hostLabel}: {ex.Message}" };
             }
 
-            // Never hand the game something it will reject: a match the host abandoned still
-            // has an unpatched header length, so verify (and repair) before launching.
-            LiveRecordReader.RecordAnalysis analysis = LiveRecordReader.Analyze(data, null);
-            if (analysis == null)
+            // MGZ needs its header repaired and trailing partial operation removed. HD records
+            // use a different container and must be preserved byte-for-byte.
+            LiveRecordReader.RecordAnalysis analysis = format == GameRecordFormat.SteamHd
+                ? null
+                : LiveRecordReader.Analyze(data, null);
+            if (format != GameRecordFormat.SteamHd && analysis == null)
             {
                 return new FetchResult { Error = "Dữ liệu trận đấu tải về không hợp lệ." };
             }
 
-            string dir = RecordedGameFinder.FindSaveGameDirectory(gameFolder);
+            string dir = RecordedGameFinder.FindSaveGameDirectory(gameFolder, format);
             if (string.IsNullOrWhiteSpace(dir))
             {
                 return new FetchResult { Error = "Không tìm thấy thư mục SaveGame để lưu trận đấu." };
             }
 
-            // Write only whole operations. The rest of the download is kept as the stream's
-            // starting leftover so the next tail continues from the right place - the file on
-            // disk is shorter than what was fetched, which is why the two are counted apart.
-            int keep = analysis.HeaderLength + analysis.BodyBytes;
-            byte[] toWrite = analysis.NeedsRepair ? analysis.RepairedData : Trim(data, keep);
+            // Write only whole operations for legacy records. HD records are an opaque stream
+            // here, so preserve every byte and let the matching game consume its own format.
+            int keep = format == GameRecordFormat.SteamHd
+                ? data.Length
+                : analysis.HeaderLength + analysis.BodyBytes;
+            byte[] toWrite = format == GameRecordFormat.SteamHd
+                ? data
+                : analysis.NeedsRepair ? analysis.RepairedData : Trim(data, keep);
             byte[] pending = data.Length > keep ? data[keep..] : Array.Empty<byte>();
 
             string safeHost = string.Join("_", (hostLabel ?? hostIp).Split(Path.GetInvalidFileNameChars()));
-            string path = Path.Combine(dir, $"{RecordedGameFinder.LivePrefix}{safeHost}.mgz");
+            string extension = GameRecordFormats.Extension(format);
+            string path = Path.Combine(dir, $"{RecordedGameFinder.LivePrefix}{safeHost}{extension}");
             try
             {
                 File.WriteAllBytes(path, toWrite);
@@ -219,14 +233,15 @@ namespace TadaPlay.Connections
             }
 
             DebugLogger.Info($"LiveShareClient: fetched {data.Length} bytes from {hostIp} " +
-                             $"({analysis.Operations} ops, {toWrite.Length} written) -> {path}");
+                             $"({GameRecordFormats.WireName(format)}, {toWrite.Length} written) -> {path}");
             return new FetchResult
             {
                 Path = path,
                 MatchName = matchName,
                 RawBytes = data.Length,
                 Pending = pending,
-                Operations = analysis.Operations,
+                Operations = analysis?.Operations ?? 0,
+                RecordFormat = format,
                 InGame = inGame
             };
         }
@@ -266,7 +281,8 @@ namespace TadaPlay.Connections
                     Data = await response.Content.ReadAsByteArrayAsync(linked.Token),
                     MatchName = Header(response, "X-Match-Name"),
                     TotalBytes = long.TryParse(Header(response, "X-Total-Bytes"), out long total) ? total : 0,
-                    InGame = Header(response, "X-In-Game") == "true"
+                    InGame = Header(response, "X-In-Game") == "true",
+                    RecordFormat = ParseWireFormat(Header(response, "X-Record-Format"))
                 };
             }
             catch (Exception ex) when (!token.IsCancellationRequested)
@@ -285,6 +301,13 @@ namespace TadaPlay.Connections
             response.Headers.TryGetValues(name, out System.Collections.Generic.IEnumerable<string> values)
                 ? System.Linq.Enumerable.FirstOrDefault(values)
                 : null;
+
+        private static GameRecordFormat ParseWireFormat(string value) => value switch
+        {
+            "userpatch" => GameRecordFormat.UserPatch,
+            "steam-hd" => GameRecordFormat.SteamHd,
+            _ => GameRecordFormat.Unknown
+        };
 
         private static byte[] Trim(byte[] data, int length)
         {

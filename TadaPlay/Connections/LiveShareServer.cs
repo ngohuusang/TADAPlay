@@ -277,6 +277,8 @@ namespace TadaPlay.Connections
             context.Response.AddHeader("X-Match-Name", Path.GetFileNameWithoutExtension(match));
             context.Response.AddHeader("X-Total-Bytes", total.ToString(CultureInfo.InvariantCulture));
             context.Response.AddHeader("X-In-Game", MatchShareState.InGame ? "true" : "false");
+            context.Response.AddHeader("X-Record-Format",
+                GameRecordFormats.WireName(GameRecordFormats.FromPath(match)));
             Write(context, "application/octet-stream", data);
 
             NoteWatcher(context.Request.RemoteEndPoint?.Address?.ToString(), from, data.Length, total);
@@ -468,6 +470,7 @@ namespace TadaPlay.Connections
                           $"\"paused\":{(MatchShareState.Paused ? "true" : "false")}," +
                           $"\"waitSeconds\":{MatchShareState.WaitSeconds}," +
                           $"\"gameMs\":{MatchShareState.DurationMs}," +
+                          $"\"recordFormat\":\"{GameRecordFormats.WireName(GameRecordFormats.FromPath(match))}\"," +
                           $"\"match\":\"{Escape(name)}\"," +
                           $"\"bytes\":{size}," +
                           $"\"finishedUtc\":\"{finishedUtc}\"" +

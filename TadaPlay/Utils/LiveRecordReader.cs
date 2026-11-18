@@ -37,7 +37,7 @@ namespace TadaPlay.Utils
 
         private static readonly string[] GameExeNames =
         {
-            "age2_x1", "age2_x2", "empires2", "age2_x1.5", "age2-WK",
+            "AoK HD", "age2_x1", "age2_x2", "empires2", "age2_x1.5", "age2-WK",
             "age2-WK-center", "WK", "age2_x1.0c", "age2_x1.4"
         };
 
@@ -662,8 +662,7 @@ namespace TadaPlay.Utils
                         if (GetFinalPathNameByHandle(probe, name, name.Capacity, 0) == 0) continue;
 
                         string candidate = name.ToString();
-                        if (!candidate.EndsWith(".mgz", StringComparison.OrdinalIgnoreCase)
-                            && !candidate.EndsWith(".mgx", StringComparison.OrdinalIgnoreCase))
+                        if (GameRecordFormats.FromPath(candidate) == GameRecordFormat.Unknown)
                         {
                             continue;
                         }
