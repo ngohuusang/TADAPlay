@@ -84,8 +84,11 @@ namespace TadaPlay.Utils
                 // which is also pool-scheduled, badly enough to spike reported ping.
                 var (status, message, _, _) = await Task.Factory.StartNew(() =>
                 {
-                    string exePath = GameExecutablePreparer.PrepareAndGetExePath(
-                        appContext.GetGameFolder(), appContext.GetGameLaunchMode());
+                    var (exePath, problem) = GameExecutablePreparer.Prepare(
+                        appContext.GetGameFolder(), appContext.GetGameLaunchMode(),
+                        appContext.GetGameSpeedVariant());
+                    if (problem != null)
+                        return (GameLauncher.LaunchStatus.LaunchFailed, problem, (int?)null, (DateTime?)null);
                     return GameLauncher.Launch(exePath, destPath);
                 }, System.Threading.CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
 

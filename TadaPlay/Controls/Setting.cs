@@ -27,6 +27,7 @@ namespace TadaPlay.Controls
         // space is not spent on explanations of switches that explain themselves.
         private const int FolderCardHeight = 176;      // path field 40, gap 8, a row of buttons 48
         private const int DisplayCardHeight = 132;     // one 52 segmented control
+        private const int SpeedCardHeight = 166;       // a 52 segmented control and a 34 note
         private const int OptionsCardHeight = 172;     // two 42 switch rows, plus 8 so the lower
                                                        // one is not flush with the card's edge
         private const int CardGap = 14;
@@ -79,10 +80,11 @@ namespace TadaPlay.Controls
                 // Added first, so it ends up last: the log switch is the card a player needs
                 // least often, and only when someone has asked them for a log.
                 Controls.Add(BuildOptionsSection());
+                Controls.Add(BuildSpeedSection());
                 Controls.Add(BuildDisplayModeSection());
                 Controls.Add(BuildGameFolderSection());
-                totalHeight += FolderCardHeight + DisplayCardHeight + OptionsCardHeight
-                               + CardGap * 3;
+                totalHeight += FolderCardHeight + DisplayCardHeight + SpeedCardHeight + OptionsCardHeight
+                               + CardGap * 4;
             }
 
             // AntdUI.Modal.open's (Form, string, object) overload does read control.Height
@@ -149,6 +151,60 @@ namespace TadaPlay.Controls
             // "căn giữa" on their own faces, and a sentence repeating that cost 36 pixels of a
             // dialog that had run out of them.
             content.Controls.Add(modes);
+            return card;
+        }
+
+        /// <summary>
+        /// Which speed build of the game to run (see <see cref="GameSpeedVariant"/>). Saved at
+        /// once and applied the next time the game is started from this app - that is when the
+        /// exe and the shared UserPatch DLLs are switched, because they cannot be while a game
+        /// is open.
+        /// </summary>
+        private Control BuildSpeedSection()
+        {
+            var card = UiTheme.Card(UiTheme.IconSpeed, "Tốc độ game",
+                                    "Bản game được mở khi bấm Bắt đầu",
+                                    UiTheme.AccentDisplay, SpeedCardHeight,
+                                    out System.Windows.Forms.Panel content);
+
+            var speeds = new AntdUI.Segmented
+            {
+                Dock = DockStyle.Top,
+                Height = 52,
+                Full = true,
+                Round = true,
+                Font = new Font("Segoe UI Semibold", 10.5F, FontStyle.Bold),
+                Items =
+                {
+                    new SegmentedItem { Text = "UserPatch  ·  2.0" },
+                    new SegmentedItem { Text = "HD  ·  2.2 (chậm hơn)" },
+                },
+                SelectIndex = _appContext.GetGameSpeedVariant() == GameSpeedVariant.Hd ? 1 : 0,
+            };
+            speeds.SelectIndexChanged += (s, e) =>
+            {
+                string variant = speeds.SelectIndex == 1 ? GameSpeedVariant.Hd : GameSpeedVariant.Original;
+                _appContext.SetGameSpeedVariant(variant);
+                DebugLogger.Info($"Game speed build set to {variant} from Cài đặt.");
+            };
+
+            // The one thing that cannot be left unsaid: a mixed match does not just feel odd,
+            // it ends in "out of sync" within seconds.
+            var note = new AntdUI.Label
+            {
+                Dock = DockStyle.Top,
+                Height = 34,
+                Text = "Cả phòng phải chọn cùng tốc độ, nếu không game sẽ bị lệch (out of sync). " +
+                       "Menu game hiện 2.0 hoặc 2.2.",
+                Font = new Font("Segoe UI", 9F),
+                ForeColor = UiTheme.Muted,
+                TextMultiLine = true,
+                BackColor = Color.Transparent,
+            };
+
+            // Dock=Top stacks in reverse add order: add bottom-most first.
+            content.Controls.Add(note);
+            content.Controls.Add(speeds);
             return card;
         }
 

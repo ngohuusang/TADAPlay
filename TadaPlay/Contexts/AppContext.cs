@@ -249,6 +249,17 @@ public class AppContext : IAppContext
             : GameExecutablePreparer.WideMode;
     }
 
+    public void SetGameSpeedVariant(string variant)
+    {
+        SetRegistryValue("GameSpeedVariant", GameSpeedVariant.Normalize(variant));
+        GameSpeedVariant.RaiseChanged(variant);
+    }
+
+    public string GetGameSpeedVariant()
+    {
+        return GameSpeedVariant.Normalize(GetRegistryValue("GameSpeedVariant")?.ToString());
+    }
+
     public void SetMinimapPosition(string position)
     {
         SetRegistryValue("GameMinimapPosition", position);

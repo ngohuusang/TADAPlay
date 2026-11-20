@@ -116,8 +116,10 @@ namespace TadaPlay.Controls
             // designer file, which Visual Studio rewrites.
             // WatcherChanged is a STATIC event, so leaving it subscribed would keep this
             // control (and its whole object graph) alive for the life of the process.
+            GameSpeedVariant.Changed += GameSpeedVariant_Changed;
             Disposed += (s, e) =>
             {
+                GameSpeedVariant.Changed -= GameSpeedVariant_Changed;
                 LiveShareServer.WatcherChanged -= LiveShare_WatcherChanged;
                 StopLiveStream();
                 _spectatorStream?.Dispose();
@@ -1275,7 +1277,40 @@ namespace TadaPlay.Controls
                 // the re-push and leave everyone seeing nothing for the rest of the match.
                 MatchStatusPublisher.Reset();
                 MatchStatusPublisher.Publish(webSocketService, appContext.GetAllowSpectateSetting(), force: true);
+
+                // The server forgets it with the connection, like everything above.
+                SendGameSpeed(appContext.GetGameSpeedVariant());
             }, "HOME_WS_CONNECTED");
+        }
+
+        /// <summary>
+        /// Tells the lobby which speed build this player runs, so everyone's list can show it -
+        /// a room that mixes 2.0 and 2.2 goes out of sync within seconds of starting.
+        /// </summary>
+        private void SendGameSpeed(string variant)
+        {
+            try
+            {
+                _ = webSocketService?.SendMessageAsync(new
+                {
+                    command = "game_speed",
+                    game_speed = GameSpeedVariant.Normalize(variant)
+                });
+            }
+            catch (Exception ex)
+            {
+                DebugLogger.Warn($"Home: cannot send the game speed: {ex.Message}");
+            }
+        }
+
+        private void GameSpeedVariant_Changed(string variant)
+        {
+            UiUtils.InvokeOnUiThread(this, () =>
+            {
+                SendGameSpeed(variant);
+                // Mismatch marks are relative to OUR speed, so they all move with it.
+                RefreshUserListForSpeed();
+            }, "HOME_GAME_SPEED");
         }
 
         private void WebSocketService_OnDisconnected(object sender, EventArgs e)
@@ -1361,7 +1396,7 @@ namespace TadaPlay.Controls
         /// the same string twice - once truncated on the top line, once in full below. When they
         /// match, the repeat is dropped.
         /// </summary>
-        private static (string Name, string Detail) DescribeIdentity(User user)
+        private static (string Name, string Detail) DescribeIdentity(User user, string mySpeed)
         {
             string username = (user.Username ?? string.Empty).Trim();
             string fullName = (user.FullName ?? string.Empty).Trim();
@@ -1373,6 +1408,17 @@ namespace TadaPlay.Controls
             string name = sameName ? username : fullName;
 
             var parts = new List<string>();
+            // The speed build first, because it is the one thing on this line that can wreck a
+            // game: a player on the other build than ours is marked, so a room can see the
+            // mismatch before starting rather than after the out-of-sync. Nothing is shown for
+            // a client too old to report it.
+            if (!string.IsNullOrEmpty(user.GameSpeed))
+            {
+                string speed = GameSpeedVariant.MenuLabel(user.GameSpeed);
+                bool differs = !string.Equals(GameSpeedVariant.Normalize(user.GameSpeed),
+                                              GameSpeedVariant.Normalize(mySpeed), StringComparison.Ordinal);
+                parts.Add(differs ? $"\u26a0 Tốc độ {speed}" : $"Tốc độ {speed}");
+            }
             // Skip a game name that just repeats the row's own title - that is the duplication
             // this layout exists to avoid, not an extra piece of information.
             if (inGame.Length > 0 && !string.Equals(inGame, name, StringComparison.OrdinalIgnoreCase))
@@ -1446,8 +1492,17 @@ namespace TadaPlay.Controls
         /// or adding and removing rows at the end, leaves it where it was, and a list that
         /// shrinks below the scroll position is clamped by the control itself.
         /// </summary>
+        // The last list drawn, so it can be redrawn when our own speed build changes.
+        private IReadOnlyList<User> _lastListedUsers;
+
+        private void RefreshUserListForSpeed()
+        {
+            if (_lastListedUsers != null) UpdateOnlineUsersListView(_lastListedUsers);
+        }
+
         private void UpdateOnlineUsersListView(IReadOnlyList<User> users)
         {
+            _lastListedUsers = users;
             // Alphabetical within each group rather than the order the server happened to send:
             // rows are matched to players by position, so without a total order the rows would
             // shuffle under the cursor on every broadcast.
@@ -1475,7 +1530,7 @@ namespace TadaPlay.Controls
                 }
 
                 string status = user.Status ?? "";
-                (string name, string detail) = DescribeIdentity(user);
+                (string name, string detail) = DescribeIdentity(user, appContext.GetGameSpeedVariant());
 
                 userItem.Icon = Properties.Resources.user_icon;
                 userItem.Text = detail;
@@ -1704,7 +1759,16 @@ namespace TadaPlay.Controls
             // rewriting the player's game config on every launch, and telling them it is how
             // others watch them, was both pointless and untrue.
 
-            string exePath = GameExecutablePreparer.PrepareAndGetExePath(appContext.GetGameFolder(), appContext.GetGameLaunchMode());
+            string speed = appContext.GetGameSpeedVariant();
+            var (exePath, problem) = GameExecutablePreparer.Prepare(
+                appContext.GetGameFolder(), appContext.GetGameLaunchMode(), speed);
+            if (problem != null)
+            {
+                printLog($"[Bắt đầu] {problem}", Color.Red);
+                return;
+            }
+            printLog($"[Bắt đầu] Tốc độ game: {GameSpeedVariant.Label(speed)} - mọi người trong trận " +
+                     "phải chọn cùng tốc độ, nếu không game sẽ bị lệch (out of sync).", Color.RoyalBlue);
             var (status, message, _, _) = GameLauncher.Launch(exePath);
             Color color = status switch
             {
@@ -2091,8 +2155,14 @@ namespace TadaPlay.Controls
                     return;
                 }
 
-                string exePath = GameExecutablePreparer.PrepareAndGetExePath(
-                    gameFolder, appContext.GetGameLaunchMode());
+                var (exePath, problem) = GameExecutablePreparer.Prepare(
+                    gameFolder, appContext.GetGameLaunchMode(), appContext.GetGameSpeedVariant());
+                if (problem != null)
+                {
+                    printLog($"[Xem] {problem}", Color.Red);
+                    UiUtils.ShowAntdModal(mainForm, "Không mở được game", problem, AntdUI.TType.Warn);
+                    return;
+                }
                 var (status, message, pid, startedUtc) = GameLauncher.Launch(exePath, fetch.Path);
                 printLog($"[Xem] {message}",
                          status == GameLauncher.LaunchStatus.Success ? Color.DarkGreen : Color.Red);

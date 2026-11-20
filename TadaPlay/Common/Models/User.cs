@@ -38,6 +38,13 @@ namespace TadaPlay.Common.Models
         [JsonProperty("in_game_name")]
         public string InGameName { get; set; }
 
+        /// <summary>
+        /// Which speed build this player runs: "original" (2.0) or "hd" (2.2), or null for a
+        /// client too old to say. Players in one match must agree, or it goes out of sync.
+        /// </summary>
+        [JsonProperty("game_speed")]
+        public string GameSpeed { get; set; }
+
         [JsonProperty("is_online")]
         public bool IsOnline { get; set; }
 

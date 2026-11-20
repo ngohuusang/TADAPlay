@@ -42,6 +42,11 @@ public interface IAppContext
 
     public string GetGameLaunchMode();
 
+    /// <summary>Which speed build to run: GameSpeedVariant.Original or GameSpeedVariant.Hd.</summary>
+    public void SetGameSpeedVariant(string variant);
+
+    public string GetGameSpeedVariant();
+
     public void SetMinimapPosition(string position);
 
     public string GetMinimapPosition();

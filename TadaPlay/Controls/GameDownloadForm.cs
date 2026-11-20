@@ -22,6 +22,7 @@ namespace TadaPlay.Controls
         private AntdUI.Button _startButton;
         private AntdUI.Button _closeButton;
         private AntdUI.Progress _progressBar;
+        private AntdUI.Segmented _speedChoice;
         private AntdUI.Label _statusLabel;
         private CancellationTokenSource _cts;
         private bool _busy;
@@ -38,7 +39,7 @@ namespace TadaPlay.Controls
             FormBorderStyle = FormBorderStyle.FixedDialog;
             MaximizeBox = false;
             MinimizeBox = false;
-            ClientSize = new Size(580, 316);
+            ClientSize = new Size(580, 384);
             Font = new Font("Segoe UI", 10F);
             BackColor = UiTheme.PageBg;
 
@@ -50,7 +51,7 @@ namespace TadaPlay.Controls
             var card = new AntdUI.Panel
             {
                 Location = new Point(14, 14),
-                Size = new Size(552, 222),
+                Size = new Size(552, 290),
                 Radius = 10,
                 Shadow = 8,
                 ShadowOpacity = 0.10F,
@@ -92,9 +93,36 @@ namespace TadaPlay.Controls
             _browseButton = UiTheme.Toolbar("Chọn...", new Point(436, 86), 100, 38);
             _browseButton.Click += Browse_Click;
 
+            var speedLabel = new AntdUI.Label
+            {
+                Text = "Tốc độ game (cả phòng phải chọn giống nhau)",
+                Location = new Point(16, 132),
+                Size = new Size(520, 22),
+                ForeColor = UiTheme.Muted,
+                Font = new Font("Segoe UI", 9.5F),
+                BackColor = Color.Transparent,
+            };
+
+            // Same setting as in Cài đặt. The download is one package either way; the HD build
+            // is made from it on the spot by patching (see GameSpeedVariant).
+            _speedChoice = new AntdUI.Segmented
+            {
+                Location = new Point(16, 156),
+                Size = new Size(520, 44),
+                Full = true,
+                Round = true,
+                Font = new Font("Segoe UI Semibold", 10F, FontStyle.Bold),
+                Items =
+                {
+                    new SegmentedItem { Text = "UserPatch  ·  2.0" },
+                    new SegmentedItem { Text = "HD  ·  2.2 (chậm hơn)" },
+                },
+                SelectIndex = _appContext.GetGameSpeedVariant() == GameSpeedVariant.Hd ? 1 : 0,
+            };
+
             _progressBar = new AntdUI.Progress
             {
-                Location = new Point(16, 140),
+                Location = new Point(16, 208),
                 Size = new Size(520, 24),
                 Radius = 6,
                 Value = 0F,
@@ -102,7 +130,7 @@ namespace TadaPlay.Controls
 
             _statusLabel = new AntdUI.Label
             {
-                Location = new Point(16, 170),
+                Location = new Point(16, 238),
                 Size = new Size(520, 40),
                 ForeColor = UiTheme.Muted,
                 Font = new Font("Segoe UI", 9.5F),
@@ -115,18 +143,20 @@ namespace TadaPlay.Controls
             card.Controls.Add(folderLabel);
             card.Controls.Add(_folderBox);
             card.Controls.Add(_browseButton);
+            card.Controls.Add(speedLabel);
+            card.Controls.Add(_speedChoice);
             card.Controls.Add(_progressBar);
             card.Controls.Add(_statusLabel);
 
             _startButton = UiTheme.Primary("Tải và cài đặt", UiTheme.AccentFolder, height: 44);
             _startButton.Dock = DockStyle.None;
-            _startButton.Location = new Point(14, 252);
+            _startButton.Location = new Point(14, 320);
             _startButton.Size = new Size(180, 44);
             _startButton.Click += Start_Click;
 
             _closeButton = UiTheme.Quiet("Đóng", height: 44);
             _closeButton.Dock = DockStyle.None;
-            _closeButton.Location = new Point(456, 252);
+            _closeButton.Location = new Point(456, 320);
             _closeButton.Size = new Size(110, 44);
             _closeButton.Click += (s, e) => Close();
 
@@ -167,8 +197,18 @@ namespace TadaPlay.Controls
             try
             {
                 string gameRoot = await GameDownloader.DownloadAndInstallAsync(targetFolder, progress, _cts.Token);
-
                 _appContext.SetGameFolder(gameRoot);
+
+                // Patched on top of what was just downloaded, so the chosen build is ready
+                // before the first launch. A problem here is not fatal: the launch tries again.
+                string speed = _speedChoice.SelectIndex == 1 ? GameSpeedVariant.Hd : GameSpeedVariant.Original;
+                _appContext.SetGameSpeedVariant(speed);
+                foreach (bool center in new[] { false, true })
+                {
+                    var (_, problem) = await System.Threading.Tasks.Task.Run(
+                        () => GameSpeedVariant.Prepare(gameRoot, speed, center));
+                    if (problem != null) DebugLogger.Warn($"GameDownloadForm: speed build {speed}: {problem}");
+                }
                 InstalledGameFolder = gameRoot;
 
                 // Install finished - clear busy BEFORE anything can trigger a close, so OnFormClosing
@@ -231,6 +271,7 @@ namespace TadaPlay.Controls
             _busy = busy;
             _folderBox.Enabled = !busy;
             _browseButton.Enabled = !busy;
+            _speedChoice.Enabled = !busy;
             _startButton.Enabled = !busy;
         }
 

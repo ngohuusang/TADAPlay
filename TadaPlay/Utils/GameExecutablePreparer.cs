@@ -25,6 +25,22 @@ namespace TadaPlay.Utils
         private const string CenterExeResourceName = "TadaPlay.Resources.WK-center.exe";
         private const string WideExeResourceName = "TadaPlay.Resources.WK-wide.exe";
 
+        /// <summary>
+        /// The exe for this display mode and speed build, made ready to run (see
+        /// <see cref="GameSpeedVariant"/>), or the reason it cannot be run.
+        /// </summary>
+        public static (string ExePath, string Problem) Prepare(string gameFolder, string mode, string speedVariant)
+        {
+            if (string.IsNullOrWhiteSpace(gameFolder)) return (null, null); // launcher says "not configured"
+            if (!Directory.Exists(Path.Combine(gameFolder, "age2_x1")))
+            {
+                DebugLogger.Error($"GameExecutablePreparer: 'age2_x1' folder not found under '{gameFolder}'.");
+                return (null, null);
+            }
+            bool center = string.Equals(mode, CenterMode, StringComparison.OrdinalIgnoreCase);
+            return GameSpeedVariant.Prepare(gameFolder, speedVariant, center);
+        }
+
         public static string PrepareAndGetExePath(string gameFolder, string mode)
         {
             if (string.IsNullOrWhiteSpace(gameFolder)) return null;
