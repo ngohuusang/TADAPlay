@@ -48,6 +48,14 @@ namespace TadaPlay.Utils
         private readonly Action<string, bool> _report;   // message, isProblem
         private readonly CancellationTokenSource _cancel = new();
 
+        /// <summary>
+        /// Snapshots whose existing bytes the game's stream once contradicted. Not reconnected
+        /// for the rest of that match: every attempt would download the whole match again only
+        /// to stop at the same place, and the shadow-copy capture serves it instead.
+        /// </summary>
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> Diverged =
+            new(StringComparer.OrdinalIgnoreCase);
+
         private Thread _thread;
         private long _lastDurationCheck;
         private DateTime _lastDurationUtc = DateTime.MinValue;
@@ -76,6 +84,7 @@ namespace TadaPlay.Utils
         public bool TryStart()
         {
             if (string.IsNullOrWhiteSpace(_snapshotPath)) return false;
+            if (Diverged.ContainsKey(_snapshotPath)) return false;
 
             Socket socket = null;
             try
@@ -125,10 +134,25 @@ namespace TadaPlay.Utils
             var buffer = new byte[64 * 1024];
             try
             {
-                // Fresh file: the stream restarts the record from the beginning, so what is on
-                // disk must be exactly what has arrived - never appended onto an older match.
-                using var fs = new FileStream(_snapshotPath, FileMode.Create, FileAccess.Write,
+                // Never truncated. Every connection to the game's stream starts the record again
+                // from byte 0, so after a reconnect mid-match the first part of what arrives is
+                // already on disk - and viewers are holding offsets into it. Rewriting the file
+                // from scratch (which this used to do) made it momentarily shorter than what
+                // they had, and each of them stopped following the match. Instead the repeated
+                // bytes are checked against the file and skipped, and only new ones appended:
+                // a read cursor that only moves forward.
+                using var fs = new FileStream(_snapshotPath, FileMode.OpenOrCreate, FileAccess.ReadWrite,
                                               FileShare.ReadWrite | FileShare.Delete);
+                long have = fs.Length;
+                long incoming = 0;   // position in the game's stream
+                BytesWritten = have;
+                if (have > 0)
+                {
+                    DebugLogger.Info($"SpectatorStreamSource: reconnected - {have} bytes already published; " +
+                                     "skipping them as they arrive again.");
+                }
+                var check = new byte[buffer.Length];
+
                 socket.ReceiveTimeout = 0; // block for live data; the match may be quiet between ops
                 while (!_cancel.IsCancellationRequested)
                 {
@@ -137,12 +161,31 @@ namespace TadaPlay.Utils
                     catch (SocketException) { break; } // host closed - match ended
                     if (n <= 0) break;
 
-                    fs.Write(buffer, 0, n);
-                    fs.Flush();
-                    BytesWritten += n;
-                    MaybePublishDuration();
+                    int skip = 0;
+                    if (incoming < have)
+                    {
+                        skip = (int)Math.Min(n, have - incoming);
+                        if (!SameAsDisk(fs, incoming, buffer, skip, check))
+                        {
+                            Diverged[_snapshotPath] = true;
+                            DebugLogger.Warn($"SpectatorStreamSource: the game's stream differs from the " +
+                                             $"published file near offset {incoming} - leaving the file as it " +
+                                             "is and using the shadow-copy capture for the rest of this match.");
+                            break;
+                        }
+                    }
+                    incoming += n;
+
+                    if (skip < n)
+                    {
+                        fs.Seek(0, SeekOrigin.End);
+                        fs.Write(buffer, skip, n - skip);
+                        fs.Flush();
+                        BytesWritten = fs.Length;
+                        MaybePublishDuration();
+                    }
                 }
-                DebugLogger.Info($"SpectatorStreamSource: stream ended, {BytesWritten} bytes written.");
+                DebugLogger.Info($"SpectatorStreamSource: stream ended, {BytesWritten} bytes published.");
             }
             catch (Exception ex)
             {
@@ -188,6 +231,26 @@ namespace TadaPlay.Utils
             {
                 DebugLogger.Warn($"SpectatorStreamSource: duration walk failed: {ex.Message}");
             }
+        }
+
+        /// <summary>
+        /// Whether <paramref name="count"/> bytes of <paramref name="incoming"/> equal the file at
+        /// <paramref name="offset"/>. The first four bytes of the file are the header length the
+        /// game fills in late, so they are not compared.
+        /// </summary>
+        private static bool SameAsDisk(FileStream fs, long offset, byte[] incoming, int count, byte[] scratch)
+        {
+            fs.Seek(offset, SeekOrigin.Begin);
+            int read = 0;
+            while (read < count)
+            {
+                int r = fs.Read(scratch, read, count - read);
+                if (r <= 0) return false;
+                read += r;
+            }
+            int start = offset < 4 ? (int)(4 - offset) : 0;
+            if (start >= count) return true;
+            return scratch.AsSpan(start, count - start).SequenceEqual(incoming.AsSpan(start, count - start));
         }
 
         private static byte[] ReadExact(Socket socket, int count, TimeSpan timeout)

@@ -72,11 +72,7 @@ namespace TadaPlay.Utils
         }
 
         /// <summary>
-        /// Writes a snapshot, replacing any earlier one for the same match.
-        ///
-        /// Written to a temporary file and then moved into place, so a crash (or the
-        /// player killing TadaPlay) can never leave a half-written snapshot that would
-        /// look like a valid but truncated record at upload time.
+        /// Writes a snapshot for a match, growing the earlier one rather than replacing it.
         /// </summary>
         public static string Save(LiveRecordReader.Snapshot snapshot)
         {
@@ -84,21 +80,118 @@ namespace TadaPlay.Utils
 
             string target = PathFor(snapshot.SourcePath);
             if (target == null) return null;
+            return WriteGrowing(target, snapshot.Data, snapshot.SourcePath);
+        }
 
-            string temp = target + ".tmp";
+        /// <summary>Bytes at the end of the overlap compared before trusting it as a prefix.</summary>
+        private const int CompareTailBytes = 64 * 1024;
+
+        /// <summary>Bytes at the start compared too (after the header-length dword).</summary>
+        private const int CompareHeadBytes = 4096;
+
+        /// <summary>
+        /// Brings the snapshot up to <paramref name="data"/> by appending only what is new.
+        ///
+        /// Viewers hold a byte offset into this file and ask for what lies beyond it. A snapshot
+        /// that is rewritten, or worse ever gets SHORTER, puts every viewer's offset past the
+        /// end, and their app stops following the match ("Dữ liệu trận đấu ... đã thay đổi").
+        /// That used to happen whenever the source changed mid-match - the game's own stream
+        /// reconnecting and starting again from byte 0, or a shadow copy (which lags the
+        /// stream, because the game buffers its disk writes) replacing a longer streamed file.
+        ///
+        /// So, the same rule as a spectator relay that never rewinds its read cursor: the
+        /// bytes already published are never touched. When the new data agrees with them it
+        /// only ever adds to the end; when it is shorter there is nothing to do. Only data that
+        /// genuinely disagrees - a different recording - replaces the file, and that is logged.
+        ///
+        /// The first four bytes are the header length the game patches in at the end of a
+        /// match; they are excluded from the comparison and refreshed in place.
+        /// </summary>
+        private static string WriteGrowing(string target, byte[] data, string label)
+        {
             try
             {
-                File.WriteAllBytes(temp, snapshot.Data);
-                File.Move(temp, target, overwrite: true);
+                if (File.Exists(target))
+                {
+                    using var fs = new FileStream(target, FileMode.Open, FileAccess.ReadWrite,
+                                                  FileShare.ReadWrite | FileShare.Delete);
+                    long have = fs.Length;
+                    if (have > 0 && Agrees(fs, have, data))
+                    {
+                        if (data.Length > have)
+                        {
+                            fs.Seek(have, SeekOrigin.Begin);
+                            fs.Write(data, (int)have, data.Length - (int)have);
+                        }
+                        PatchHeaderLength(fs, data);
+                        return target;
+                    }
+                    if (have > 0)
+                    {
+                        DebugLogger.Warn($"LiveRecordSnapshotStore: new data for '{label}' does not continue " +
+                                         $"the published {have} bytes - replacing it ({data.Length} bytes). " +
+                                         "Viewers of the old copy will have to reopen it.");
+                    }
+                }
+
+                // New file, or one that has to be replaced: written beside it and moved into
+                // place, so nobody ever reads a half-written file.
+                string temp = target + ".tmp";
+                try
+                {
+                    File.WriteAllBytes(temp, data);
+                    File.Move(temp, target, overwrite: true);
+                }
+                catch
+                {
+                    TryDelete(temp);
+                    throw;
+                }
                 return target;
             }
             catch (Exception ex)
             {
-                DebugLogger.Error($"LiveRecordSnapshotStore: cannot save snapshot for " +
-                                  $"'{snapshot.SourcePath}': {ex.Message}");
-                TryDelete(temp);
+                DebugLogger.Error($"LiveRecordSnapshotStore: cannot save snapshot for '{label}': {ex.Message}");
                 return null;
             }
+        }
+
+        /// <summary>Whether the first <paramref name="have"/> bytes on disk and <paramref name="data"/>
+        /// agree wherever both exist (start and end of the overlap; the length dword excepted).</summary>
+        private static bool Agrees(FileStream fs, long have, byte[] data)
+        {
+            long overlap = Math.Min(have, data.Length);
+            if (overlap <= 4) return true;
+
+            return Matches(fs, 4, Math.Min(overlap, CompareHeadBytes), data)
+                && Matches(fs, Math.Max(4, overlap - CompareTailBytes), overlap, data);
+        }
+
+        private static bool Matches(FileStream fs, long from, long to, byte[] data)
+        {
+            int count = (int)(to - from);
+            if (count <= 0) return true;
+            var disk = new byte[count];
+            fs.Seek(from, SeekOrigin.Begin);
+            int read = 0;
+            while (read < count)
+            {
+                int n = fs.Read(disk, read, count - read);
+                if (n <= 0) return false;
+                read += n;
+            }
+            return disk.AsSpan().SequenceEqual(data.AsSpan((int)from, count));
+        }
+
+        private static void PatchHeaderLength(FileStream fs, byte[] data)
+        {
+            if (data.Length < 4 || fs.Length < 4) return;
+            var disk = new byte[4];
+            fs.Seek(0, SeekOrigin.Begin);
+            if (fs.Read(disk, 0, 4) != 4) return;
+            if (disk.AsSpan().SequenceEqual(data.AsSpan(0, 4))) return;
+            fs.Seek(0, SeekOrigin.Begin);
+            fs.Write(data, 0, 4);
         }
 
         /// <summary>
@@ -132,10 +225,14 @@ namespace TadaPlay.Utils
                     ? analysis.RepairedData
                     : File.ReadAllBytes(recordPath);
 
-                string target = PathFor(recordPath);
-                string temp = target + ".tmp";
-                File.WriteAllBytes(temp, data);
-                File.Move(temp, target, overwrite: true);
+                // Grown, not replaced: viewers are usually still following this same file
+                // when the match ends, and a rewrite would cut them off before the ending.
+                string target = WriteGrowing(PathFor(recordPath), data, recordPath);
+                if (target == null)
+                {
+                    note = "Không ghi được file để chia sẻ.";
+                    return null;
+                }
 
                 DebugLogger.Info($"LiveRecordSnapshotStore: published '{Path.GetFileName(recordPath)}' " +
                                  $"for spectating ({analysis.Operations} ops, {data.Length} bytes).");

@@ -20,8 +20,20 @@ namespace TadaPlay.Utils
     ///   remaining bytes and hits the end of a match that is not over. The replay is paused and
     ///   released when the host plays on.
     /// - The viewer fast-forwards and catches up. Once playback is within
-    ///   <see cref="CatchUpWithin"/> of the host's own match clock there is nothing left to watch,
-    ///   so the speed goes back to normal.
+    ///   <see cref="CatchUpWithin"/> of the end of what has been DOWNLOADED, the speed goes back
+    ///   to normal.
+    /// - The download runs dry. The host's record reaches the viewer in lumps, one per capture
+    ///   (every 30 seconds), and a replay that reaches the end of its file ends - the viewer has
+    ///   to start spectating all over again. So when less than <see cref="StarveBelow"/> of game
+    ///   time is left in the file, the replay is held exactly like a host pause, and released
+    ///   once <see cref="RefillTo"/> has arrived.
+    ///
+    /// Both of those compare the playhead with the viewer's OWN file - game time summed from the
+    /// record, a fact rather than an estimate. They used to compare it with the host's match
+    /// clock, which was fine while that clock was the clock of the latest capture. Since 3.37.6
+    /// the host carries its clock forward between captures, so it runs up to a whole capture
+    /// interval ahead of anything a viewer can have, and "30 seconds behind the host" could mean
+    /// the replay was already at the end of its file.
     ///
     /// An earlier version also policed the playhead's distance from end-of-file using measured
     /// byte rates, and re-pressed whenever that estimate said the replay was gaining. That is
@@ -53,14 +65,27 @@ namespace TadaPlay.Utils
         /// normal. Generous on purpose: the playhead is the file-READ position, which the game has
         /// buffered but not yet drawn, so this triggers a little earlier than it reads.
         /// </summary>
-        private static readonly TimeSpan CatchUpWithin = TimeSpan.FromSeconds(30);
+        private static readonly TimeSpan CatchUpWithin = TimeSpan.FromSeconds(75);
 
         /// <summary>
-        /// How far playback must fall back behind the host before "caught up" can fire again.
-        /// Well clear of <see cref="CatchUpWithin"/> so a viewer sitting near the live edge - the
-        /// normal state after catching up - does not get pressed at every tick.
+        /// How much downloaded game time must be ahead of playback again before "caught up" can
+        /// fire again. Well clear of <see cref="CatchUpWithin"/> so a viewer sitting near the
+        /// live edge - the normal state after catching up - does not get pressed at every tick.
         /// </summary>
-        private static readonly TimeSpan CatchUpRelease = TimeSpan.FromSeconds(90);
+        private static readonly TimeSpan CatchUpRelease = TimeSpan.FromSeconds(150);
+
+        /// <summary>
+        /// Game time left in the file below which the replay is held so it cannot reach the end.
+        /// The playhead is the game's READ position, which runs a little ahead of what is drawn,
+        /// so the real margin is a bit larger than this reads.
+        /// </summary>
+        private static readonly TimeSpan StarveBelow = TimeSpan.FromSeconds(8);
+
+        /// <summary>
+        /// Game time that must be in hand again before a held-for-data replay is let go. About
+        /// one capture's worth, so a release is not followed by another hold moments later.
+        /// </summary>
+        private static readonly TimeSpan RefillTo = TimeSpan.FromSeconds(40);
 
         /// <summary>Timing the playhead costs a read of everything played so far, so it is throttled.</summary>
         private static readonly TimeSpan MeasurePlaybackEvery = TimeSpan.FromMilliseconds(1500);
@@ -99,6 +124,8 @@ namespace TadaPlay.Utils
         private ushort _pauseKey = GameInput.VkPauseDefault;
 
         private HoldMethod _hold = HoldMethod.None;
+        /// <summary>Why the replay is held: the host paused, or the download ran low.</summary>
+        private bool _holdForData;
         private bool _warnedElevation;
         private bool _gaveUp;
         private volatile bool _injecting;
@@ -113,6 +140,8 @@ namespace TadaPlay.Utils
 
         private bool _caughtUp;
         private long _playbackMs;
+        /// <summary>Game time in the whole downloaded file - the most the replay can show.</summary>
+        private long _bufferedMs;
         private DateTime _lastPlaybackUtc = DateTime.MinValue;
 
         public ReplayFollower(string replayPath, Action<string> log = null,
@@ -131,7 +160,8 @@ namespace TadaPlay.Utils
             _pauseKey = ResolvePauseKey(_gameFolder);
             _timer = new System.Threading.Timer(_ => Tick(), null, TickMs, TickMs);
             DebugLogger.Info($"ReplayFollower: watching '{_replayPath}'. Pause key VK 0x{_pauseKey:X2}; " +
-                             $"speed returns to normal within {CatchUpWithin.TotalSeconds:F0}s of the host's clock.");
+                             $"speed returns to normal within {CatchUpWithin.TotalSeconds:F0}s of the downloaded " +
+                             $"end; held below {StarveBelow.TotalSeconds:F0}s left until {RefillTo.TotalSeconds:F0}s arrive.");
         }
 
         /// <summary>
@@ -186,17 +216,20 @@ namespace TadaPlay.Utils
                 if (!string.IsNullOrEmpty(path) && !SamePath(path, _replayPath)) return;
 
                 LiveShareClient.HostStatus host = ReadHostStatus();
+                MeasureRunway(pos);
 
-                // Paused counts only while the host is still IN a match. A finished match has a
-                // stopped clock too, and holding the viewer's replay for that would strand them
-                // just before the ending they are trying to watch.
-                bool hostPaused = host != null && host.InGame && host.Paused;
+                // Both holds count only while the host is still IN a match. A finished match has
+                // a stopped clock and a file that will not grow, and holding the viewer's replay
+                // for either would strand them just before the ending they are trying to watch.
+                bool hostInGame = host != null && host.InGame;
+                bool hostPaused = hostInGame && host.Paused;
+                bool starving = hostInGame && IsStarving();
 
                 ReportStatus(host, hostPaused);
 
-                if (hostPaused)
+                if (hostPaused || starving)
                 {
-                    if (_hold == HoldMethod.None) BeginHold(pos);
+                    if (_hold == HoldMethod.None) BeginHold(pos, forData: !hostPaused);
                     else ProveHold(pos);
                     return;
                 }
@@ -210,7 +243,7 @@ namespace TadaPlay.Utils
                 // Still settling a resume: leave the speed alone until the playhead proves it moved.
                 if (!ProveRelease(pos)) return;
 
-                CheckCaughtUp(host, pos);
+                CheckCaughtUp(host);
             }
             catch (Exception ex)
             {
@@ -227,7 +260,9 @@ namespace TadaPlay.Utils
                              : host.GameMs > 0 ? $"{host.GameMs / 1000}s" + (hostPaused ? " PAUSED" : "")
                              : "no clock";
             string mine = _playbackMs > 0 ? $"{_playbackMs / 1000}s" : "unknown";
-            DebugLogger.Info($"ReplayFollower: status - playback {mine}, host {hostClock}, hold {_hold}.");
+            string have = _bufferedMs > 0 ? $"{_bufferedMs / 1000}s" : "unknown";
+            DebugLogger.Info($"ReplayFollower: status - playback {mine} of {have} downloaded, host {hostClock}, " +
+                             $"hold {_hold}{(_holdForData ? " (waiting for data)" : "")}.");
         }
 
         /// <summary>
@@ -250,15 +285,26 @@ namespace TadaPlay.Utils
 
         // ---------------------------------------------------------------- pause
 
-        private void BeginHold(long pos)
+        private void BeginHold(long pos, bool forData)
         {
             if (_gaveUp) return;
             if (!TryInject(() => GameInput.PressPauseKey(_pauseKey))) return;
 
             _hold = HoldMethod.PauseKey;
+            _holdForData = forData;
             ArmProof(pos, expectsMovement: false);
-            _log("[Xem] ⏸ Chủ nhà đã TẠM DỪNG - đã tự động dừng replay của bạn.");
-            DebugLogger.Info($"ReplayFollower: host paused - pressed the pause key (VK 0x{_pauseKey:X2}).");
+            if (forData)
+            {
+                _log("[Xem] ⏸ Replay đã chạy tới phần mới nhất - tạm dừng chờ dữ liệu từ chủ nhà " +
+                     "(sẽ tự chạy tiếp).");
+                DebugLogger.Info($"ReplayFollower: only {(_bufferedMs - _playbackMs) / 1000}s left in the file " +
+                                 $"(playback {_playbackMs}ms of {_bufferedMs}ms) - pressed the pause key.");
+            }
+            else
+            {
+                _log("[Xem] ⏸ Chủ nhà đã TẠM DỪNG - đã tự động dừng replay của bạn.");
+                DebugLogger.Info($"ReplayFollower: host paused - pressed the pause key (VK 0x{_pauseKey:X2}).");
+            }
         }
 
         private void ProveHold(long pos)
@@ -311,11 +357,22 @@ namespace TadaPlay.Utils
 
             if (!TryInject(press)) return;
 
+            bool forData = _holdForData;
             _hold = HoldMethod.None;
+            _holdForData = false;
             _gaveUp = false;
             ArmProof(pos, expectsMovement: true);
-            _log("[Xem] ▶ Chủ nhà đã chơi tiếp - đã cho replay chạy lại.");
-            DebugLogger.Info($"ReplayFollower: host resumed - released via {held}.");
+            if (forData)
+            {
+                // Quietly: a line every capture would bury the log during a close-to-live watch.
+                DebugLogger.Info($"ReplayFollower: {(_bufferedMs - _playbackMs) / 1000}s in hand again - " +
+                                 $"released via {held}.");
+            }
+            else
+            {
+                _log("[Xem] ▶ Chủ nhà đã chơi tiếp - đã cho replay chạy lại.");
+                DebugLogger.Info($"ReplayFollower: host resumed - released via {held}.");
+            }
         }
 
         /// <summary>
@@ -356,32 +413,51 @@ namespace TadaPlay.Utils
 
         // ---------------------------------------------------------------- caught up
 
-        private void CheckCaughtUp(LiveShareClient.HostStatus host, long pos)
+        /// <summary>
+        /// Game time at the playhead and in the whole file. Each costs a read of the record, so
+        /// both are refreshed together and throttled.
+        /// </summary>
+        private void MeasureRunway(long pos)
         {
-            if (host == null || !host.InGame || host.GameMs <= 0) return;
+            if (DateTime.UtcNow - _lastPlaybackUtc < MeasurePlaybackEvery) return;
+            _lastPlaybackUtc = DateTime.UtcNow;
+            if (LiveRecordReader.TryGetPlaybackDurationMs(_replayPath, pos, out long played)) _playbackMs = played;
+            if (LiveRecordReader.TryGetPlaybackDurationMs(_replayPath, long.MaxValue, out long buffered))
+                _bufferedMs = buffered;
+        }
 
-            if (DateTime.UtcNow - _lastPlaybackUtc >= MeasurePlaybackEvery)
-            {
-                _lastPlaybackUtc = DateTime.UtcNow;
-                if (LiveRecordReader.TryGetPlaybackDurationMs(_replayPath, pos, out long ms)) _playbackMs = ms;
-            }
-            if (_playbackMs <= 0) return;
+        /// <summary>
+        /// True when the replay is about to run out of file. Once held for that, stays true until
+        /// a good margin has arrived, so the replay is not stopped and started on every capture.
+        /// </summary>
+        private bool IsStarving()
+        {
+            if (_playbackMs <= 0 || _bufferedMs <= 0) return false;
+            long left = _bufferedMs - _playbackMs;
+            if (_hold != HoldMethod.None && _holdForData) return left < RefillTo.TotalMilliseconds;
+            return left < StarveBelow.TotalMilliseconds;
+        }
 
-            long behindMs = host.GameMs - _playbackMs;
+        private void CheckCaughtUp(LiveShareClient.HostStatus host)
+        {
+            if (host == null || !host.InGame) return;
+            if (_playbackMs <= 0 || _bufferedMs <= 0) return;
 
-            if (behindMs > CatchUpRelease.TotalMilliseconds)
+            long leftMs = _bufferedMs - _playbackMs;
+
+            if (leftMs > CatchUpRelease.TotalMilliseconds)
             {
                 _caughtUp = false;   // genuinely behind again - re-arm
                 return;
             }
-            if (_caughtUp || behindMs > CatchUpWithin.TotalMilliseconds) return;
+            if (_caughtUp || leftMs > CatchUpWithin.TotalMilliseconds) return;
 
             if (!TryInject(GameInput.SetReplaySpeedNormal)) return;
             _caughtUp = true;
-            _log($"[Xem] ⏩ Đã gần đuổi kịp chủ nhà (còn {Math.Max(0, behindMs) / 1000}s) - " +
+            _log($"[Xem] ⏩ Đã gần đuổi kịp chủ nhà (còn {Math.Max(0, leftMs) / 1000}s đã tải) - " +
                  "đã hạ tốc độ về bình thường.");
-            DebugLogger.Info($"ReplayFollower: caught up - playback {_playbackMs}ms vs host {host.GameMs}ms " +
-                             $"({behindMs}ms behind); speed back to normal.");
+            DebugLogger.Info($"ReplayFollower: caught up - playback {_playbackMs}ms of {_bufferedMs}ms downloaded " +
+                             $"({leftMs}ms left, host clock {host.GameMs}ms); speed back to normal.");
         }
 
         // ---------------------------------------------------------------- plumbing

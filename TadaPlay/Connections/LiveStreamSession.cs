@@ -46,6 +46,22 @@ namespace TadaPlay.Connections
         /// </summary>
         private const int MinCycleSeconds = 3;
 
+        /// <summary>
+        /// Shortest gap between requests that brought data. The host's game stream arrives a few
+        /// hundred bytes at a time, and answering each with its own request and file append
+        /// costs both machines for no visible gain; half a second of batching is invisible in
+        /// a replay that is at least a minute and a half behind.
+        /// </summary>
+        private static readonly TimeSpan MinDataCycle = TimeSpan.FromMilliseconds(500);
+
+        /// <summary>
+        /// How long the host may say "nothing to share" or hand back a file shorter than what
+        /// we already have before that is believed. Both happen for a moment while the host's
+        /// app switches between its sources or publishes the finished match, and stopping on
+        /// the first one ended spectating over a hiccup.
+        /// </summary>
+        private static readonly TimeSpan UnavailableGraceTime = TimeSpan.FromMinutes(2);
+
         /// <summary>Backoff between retries, in seconds, holding at the last value.</summary>
         private static readonly int[] RetryDelaySeconds = { 2, 3, 5, 5, 10, 10, 15, 20, 30 };
 
@@ -126,6 +142,7 @@ namespace TadaPlay.Connections
             {
                 bool reportedLoss = false;
                 DateTime failingSince = DateTime.UtcNow;
+                DateTime? unavailableSince = null;
                 while (!token.IsCancellationRequested)
                 {
                     DateTime cycleStart = DateTime.UtcNow;
@@ -176,10 +193,33 @@ namespace TadaPlay.Connections
                         failures = 0;
                     }
 
-                    if (tail.TotalBytes < 0)
+                    // Nothing shared, or less than we already have: usually a moment while the
+                    // host's app changes over. Believed only once it has lasted.
+                    bool gone = tail.TotalBytes < 0;
+                    bool shrunk = tail.TotalBytes > 0 && _fetched > tail.TotalBytes
+                                  && (string.IsNullOrEmpty(_matchName) || string.IsNullOrEmpty(tail.MatchName)
+                                      || string.Equals(_matchName, tail.MatchName, StringComparison.OrdinalIgnoreCase));
+                    if (gone || shrunk)
                     {
-                        Finish($"[Xem] {_hostLabel} không còn chia sẻ trận này nữa.", false);
-                        return;
+                        unavailableSince ??= DateTime.UtcNow;
+                        TimeSpan waited = DateTime.UtcNow - unavailableSince.Value;
+                        DebugLogger.Warn($"LiveStreamSession: poll {_polls} - host " +
+                                         (gone ? "has nothing to share" : $"has {tail.TotalBytes} bytes, we have {_fetched}") +
+                                         $" ({waited.TotalSeconds:F0}s so far).");
+                        if (waited >= UnavailableGraceTime)
+                        {
+                            if (gone) Finish($"[Xem] {_hostLabel} không còn chia sẻ trận này nữa.", false);
+                            else Finish($"[Xem] Dữ liệu trận đấu của {_hostLabel} đã thay đổi - dừng cập nhật.", true);
+                            return;
+                        }
+                        await Task.Delay(TimeSpan.FromSeconds(3), token);
+                        continue;
+                    }
+                    if (unavailableSince != null)
+                    {
+                        DebugLogger.Info($"LiveStreamSession: host serving again after " +
+                                         $"{(DateTime.UtcNow - unavailableSince.Value).TotalSeconds:F0}s.");
+                        unavailableSince = null;
                     }
 
                     // A different match, or an offset past the end of the file being served,
@@ -192,12 +232,6 @@ namespace TadaPlay.Connections
                                "danh sách để xem trận đó.", false);
                         return;
                     }
-                    if (tail.TotalBytes > 0 && _fetched > tail.TotalBytes)
-                    {
-                        Finish($"[Xem] Dữ liệu trận đấu của {_hostLabel} đã thay đổi - dừng cập nhật.", true);
-                        return;
-                    }
-
                     // Worth calling out once: from here the host is no longer playing, so what
                     // is left is the tail of a finished match rather than a live feed.
                     if (!tail.InGame && !_sawHostQuit)
@@ -215,6 +249,9 @@ namespace TadaPlay.Connections
                         _fetched += tail.Data.Length;
                         Append(tail.Data);
                         ReportProgress(force: false);
+
+                        TimeSpan took = DateTime.UtcNow - cycleStart;
+                        if (took < MinDataCycle) await Task.Delay(MinDataCycle - took, token);
                     }
                     else if (!tail.InGame && _pending.Length == 0)
                     {
